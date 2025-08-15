@@ -1,0 +1,82 @@
+############################################
+# ACL for FarmIQ Edge Mosquitto
+# Policy: deny-by-default, least privilege
+############################################
+
+# ===== Admin =====
+user edge_admin
+topic readwrite #
+
+# ===== Service accounts =====
+# sensor-service
+user edge_sensor_svc
+topic read  sensor.raw/#
+topic write sensor.clean/#
+topic write sensor.anomaly/#
+topic write sensor.dlq/#
+topic read  cmd/#
+
+# edge-agent
+user edge_agent
+# รับ OTA offer
+topic read  ota/#
+# รายงาน progress OTA
+topic write ota/+/+/progress
+topic read  dm/+/+/shadow/update
+topic write dm/+/+/shadow/accepted
+topic write dm/+/+/shadow/reported
+topic write dm/+/+/health
+topic write dm/+/+/lwt
+
+# Edge scheduler/orchestrator (สั่งงานหุ่น)
+user edge_scheduler
+topic write robot/+/+/schedule/set
+topic read  robot/+/+/schedule/ack
+topic write robot/+/+/run/start
+topic read  robot/+/+/run/end
+topic read  robot/+/+/pose
+
+# Edge sync-service (ตัวเขียน DB)
+user edge_sync_svc
+topic read  sensor.clean/#
+topic read  robot/+/+/pose
+topic read  robot/+/+/run/end
+topic read  dm/+/+/health
+topic read  dm/+/+/lwt
+
+# Image ingestion service (publish event รูป)
+user edge_image_ingest
+topic write image/created
+
+# Read-only viewer (เช่น MQTT Explorer)
+user edge_viewer
+topic read #
+
+# ===== Device rules (username = tenant, clientid = deviceId) =====
+# Shadow / Health / LWT
+pattern write dm/%u/%c/shadow/reported
+pattern read  dm/%u/%c/shadow/update
+pattern write dm/%u/%c/shadow/accepted
+pattern write dm/%u/%c/health
+pattern write dm/%u/%c/lwt
+
+# OTA
+pattern read  ota/%u/%c/offer
+pattern write ota/%u/%c/progress
+
+# Telemetry
+pattern write sensor.raw/%u/+/%c
+pattern write sensor.clean/%u/+/%c
+
+# Command/Actuation
+pattern read  cmd/%u/%c/request
+pattern write cmd/%u/%c/ack
+
+# ===== Per-device/robot (username = tenant, clientid = robotId) =====
+# Schedule
+pattern read  robot/%u/%c/schedule/set
+pattern write robot/%u/%c/schedule/ack
+# Run control & telemetry
+pattern read  robot/%u/%c/run/start
+pattern write robot/%u/%c/run/end
+pattern write robot/%u/%c/pose

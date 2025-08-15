@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/external_factors.created.schema.json",
+  "title": "ExternalFactorsCreated",
+  "type": "object",
+  "required": [
+    "traceId",
+    "timestamp",
+    "source",
+    "eventType",
+    "data"
+  ],
+  "properties": {
+    "traceId": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "source": { "type": "string" },
+    "eventType": { "const": "external_factors.created" },
+    "data": {
+      "$ref": "external_factors.data.schema.json"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Animal Updated Event",
+  "type": "object",
+  "properties": {
+    "animal_id":      { "type": "integer" },
+    "changed_fields": {
+      "type": "object",
+      "patternProperties": { "^[a-zA-Z0-9_]+$": {} },
+      "additionalProperties": false
+    },
+    "updated_at":     { "type": "string", "format": "date-time" }
+  },
+  "required": ["animal_id","changed_fields","updated_at"],
+  "additionalProperties": false
+}

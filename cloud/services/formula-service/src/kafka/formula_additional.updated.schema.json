@@ -1,0 +1,13 @@
+{
+  "$id": "formula_additional.updated",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "formula_id": { "type": "integer" },
+    "item": { "type": "string" },
+    "details": { "type": ["string", "null"] },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "formula_id", "item", "updated_at"],
+  "additionalProperties": false
+}

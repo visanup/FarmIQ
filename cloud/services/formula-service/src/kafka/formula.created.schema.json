@@ -1,0 +1,13 @@
+{
+  "$id": "formula.created",
+  "type": "object",
+  "properties": {
+    "formula_id": { "type": "integer" },
+    "formula_no": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": ["string", "null"] },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["formula_id", "formula_no", "name", "created_at"],
+  "additionalProperties": false
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Animal Deleted Event",
+  "type": "object",
+  "properties": {
+    "animal_id":    { "type": "integer" },
+    "customer_id":  { "type": "integer" },
+    "farm_id":      { "type": "integer" },
+    "house_id":     { "type": ["integer","null"] },
+    "deleted_at":   { "type": "string", "format": "date-time" }
+  },
+  "required": ["animal_id","customer_id","farm_id","deleted_at"],
+  "additionalProperties": false
+}

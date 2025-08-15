@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: Sync Service API
+  version: "1.0.0"
+  description: API สำหรับรับข้อมูล batch จาก Edge Server เพื่อ sync ข้อมูลขึ้น Cloud
+
+servers:
+  - url: https://api.yourdomain.com/sync
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+paths:
+  /edge-to-cloud:
+    post:
+      summary: รับข้อมูล batch จาก Edge Server เพื่อ sync ข้อมูลขึ้น Cloud
+      description: รับข้อมูล batch ที่เป็น sensor data, logs หรือข้อมูลอื่น ๆ จาก Edge server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data_batch
+              properties:
+                data_batch:
+                  type: array
+                  description: รายการข้อมูล batch ที่ส่งมาจาก Edge Server
+                  items:
+                    type: object
+                    description: ข้อมูลที่อาจแตกต่างกันตามแต่ละประเภท sensor หรือ log
+                    properties:
+                      timestamp:
+                        type: string
+                        format: date-time
+                      sensor_id:
+                        type: string
+                      value:
+                        type: number
+                      metadata:
+                        type: object
+                        additionalProperties: true
+      responses:
+        '200':
+          description: Sync สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Sync completed successfully"
+                  received_count:
+                    type: integer
+                    example: 100
+        '400':
+          description: ข้อมูลส่งมาไม่ถูกต้อง
+        '401':
+          description: Unauthorized - ต้องระบุ token ที่ถูกต้อง
+        '500':
+          description: Internal Server Error
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,21 @@
+{
+  "$id": "https://example.com/schemas/feed_batch_assignments.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FeedBatchAssignment",
+  "type": "object",
+  "properties": {
+    "assignmentId": { "type": "integer" },
+    "productionDate": { "type": "string", "format": "date-time" },
+    "feedBatchId": { "type": "integer" },
+    "farmId": { "type": ["integer", "null"] },
+    "houseId": { "type": ["integer", "null"] },
+    "animalId": { "type": ["integer", "null"] },
+    "assignedStart": { "type": "string", "format": "date-time" },
+    "assignedEnd": { "type": ["string", "null"], "format": "date-time" },
+    "feedQuantity": { "type": ["number", "null"] },
+    "note": { "type": ["string", "null"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "required": ["assignmentId", "productionDate", "feedBatchId", "assignedStart", "createdAt", "updatedAt"]
+}

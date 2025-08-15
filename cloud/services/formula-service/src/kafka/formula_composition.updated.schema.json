@@ -1,0 +1,13 @@
+{
+  "$id": "formula_composition.updated",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "formula_id": { "type": "integer" },
+    "ingredient": { "type": "string" },
+    "percentage": { "type": "number" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "formula_id", "ingredient", "percentage", "updated_at"],
+  "additionalProperties": false
+}

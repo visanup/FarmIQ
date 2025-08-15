@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WaterQualityDelete",
+  "description": "Schema สำหรับ validate payload การลบ water_quality",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer", "description": "รหัสเรคอร์ดที่ต้องการลบ" }
+  },
+  "required": ["id"],
+  "additionalProperties": false
+}

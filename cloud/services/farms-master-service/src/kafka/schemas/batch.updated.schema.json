@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Batch Updated Event",
+  "type": "object",
+  "properties": {
+    "batch_id":        { "type": "string" },
+    "changed_fields": {
+      "type": "object",
+      "patternProperties": { "^[a-zA-Z0-9_]+$": {} },
+      "additionalProperties": false
+    },
+    "updated_at":      { "type": "string", "format": "date-time" }
+  },
+  "required": ["batch_id","changed_fields","updated_at"],
+  "additionalProperties": false
+}

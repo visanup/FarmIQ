@@ -1,0 +1,14 @@
+| Topic                         | Event Name       | Payload (JSON)                                                                                                | คำอธิบาย                               |
+| ----------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `farms-master.farm.created`   | `farm.created`   | `{ farm_id, customer_id, name, location, status, created_at, updated_at }`                                    | สร้างฟาร์มใหม่                         |
+| `farms-master.farm.updated`   | `farm.updated`   | `{ farm_id, changed_fields: {...}, updated_at }`                                                              | อัพเดตข้อมูลฟาร์ม                      |
+| `farms-master.farm.deleted`   | `farm.deleted`   | `{ farm_id, customer_id, deleted_at }`                                                                        | ลบฟาร์ม (soft-delete หรือ hard-delete) |
+| `farms-master.house.created`  | `house.created`  | `{ house_id, customer_id, farm_id, name, area, capacity, created_at, updated_at }`                            | สร้างโรงเรือนใหม่                      |
+| `farms-master.house.updated`  | `house.updated`  | `{ house_id, changed_fields: {...}, updated_at }`                                                             | อัพเดตข้อมูลโรงเรือน                   |
+| `farms-master.house.deleted`  | `house.deleted`  | `{ house_id, customer_id, farm_id, deleted_at }`                                                              | ลบโรงเรือน                             |
+| `farms-master.animal.created` | `animal.created` | `{ animal_id, customer_id, farm_id, house_id, species, breed, birth_date, created_at, updated_at }`           | เพิ่มสัตว์ใหม่                         |
+| `farms-master.animal.updated` | `animal.updated` | `{ animal_id, changed_fields: {...}, updated_at }`                                                            | อัพเดตข้อมูลสัตว์                      |
+| `farms-master.animal.deleted` | `animal.deleted` | `{ animal_id, customer_id, farm_id, house_id, deleted_at }`                                                   | ลบข้อมูลสัตว์                          |
+| `farms-master.batch.created`  | `batch.created`  | `{ batch_id, customer_id, farm_id, species, breed, quantity_start, start_date, end_date, notes, created_at }` | เริ่มชุดเลี้ยงใหม่                     |
+| `farms-master.batch.updated`  | `batch.updated`  | `{ batch_id, changed_fields: {...}, updated_at }`                                                             | อัพเดตชุดเลี้ยง                        |
+| `farms-master.batch.deleted`  | `batch.deleted`  | `{ batch_id, customer_id, farm_id, deleted_at }`                                                              | ปิดชุดเลี้ยง (หรือ hard-delete)        |

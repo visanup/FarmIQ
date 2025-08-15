@@ -1,0 +1,19 @@
+{
+  "$id": "https://example.com/schemas/feed_batches.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FeedBatch",
+  "type": "object",
+  "properties": {
+    "productionDate": { "type": "string", "format": "date-time" },
+    "feedBatchId": { "type": "integer" },
+    "customerId": { "type": "integer" },
+    "farmId": { "type": ["integer", "null"] },
+    "formulaId": { "type": ["integer", "null"] },
+    "formulaNo": { "type": ["integer", "null"] },
+    "lineNo": { "type": ["string", "null"] },
+    "batchNo": { "type": ["string", "null"] },
+    "feedType": { "type": ["string", "null"] },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "required": ["productionDate", "feedBatchId", "customerId", "createdAt"]
+}

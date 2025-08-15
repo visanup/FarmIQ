@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GeneticFactorsCreate",
+  "description": "Schema สำหรับ validate payload การสร้าง genetic_factors ใหม่",
+  "type": "object",
+  "properties": {
+    "customer_id": {"type": "integer", "description": "รหัสลูกค้า"},
+    "farm_id": {"type": "integer", "description": "รหัสฟาร์ม"},
+    "factor_name": {"type": "string", "description": "ชื่อปัจจัยด้านพันธุกรรม"},
+    "factor_value": {"type": ["string", "number"], "description": "ค่าของปัจจัย (string หรือ number)"},
+    "measurement_date": {"type": ["string", "null"], "format": "date", "description": "วันที่วัด (optional)"},
+    "effective_start": {"type": "string", "format": "date-time", "description": "วัน-เวลาที่เริ่มมีผล (timestamptz)"},
+    "effective_end": {"type": ["string", "null"], "format": "date-time", "description": "วัน-เวลาที่สิ้นสุดผล (optional, timestamptz)"}
+  },
+  "required": ["customer_id", "farm_id", "factor_name", "factor_value", "effective_start"],
+  "additionalProperties": false
+}

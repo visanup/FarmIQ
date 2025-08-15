@@ -1,0 +1,16 @@
+{
+  "$id": "https://example.com/schemas/physical_quality.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PhysicalQuality",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "productionDate": { "type": "string", "format": "date-time" },
+    "feedBatchId": { "type": "integer" },
+    "propertyName": { "type": "string" },
+    "propertyValue": { "type": "number" },
+    "unit": { "type": ["string", "null"] },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "productionDate", "feedBatchId", "propertyName", "propertyValue", "createdAt"]
+}

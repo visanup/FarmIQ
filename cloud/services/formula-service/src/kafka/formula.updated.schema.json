@@ -1,0 +1,12 @@
+{
+  "$id": "formula.updated",
+  "type": "object",
+  "properties": {
+    "formula_id": { "type": "integer" },
+    "name": { "type": "string" },
+    "description": { "type": ["string", "null"] },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["formula_id", "name", "updated_at"],
+  "additionalProperties": false
+}

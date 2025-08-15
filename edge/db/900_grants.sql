@@ -1,0 +1,8 @@
+-- ────────────────────────────────────────────────────────────────────────────
+-- migrations/900_grants.sql (optional ตัวอย่างการให้สิทธิ์)
+-- ────────────────────────────────────────────────────────────────────────────
+-- CREATE USER edge WITH PASSWORD 'EdgeStrong!123';
+-- GRANT USAGE ON SCHEMA sensors TO edge;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sensors TO edge;
+-- ALTER DEFAULT PRIVILEGES IN SCHEMA sensors
+--   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO edge;

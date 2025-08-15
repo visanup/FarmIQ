@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"name": "moisture-sensor",
+			"path": "../sensor/moisture-sensor"
+		}
+	],
+	"settings": {}
+}

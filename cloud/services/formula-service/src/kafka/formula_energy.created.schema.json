@@ -1,0 +1,13 @@
+{
+  "$id": "formula_energy.created",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "formula_id": { "type": "integer" },
+    "energy_type": { "type": "string" },
+    "value": { "type": "number" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "formula_id", "energy_type", "value", "created_at"],
+  "additionalProperties": false
+}

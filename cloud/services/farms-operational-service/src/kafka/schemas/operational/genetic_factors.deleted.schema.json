@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GeneticFactorsDelete",
+  "description": "Schema สำหรับ validate payload การลบ genetic_factors",
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer", "description": "รหัสเรคอร์ดที่ต้องการลบ"}
+  },
+  "required": ["id"],
+  "additionalProperties": false
+}

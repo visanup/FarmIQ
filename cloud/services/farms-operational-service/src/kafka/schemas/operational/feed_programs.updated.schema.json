@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FeedProgramsUpdate",
+  "description": "Schema สำหรับ validate payload การอัพเดต feed_programs",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer", "description": "รหัสเรคอร์ดที่ต้องการอัพเดต" },
+    "program_name": { "type": ["string", "null"], "description": "ชื่อโปรแกรมอาหาร (optional)" },
+    "start_date": { "type": ["string", "null"], "format": "date", "description": "วันที่เริ่มใช้โปรแกรม (optional)" },
+    "end_date": { "type": ["string", "null"], "format": "date", "description": "วันที่สิ้นสุดโปรแกรม (optional)" },
+    "details": { "type": ["string", "null"], "description": "รายละเอียดเพิ่มเติม (optional)" }
+  },
+  "required": ["id"],
+  "additionalProperties": false
+}

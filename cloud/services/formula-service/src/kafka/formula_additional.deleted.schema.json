@@ -1,0 +1,9 @@
+{
+  "$id": "formula_additional.deleted",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" }
+  },
+  "required": ["id"],
+  "additionalProperties": false
+}

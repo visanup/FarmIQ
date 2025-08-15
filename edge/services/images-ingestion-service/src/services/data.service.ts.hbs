@@ -1,0 +1,69 @@
+
+// generators/app/templates/src/services/data.service.ts.hbs
+
+import { Repository } from 'typeorm';
+import { AppDataSource } from '../utils/dataSource';
+import { Data } from '../models/data.model.stub';
+
+/**
+ * BOILERPLATE STUB
+ * DataService handles CRUD operations for Data entity.
+ * TODO: Customize error handling and business logic as needed.
+ */
+export class DataService {
+  private repo: Repository<Data>;
+
+  constructor() {
+    this.repo = AppDataSource.getRepository(Data);
+  }
+
+  /**
+   * Create a new Data entry
+   */
+  async create(data: Partial<Data>): Promise<Data> {
+    return this.repo.save(data);
+  }
+
+  /**
+   * Fetch all Data entries
+   */
+  async findAll(): Promise<Data[]> {
+    return this.repo.find();
+  }
+
+  /**
+   * Fetch Data by ID
+   */
+  async findById(id: number): Promise<Data | null> {
+    return this.repo.findOneBy({ id });
+  }
+
+  /**
+   * Fetch Data by ID and customerId
+   */
+  async findByIdAndCustomer(id: number, customerId: number): Promise<Data | null> {
+    return this.repo.findOneBy({ id, customer_id: customerId });
+  }
+
+  /**
+   * Update an existing Data entry
+   */
+  async update(id: number, data: Partial<Data>): Promise<Data> {
+    await this.repo.update(id, data);
+    const updated = await this.findById(id);
+    if (!updated) {
+      throw new Error('Data not found');
+    }
+    return updated;
+  }
+
+  /**
+   * Delete an Data entry by ID
+   */
+  async delete(id: number): Promise<void> {
+    await this.repo.delete(id);
+  }
+}
+
+export default new DataService();
+

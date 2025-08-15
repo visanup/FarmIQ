@@ -1,0 +1,13 @@
+{
+  "$id": "https://example.com/schemas/message_envelope.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MessageEnvelope",
+  "type": "object",
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventType": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "required": ["eventId", "eventType", "timestamp", "payload"]
+}

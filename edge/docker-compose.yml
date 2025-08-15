@@ -1,0 +1,121 @@
+name: farmiq-edge
+
+networks:
+  farm_edge:
+    driver: bridge
+
+volumes:
+  timescale-data:
+  mosquitto-data:
+  mosquitto-log:
+  minio_data:
+
+services:
+  # 1) MQTT broker (lightweight, ง่ายต่อ edge)
+  edge-mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: edge-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9002:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    command: >
+      sh -c '
+        test -f /mosquitto/config/passwd  || { echo "Missing passwd in /mosquitto/config";  exit 13; }
+        test -f /mosquitto/config/aclfile || { echo "Missing aclfile in /mosquitto/config"; exit 13; }
+        cp -f /mosquitto/config/passwd  /mosquitto/passwd &&
+        cp -f /mosquitto/config/aclfile /mosquitto/aclfile &&
+        chown mosquitto:mosquitto /mosquitto/passwd /mosquitto/aclfile || true &&
+        chmod 600 /mosquitto/passwd &&
+        chmod 700 /mosquitto/aclfile &&             # <-- จากเดิม 644
+        exec mosquitto -c /mosquitto/config/mosquitto.conf
+      '
+    networks: [farm_edge]
+
+  mqtt-explorer:
+    image: smeagolworms4/mqtt-explorer:browser-1.0.0
+    container_name: mqtt-explorer
+    restart: unless-stopped
+    ports:
+      - "8080:4000" 
+    environment:
+      MQTT_BROKER_URL: mqtt://edge-mqtt:1883
+      MQTT_USER: ${MQTT_USER}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+    networks: [farm_edge]
+
+  # 2) TimeSeries DB (TimescaleDB)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: Asia/Bangkok
+    ports:
+      - "15432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      - ./db/initdb.d:/docker-entrypoint-initdb.d:ro  # ใส่สคริปต์สร้างตาราง/ไฮเปอร์เทเบิล
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # 3) MinIO
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # 4) image-ingestion-service
+  image-ingestion:
+    build:
+      context: ./services/images-ingestion-service   # <- แก้ path ให้ตรงของจริง
+      dockerfile: Dockerfile
+    container_name: image-ingestion
+    restart: unless-stopped
+    ports:
+      - "${IMAGE_INGESTION_SERVICE_PORT:-6313}:6313" 
+    env_file:
+      - .env
+    environment:
+      # ให้ service ใช้ service-name เป็น host ภายในเครือข่าย
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      # ไม่ต้องตั้ง ENV_PATH เมื่อใช้ env_file; compose จะ inject เข้า ENV อยู่แล้ว
+    depends_on:
+      - timescaledb
+      - minio
+      - edge-mqtt
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6313/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s

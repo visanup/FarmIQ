@@ -1,0 +1,35 @@
+robot_id: robot-01
+baseline:
+  sweep_every_min: 60
+  cadence_sec: 60
+sensors:
+  - sensor_id: temp-head
+    metric: TEMP
+    every_n_runs: 1
+    warmup_sec: 5
+    dwell_sec: 5
+  - sensor_id: co2-head
+    metric: CO2
+    every_n_runs: 1
+    warmup_sec: 60    # NDIR warm-up
+    dwell_sec: 10
+  - sensor_id: nh3-head
+    metric: NH3
+    every_n_runs: 1
+    warmup_sec: 90
+    dwell_sec: 10
+  - sensor_id: voc-head
+    metric: TVOC
+    every_n_runs: 3    # วัดทุก 3 รอบ
+    warmup_sec: 120
+    dwell_sec: 10
+  - sensor_id: pm-head
+    metric: PM25
+    every_n_runs: 2
+    warmup_sec: 30
+    dwell_sec: 10
+overrides:
+  - metric: NH3
+    zone_id: A1-A3
+    force_every_minutes: 30
+    until: "2025-08-12T18:00:00+07:00"

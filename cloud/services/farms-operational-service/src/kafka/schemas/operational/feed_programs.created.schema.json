@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FeedProgramsCreate",
+  "description": "Schema สำหรับ validate payload การสร้าง feed_programs ใหม่",
+  "type": "object",
+  "properties": {
+    "customer_id": { "type": "integer", "description": "รหัสลูกค้า" },
+    "farm_id": { "type": "integer", "description": "รหัสฟาร์ม" },
+    "program_name": { "type": "string", "description": "ชื่อโปรแกรมอาหาร" },
+    "start_date": { "type": "string", "format": "date", "description": "วันที่เริ่มใช้โปรแกรม" },
+    "end_date": { "type": ["string", "null"], "format": "date", "description": "วันที่สิ้นสุดโปรแกรม (optional)" },
+    "details": { "type": ["string", "null"], "description": "รายละเอียดเพิ่มเติม (optional)" }
+  },
+  "required": ["customer_id", "farm_id", "program_name", "start_date"],
+  "additionalProperties": false
+}

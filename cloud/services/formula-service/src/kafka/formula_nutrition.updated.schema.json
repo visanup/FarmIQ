@@ -1,0 +1,13 @@
+{
+  "$id": "formula_nutrition.updated",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "formula_id": { "type": "integer" },
+    "nutrient": { "type": "string" },
+    "amount": { "type": "number" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "formula_id", "nutrient", "amount", "updated_at"],
+  "additionalProperties": false
+}

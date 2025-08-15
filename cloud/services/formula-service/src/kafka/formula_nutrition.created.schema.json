@@ -1,0 +1,13 @@
+{
+  "$id": "formula_nutrition.created",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "formula_id": { "type": "integer" },
+    "nutrient": { "type": "string" },
+    "amount": { "type": "number" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "formula_id", "nutrient", "amount", "created_at"],
+  "additionalProperties": false
+}

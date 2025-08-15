@@ -1,0 +1,29 @@
+{
+  "$id": "https://cerabratechai.com/schemas/economic_data.created.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EconomicDataCreated",
+  "type": "object",
+  "properties": {
+    "id":                { "type": "integer" },
+    "customer_id":       { "type": "integer" },
+    "farm_id":           { "type": "integer" },
+    "batch_id":          { "type": ["string", "null"] },
+    "feed_assignment_id":{ "type": ["integer", "null"] },
+    "cost_type":         { "type": "string" },
+    "amount":            { "type": "number" },
+    "animal_price":      { "type": ["number", "null"] },
+    "feed_cost":         { "type": ["number", "null"] },
+    "labor_cost":        { "type": ["number", "null"] },
+    "utility_cost":      { "type": ["number", "null"] },
+    "medication_cost":   { "type": ["number", "null"] },
+    "maintenance_cost":  { "type": ["number", "null"] },
+    "other_costs":       { "type": ["number", "null"] },
+    "record_date":       { "type": "string", "format": "date" },
+    "created_at":        { "type": "string", "format": "date-time" },
+    "updated_at":        { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "id", "customer_id", "farm_id", "cost_type", "amount", "record_date", "created_at", "updated_at"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "House Created Event",
+  "type": "object",
+  "properties": {
+    "house_id":     { "type": "integer" },
+    "customer_id":  { "type": "integer" },
+    "farm_id":      { "type": "integer" },
+    "name":         { "type": "string" },
+    "area":         { "type": "number" },
+    "capacity":     { "type": "integer" },
+    "created_at":   { "type": "string", "format": "date-time" },
+    "updated_at":   { "type": "string", "format": "date-time" }
+  },
+  "required": ["house_id","customer_id","farm_id","created_at","updated_at"],
+  "additionalProperties": false
+}

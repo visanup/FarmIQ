@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/external_factors.data.schema.json",
+  "title": "ExternalFactorsData",
+  "type": "object",
+  "required": [
+    "id",
+    "customer_id",
+    "farm_id",
+    "record_date",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": { "type": "integer" },
+    "customer_id": { "type": "integer" },
+    "farm_id": { "type": "integer" },
+    "batch_id": { "type": ["string", "null"] },
+    "feed_assignment_id": { "type": ["integer", "null"] },
+    "weather": { "type": ["object", "null"] },
+    "disease_alert": { "type": ["object", "null"] },
+    "market_price": { "type": ["object", "null"] },
+    "feed_supply": { "type": ["object", "null"] },
+    "weather_forecast": { "type": ["object", "null"] },
+    "disease_risk_score": { "type": ["number", "null"] },
+    "regulatory_changes": { "type": ["string", "null"] },
+    "record_date": { "type": "string", "format": "date" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

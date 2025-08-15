@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FeedIntakeCreate",
+  "description": "Schema สำหรับ validate payload การสร้าง feed_intake ใหม่",
+  "type": "object",
+  "properties": {
+    "customer_id": { "type": "integer", "description": "รหัสลูกค้า" },
+    "farm_id": { "type": "integer", "description": "รหัสฟาร์ม" },
+    "animal_id": { "type": ["integer", "null"], "description": "รหัสสัตว์ (optional)" },
+    "batch_id": { "type": ["string", "null"], "description": "รหัสชุดข้อมูล (optional)" },
+    "feed_quantity": { "type": ["number", "null"], "description": "ปริมาณอาหาร (optional)" },
+    "created_at": { "type": ["string", "null"], "format": "date-time", "description": "เวลาสร้าง (optional)" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time", "description": "เวลาอัพเดต (optional)" }
+  },
+  "required": ["customer_id", "farm_id"],
+  "additionalProperties": false
+}

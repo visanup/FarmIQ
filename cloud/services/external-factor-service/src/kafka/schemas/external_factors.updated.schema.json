@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/external_factors.updated.schema.json",
+  "title": "ExternalFactorsUpdated",
+  "allOf": [
+    { "$ref": "external_factors.created.schema.json" },
+    {
+      "properties": {
+        "eventType": { "const": "external_factors.updated" },
+        "data": {
+          "type": "object",
+          "allOf": [
+            { "$ref": "external_factors.data.schema.json" },
+            {
+              "required": ["id", "updated_at"]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

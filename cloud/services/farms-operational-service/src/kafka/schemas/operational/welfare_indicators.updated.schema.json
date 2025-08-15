@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WelfareIndicatorsUpdate",
+  "description": "Schema สำหรับ validate payload การอัพเดต welfare_indicators",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer", "description": "รหัสเรคอร์ดที่ต้องการอัพเดต" },
+    "indicator_name": { "type": ["string", "null"], "description": "ชื่อดัชนี (optional)" },
+    "indicator_value": { "type": ["number", "null"], "description": "ค่าดัชนี (optional)" },
+    "measurement_date": { "type": ["string", "null"], "format": "date", "description": "วันที่วัด (optional)" },
+    "effective_start": { "type": ["string", "null"], "format": "date-time", "description": "วัน-เวลาที่เริ่มผล (optional)" },
+    "effective_end": { "type": ["string", "null"], "format": "date-time", "description": "วัน-เวลาที่สิ้นสุดผล (optional)" }
+  },
+  "required": [ "id" ],
+  "additionalProperties": false
+}
