@@ -57,7 +57,7 @@ console.log(`Using EDGE_DATABASE_URL: ${EDGE_DATABASE_URL}`);
 // 2) Cloud Database settings
 export const CLOUD_DB_HOST     = process.env.CLOUD_DB_HOST     || 'localhost';
 export const CLOUD_DB_PORT     = Number(process.env.CLOUD_DB_PORT) || 5432;
-export const CLOUD_DB_NAME     = process.env.CLOUD_DB_NAME     || 'cloud_db';
+export const CLOUD_DB_NAME     = process.env.CLOUD_DB_NAME     || 'sensor_cloud_db';
 export const CLOUD_DB_USER     = process.env.CLOUD_DB_USER     || 'postgres';
 export const CLOUD_DB_PASSWORD = process.env.CLOUD_DB_PASSWORD || 'password';
 
@@ -66,7 +66,12 @@ export const CLOUD_DATABASE_URL = process.env.CLOUD_DATABASE_URL ||
 console.log(`Using CLOUD_DATABASE_URL: ${CLOUD_DATABASE_URL}`);
 
 // 3) Server port
-export const PORT = Number(process.env.SYNC_PORT) || 4104;
+export const PORT = Number(process.env.SYNC_PORT) || 6311;
+
+export const REQUIRE_API_KEY = String(process.env.API_KEY ?? "false").toLowerCase() === "true";
+export const SERVICE_API_KEY = process.env.API_KEY ?? "";
+
+export const SYNC_INTERVAL_MINUTES = Number(process.env.SYNC_INTERVAL_MINUTES) || 5;
 
 
 

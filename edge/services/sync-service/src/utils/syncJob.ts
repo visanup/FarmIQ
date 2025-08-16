@@ -2,49 +2,67 @@
 import { edgeDataSource, cloudDataSource } from "./dataSource";
 import { SweepReading } from "../models/SweepReading";
 import { LabReading } from "../models/LabReading";
+import { DeviceReading } from "../models/DeviceReading";
 import { DeviceHealth } from "../models/DeviceHealth";
 import { SyncState } from "../models/SyncState";
 
 let isSyncing = false;
 
 type Plan = {
-  name: "sensors.sweep_readings" | "sensors.lab_readings" | "sensors.device_health";
+  name:
+    | "sensors.sweep_readings"
+    | "sensors.lab_readings"
+    | "sensors.device_readings"
+    | "sensors.device_health";
   entity: any;
   timeCol: string;
-  conflictCols: string[];        // สำหรับ DO NOTHING
-  filter?: string;               // เช่น filter tenant
+  filter?: string;
   batch?: number;
+  order: number;
 };
 
-const TENANT = process.env.SYNC_TENANT?.trim(); // ถ้าระบุจะ filter by tenant
+const TENANT = process.env.SYNC_TENANT?.trim();
+const BATCH_SWEEP = Number(process.env.SYNC_BATCH_SWEEP ?? 20000);
+const BATCH_LAB = Number(process.env.SYNC_BATCH_LAB ?? 10000);
+const BATCH_DEVICE = Number(process.env.SYNC_BATCH_DEVICE ?? 20000);
+const BATCH_HEALTH = Number(process.env.SYNC_BATCH_HEALTH ?? 5000);
 
 const plans: Plan[] = [
   {
     name: "sensors.sweep_readings",
     entity: SweepReading,
     timeCol: "time",
-    conflictCols: ["time","tenant_id","robot_id","run_id","sensor_id","metric"],
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
-    batch: 20000,
+    batch: BATCH_SWEEP,
+    order: 2,
   },
   {
     name: "sensors.lab_readings",
     entity: LabReading,
     timeCol: "time",
-    conflictCols: ["time","tenant_id","station_id","sensor_id","metric"],
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
-    batch: 10000,
+    batch: BATCH_LAB,
+    order: 2,
+  },
+  {
+    name: "sensors.device_readings",
+    entity: DeviceReading,
+    timeCol: "time",
+    filter: TENANT ? "t.tenant_id = :tenant" : undefined,
+    batch: BATCH_DEVICE,
+    order: 2,
   },
   {
     name: "sensors.device_health",
     entity: DeviceHealth,
     timeCol: "time",
-    conflictCols: ["time","tenant_id","device_id"],
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
-    batch: 5000,
+    batch: BATCH_HEALTH,
+    order: 3,
   },
 ];
 
+/** ensure sync_state exists on cloud */
 async function ensureSyncState() {
   await cloudDataSource.query(`
     CREATE TABLE IF NOT EXISTS sync_state(
@@ -54,14 +72,59 @@ async function ensureSyncState() {
   `);
 }
 
-async function getCursor(table: string) {
+async function getCursor(table: string): Promise<Date> {
   const repo = cloudDataSource.getRepository(SyncState);
-  let s = await repo.findOne({ where: { table_name: table } });
-  if (!s) {
-    s = repo.create({ table_name: table, last_ts: new Date(0) });
-    await repo.save(s);
+  let st = await repo.findOne({ where: { table_name: table } });
+  if (!st) {
+    st = repo.create({ table_name: table, last_ts: new Date(0) });
+    await repo.save(st);
   }
-  return s;
+  // backoff 1ms กันตกหล่น
+  return new Date(st.last_ts.getTime() - 1);
+}
+
+async function setCursor(table: string, ts: Date) {
+  const repo = cloudDataSource.getRepository(SyncState);
+  await repo.save({ table_name: table, last_ts: ts });
+}
+
+/** ดึงทีละชุดจนหมดช่วง (loop แบบค่อยๆ ขยับ cursor) */
+async function syncOne(p: Plan) {
+  const edgeRepo = edgeDataSource.getRepository(p.entity);
+  const cloudRepo = cloudDataSource.getRepository(p.entity);
+
+  let cursor = await getCursor(p.name);
+  const batch = p.batch ?? 10000;
+  let total = 0;
+
+  for (;;) {
+    let qb = edgeRepo
+      .createQueryBuilder("t")
+      .where(`t.${p.timeCol} > :cursor`, { cursor })
+      .orderBy(`t.${p.timeCol}`, "ASC")
+      .limit(batch);
+
+    if (p.filter) qb = qb.andWhere(p.filter, { tenant: TENANT });
+
+    const rows = await qb.getMany();
+    if (!rows.length) {
+      if (total === 0) {
+        console.log(`ℹ️ [${p.name}] no new rows`);
+      } else {
+        console.log(`✅ [${p.name}] synced total ${total} rows`);
+      }
+      break;
+    }
+
+    // ใช้ INSERT ... ON CONFLICT DO NOTHING (TypeORM: orIgnore()) เพื่อรองรับ composite PK + generated columns
+    await cloudRepo.createQueryBuilder().insert().values(rows as any).orIgnore().execute();
+
+    total += rows.length;
+    // อัปเดตคอร์สเซอร์เป็นเวลาแถวสุดท้ายของชุดนี้
+    const last = (rows as any[])[rows.length - 1][p.timeCol] as Date;
+    cursor = last;
+    await setCursor(p.name, last);
+  }
 }
 
 export async function runSync() {
@@ -72,8 +135,8 @@ export async function runSync() {
     if (!cloudDataSource.isInitialized) await cloudDataSource.initialize();
     await ensureSyncState();
 
-    for (const p of plans) {
-      await syncOne(p);
+    for (const plan of plans.sort((a, b) => a.order - b.order)) {
+      await syncOne(plan);
     }
   } catch (err) {
     console.error("❌ Sync error:", err);
@@ -82,46 +145,3 @@ export async function runSync() {
   }
 }
 
-async function syncOne(p: Plan) {
-  const eRepo = edgeDataSource.getRepository(p.entity);
-  const cRepo = cloudDataSource.getRepository(p.entity);
-  const sRepo = cloudDataSource.getRepository(SyncState);
-
-  const st = await getCursor(p.name);
-  const cursor = new Date(st.last_ts.getTime() - 1); // backoff 1ms
-
-  let qb = eRepo.createQueryBuilder("t")
-    .where(`t.${p.timeCol} > :cursor`, { cursor })
-    .orderBy(`t.${p.timeCol}`, "ASC")
-    .limit(p.batch ?? 10000);
-  if (p.filter) qb = qb.andWhere(p.filter, { tenant: TENANT });
-
-  const rows = await qb.getMany();
-  if (!rows.length) {
-    console.log(`ℹ️ [${p.name}] no new rows`);
-    return;
-  }
-
-  // ON CONFLICT DO NOTHING ใช้ composite key
-  const cols = Object.keys(eRepo.metadata.propertiesMap);
-  const values = rows.map(r => cols.map(c => (r as any)[c]));
-
-  const colList = cols.map(c => `"${c}"`).join(",");
-  const placeholders = rows
-    .map((_, i) => `(${cols.map((__, j) => `$${i * cols.length + j + 1}`).join(",")})`)
-    .join(",");
-
-  const conflict = p.conflictCols.map(c => `"${c}"`).join(", ");
-
-  await cRepo.manager.query(
-    `INSERT INTO "${eRepo.metadata.schema}"."${eRepo.metadata.tableName}" (${colList})
-     VALUES ${placeholders}
-     ON CONFLICT (${conflict}) DO NOTHING`,
-    values.flat()
-  );
-
-  const last = (rows as any[])[rows.length - 1][p.timeCol] as Date;
-  await sRepo.save({ table_name: p.name, last_ts: last });
-
-  console.log(`✅ [${p.name}] synced ${rows.length} rows > ${cursor.toISOString()}`);
-}

@@ -74,4 +74,4 @@ $RECYCLE.BIN/
 log/
 
 yarn.lock
-edge/mosquitto/config/passwd
+# edge/mosquitto/config/passwd
