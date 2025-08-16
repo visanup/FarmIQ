@@ -22,11 +22,10 @@ edge/
    ├─ sensor-service-port:6309
    ├─ station-service-port:6310
    ├─ sync-service-port:6311
-   ├─ vision-capture-service-port:6312
+   ├─ weigh-associator-service-port:6312
    ├─ image-ingestion-service -port:6313
    ├─ vision-inference-service-port:6314
-   ├─ weigh-associator-service-port:6315
-   └─ zone-mapper-service-port:6316
+   └─ zone-mapper-service-port:6315
 ```
 
 ## ภาพรวมสถาปัตยกรรม (Lab → Commercial)

@@ -1,65 +1,136 @@
-// services/sensor-service/src/server.ts
-
+// src/server.ts
 import "reflect-metadata";
 import express from "express";
+import cors from "cors";
+import helmet from "helmet";
 
-// ตรงนี้ import จาก src/config/config.ts
-import { mqttClient, PORT } from "./configs/config";
-import { AppDataSource } from "./utils/dataSource";
-import { parsePayload } from "./utils/helpers";
-import sensorRoutes, { updateSensorData } from "./routes/sensorRoutes";
-import { SensorData } from "./models/sensorDataModel";
+import {
+  PORT,
+  SENSOR_RAW_SUB,
+  PUB_NS_CLEAN,
+  PUB_NS_ANOMALY,
+  PUB_NS_DLQ,
+  WRITE_DB,
+} from "./configs/config";
+import { mqttClient, pubJSON } from "./utils/mqtt";
+import { parseRaw, applyDQ } from "./utils/zod";
+import sensorRouter, { stashLatest } from "./routes/sensor.route";
+
+// ===== Optional DB (เปิดใช้เมื่อ WRITE_DB=true) =====
+let saveReading:
+  | ((
+      r: {
+        time: Date;
+        tenant: string;
+        deviceId: string;
+        metric: string;
+        value: number;
+        rawPayload?: any;
+      }
+    ) => Promise<any>)
+  | undefined;
+
+async function initDbIfNeeded() {
+  if (!WRITE_DB) return;
+  const { AppDataSource } = await import("./utils/dataSource");
+  const mod = await import("./services/sensor.service");
+  await AppDataSource.initialize();
+  saveReading = mod.saveReading;
+  console.log("🔗 Database connected (WRITE_DB=true)");
+}
+
+// sensor.raw/{tenant}/{metric}/{deviceId}
+function parseTopic(topic: string) {
+  const parts = topic.split("/");
+  if (parts.length < 4) return null;
+  return { tenant: parts[1], metric: parts[2], deviceId: parts[3] };
+}
 
 async function bootstrap() {
-  // 1. เชื่อมต่อฐานข้อมูล
-  await AppDataSource.initialize();
-  console.log("🔗 Database connected");
+  await initDbIfNeeded();
 
-  // 2. subscribe topic ตาม convention
-  mqttClient.subscribe("sensor/+/data");
-  console.log("☕ Subscribed to sensor/+/data");
+  // Subscribe เมื่อ connect สำเร็จ (ปลอดภัยกว่าและ re-sub อัตโนมัติเมื่อ reconnect)
+  mqttClient.on("connect", () => {
+    mqttClient.subscribe(SENSOR_RAW_SUB, { qos: 1 }, (err) => {
+      if (err) console.error("❌ Subscribe error:", err);
+      else console.log(`☕ Subscribed: ${SENSOR_RAW_SUB}`);
+    });
+  });
 
-  // 3. เมื่อได้ message ให้ parse แล้ว save เข้า DB
-  mqttClient.on("message", async (topic, payloadBuf) => {
-    const data = parsePayload(payloadBuf);
-    if (!data) return;
-
-    const parts = topic.split("/");
-    const deviceId = Number(parts[1]);
-    if (isNaN(deviceId)) {
-      console.warn("Invalid deviceId:", parts[1]);
+  mqttClient.on("message", async (topic, payload) => {
+    const tp = parseTopic(topic);
+    if (!tp) {
+      console.warn("⚠️ Bad topic:", topic);
       return;
     }
 
-    const metric = data.metric as string;
-    const value  = Number(data.value);
+    const raw = parseRaw(payload);
+    if (!raw) return;
 
-    const sd = new SensorData();
-    sd.time       = new Date();
-    sd.deviceId   = deviceId;
-    sd.topic      = metric;
-    sd.value      = value;
-    sd.rawPayload = data;
+    const ts = raw.ts ?? new Date();
+    const dq = applyDQ(tp.metric, raw.value);
 
-    try {
-      await AppDataSource.manager.save(sd);
-      updateSensorData(sd);
-      console.log(`💾 [Device ${deviceId}] ${metric} = ${value}`);
-    } catch (err) {
-      console.error("❌ Error saving to DB:", err);
+    const out = {
+      ts,
+      tenant: tp.tenant,
+      device_id: tp.deviceId,
+      metric: tp.metric,
+      value: raw.value,
+      quality: dq.quality,
+      rule_hits: dq.reasons ?? [],
+      payload: raw,
+    };
+
+    // forward → sensor.clean / sensor.anomaly / sensor.dlq
+    const base =
+      dq.quality === "clean"
+        ? PUB_NS_CLEAN
+        : dq.quality === "anomaly"
+        ? PUB_NS_ANOMALY
+        : PUB_NS_DLQ;
+
+    const outTopic = `${base}/${tp.tenant}/${tp.metric}/${tp.deviceId}`;
+    pubJSON(outTopic, out, 1, false);
+    stashLatest({ topic: outTopic, data: out });
+
+    // (optional) เขียน DB ใน service นี้ (ระหว่างรอ sync-service)
+    if (WRITE_DB && saveReading) {
+      try {
+        await saveReading({
+          time: new Date(ts),
+          tenant: tp.tenant,
+          deviceId: tp.deviceId,
+          metric: tp.metric,
+          value: out.value,
+          rawPayload: out,
+        });
+      } catch (e) {
+        console.error("❌ DB save error:", e);
+      }
     }
   });
 
-  // 4. สตาร์ท HTTP server (สำหรับ /sensor/latest)
+  // ===== HTTP =====
   const app = express();
+  app.use(helmet());
+  app.use(cors());
   app.use(express.json());
-  app.use("/sensor", sensorRoutes);
+  app.use("/sensor", sensorRouter);
 
-  app.listen(PORT, () => {
-    console.log(`🚀 sensor-service listening on http://localhost:${PORT}`);
-  });
+  const server = app.listen(PORT, () =>
+    console.log(`🚀 sensor-service http://0.0.0.0:${PORT}`)
+  );
+
+  // Graceful shutdown
+  const shutdown = (sig: string) => {
+    console.log(`\n🛑 Received ${sig}, shutting down...`);
+    server.close(() => process.exit(0));
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
-bootstrap().catch((err) => {
-  console.error("Bootstrap error:", err);
+bootstrap().catch((e) => {
+  console.error("Bootstrap error:", e);
+  process.exit(1);
 });

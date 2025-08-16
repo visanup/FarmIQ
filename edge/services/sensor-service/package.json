@@ -2,27 +2,31 @@
   "name": "sensor-service",
   "version": "1.0.0",
   "main": "dist/server.js",
+  "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "start": "node dist/server.js",
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node dist/server.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^5.1.0",
+    "helmet": "^7.1.0",
     "mqtt": "^5.13.1",
-    "pg": "^8.16.0",
+    "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
-    "typeorm": "^0.3.24"
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "typeorm": "^0.3.25",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/mqtt": "^2.5.0",
-    "@types/node": "^24.0.13",
-    "dotenv": "^17.2.0",
-    "node-fetch": "^3.3.2",
+    "@types/node": "^20.14.10",
+    "dotenv": "^16.4.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.5.4"
   }
 }

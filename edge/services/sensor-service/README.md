@@ -1,122 +1,245 @@
-````markdown
 # sensor-service
 
-`sensor-service` เป็น microservice สำหรับรับ–เก็บ–แสดงผลข้อมูลเซนเซอร์แบบ Time Series โดยใช้ PostgreSQL + TimescaleDB
+บริการ **รับข้อมูลเซ็นเซอร์** จาก MQTT (`sensor.raw/...`) แล้ว **ตรวจสอบ / แปลง / enrich** และ **เผยแพร่ต่อ** ไปที่หัวข้อทำความสะอาด (`sensor.clean/...`) หรือแจ้งเตือนความผิดปกติ (`sensor.anomaly/...`) พร้อมตัวเลือกเขียนลงฐานข้อมูล (TimescaleDB/PostgreSQL)
+
+> ตัวอย่าง log เมื่อเชื่อมต่อสำเร็จ
+> `📡 MQTT connected: mqtt://edge-mqtt:1883`
+> `☕ Subscribed: sensor.raw/+/+/+`
 
 ---
 
-## 🗄️ Database Schema
+## คุณสมบัติ
 
-```sql
-CREATE SCHEMA IF NOT EXISTS sensors;
-CREATE EXTENSION IF NOT EXISTS timescaledb;
+* Subscribe: `sensor.raw/+/+/+` (ค่าเริ่มต้น ปรับได้ผ่าน `.env`)
+* Publish:
 
--- ตาราง sensor_data บันทึกข้อมูลเซนเซอร์ตามเวลา
-CREATE TABLE IF NOT EXISTS sensors.sensor_data (
-  time         TIMESTAMPTZ      NOT NULL,
-  device_id    INTEGER          NOT NULL,
-  topic        TEXT             NOT NULL,
-  value        DOUBLE PRECISION NOT NULL,
-  raw_payload  JSONB,
-  PRIMARY KEY (time, device_id, topic)
-);
-
--- แปลงเป็น Hypertable (partition ตามวัน)
-SELECT create_hypertable(
-  'sensors.sensor_data',
-  'time',
-  chunk_time_interval => INTERVAL '1 day',
-  if_not_exists       => TRUE,
-  migrate_data        => TRUE
-);
-
--- ดัชนีเสริม
-CREATE INDEX IF NOT EXISTS idx_sensor_data_device_time
-  ON sensors.sensor_data (device_id, time DESC);
-
-CREATE INDEX IF NOT EXISTS idx_sensor_data_topic_time
-  ON sensors.sensor_data (topic, time DESC);
-````
-
-* **Hypertable**: TimescaleDB ช่วยจัดการ partition อัตโนมัติบนคอลัมน์ `time`
-* **Primary Key**: `(time, device_id, topic)`
-* **Indexes**: ช่วยให้ query ตามอุปกรณ์และหัวข้อรวดเร็วขึ้น
+  * ข้อมูลผ่านเกณฑ์ → `sensor.clean/...`
+  * ผิดสคีมาหรือค่าผิดปกติ → `sensor.anomaly/...`
+  * (ตัวเลือก) Dead-letter → `sensor.dlq/...`
+* แยก **namespace** ได้ด้วยตัวแปร: `PUB_NS_CLEAN`, `PUB_NS_ANOMALY`, `PUB_NS_DLQ`
+* รองรับ **multi-tenant** / device id model (สอดคล้อง ACL แบบ `pattern`)
+* เขียน DB ได้ (TimescaleDB/PostgreSQL) เมื่อเปิด `WRITE_DB=true`
+* HTTP server (สำหรับ health/metrics ของบริการ) ที่พอร์ต `SENSOR_PORT` (ค่าเริ่ม 6309)
+* `.env` loader แบบ **ฉลาด**: หาไฟล์ `.env` อัตโนมัติ หรือรับจาก `docker-compose`
 
 ---
 
-## 🛠️ การติดตั้ง & รัน
+## สถาปัตยกรรมย่อ
 
-1. **Clone โปรเจกต์**
-
-   ```bash
-   git clone <repo-url>
-   cd services/sensor-service
-   ```
-2. **ติดตั้ง dependencies**
-
-   ```bash
-   yarn install
-   ```
-3. **ตั้งค่า `.env`** (root ของ workspace):
-
-   ```dotenv
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_USER=postgres
-   DB_PASSWORD=secret
-   DB_NAME=sensors_db
-   SENSOR_SERVICE_PORT=4101
-   ```
-4. **รันด้วย ts-node-dev**
-
-   ```bash
-   yarn dev
-   ```
+```
+(sensor devices) ---> sensor.raw/{tenant}/{type}/{deviceId} ---> [sensor-service]
+                                                         |--> validate/transform/enrich
+                                                         |--> sensor.clean/{tenant}/{type}/{deviceId}
+                                                         |--> sensor.anomaly/{tenant}/{type}/{deviceId}
+                                                         |--> (optional) DB write (Timescale)
+```
 
 ---
 
-## ✨ การทำงานหลัก
+## MQTT Topics
 
-* Service นี้มี **route** เดียวสำหรับดึงข้อมูลเซนเซอร์ล่าสุด (`/api/sensors/latest`)
-* ข้อมูลล่าสุดถูกเก็บชั่วคราวในหน่วยความจำ (cache) จำนวน **10 รายการล่าสุด**
-* เมื่อมีข้อมูลใหม่เข้ามา (ผ่าน MQTT หรือ WebSocket) ให้เรียก `updateSensorData(newData)` เพื่ออัปเดต cache
+ค่าเริ่มต้น (แก้ได้ใน `.env`):
+
+* Subscribe (input):
+
+  * `SENSOR_RAW_SUB=sensor.raw/+/+/+`
+* Publish (output namespaces):
+
+  * `PUB_NS_CLEAN=sensor.clean`
+  * `PUB_NS_ANOMALY=sensor.anomaly`
+  * `PUB_NS_DLQ=sensor.dlq`
+
+> ตัวอย่าง mapping:
+> รับหัวข้อ: `sensor.raw/t1/thermo/dev-001`
+> ส่งต่อ: `sensor.clean/t1/thermo/dev-001` (หรือ `sensor.anomaly/t1/thermo/dev-001`)
 
 ---
 
-## 📡 API Endpoint
+## ตัวอย่าง Payload
 
-### GET `/api/sensors/latest`
+### Raw (เข้า)
 
-* **Description**: ดึง 10 ข้อมูลเซนเซอร์ล่าสุดจากหน่วยความจำ
-* **Response**:
+```json
+{
+  "ts": "2025-08-16T07:00:00Z",
+  "value": 23.5,
+  "unit": "C",
+  "meta": { "firmware": "1.2.3" }
+}
+```
 
-  ```json
-  {
-    "data": [
-      {
-        "time": "2025-06-27T04:00:00Z",
-        "device_id": 42,
-        "topic": "sensor/temperature",
-        "value": 25.96,
-        "raw_payload": { /* JSON payload */ }
-      },
-      // ...รวม 10 รายการ
-    ]
-  }
+### Clean (ออก)
+
+```json
+{
+  "schema": "sensor_clean@1",
+  "ts": "2025-08-16T07:00:00Z",
+  "tenant": "t1",
+  "type": "thermo",
+  "device_id": "dev-001",
+  "value": 23.5,
+  "unit": "C",
+  "meta": { "firmware": "1.2.3" }
+}
+```
+
+### Anomaly (ออก)
+
+```json
+{
+  "schema": "sensor_anomaly@1",
+  "ts": "2025-08-16T07:00:00Z",
+  "tenant": "t1",
+  "type": "thermo",
+  "device_id": "dev-001",
+  "reason": "missing_field:value",
+  "raw": { "ts": "2025-08-16T07:00:00Z", "unit":"C" }
+}
+```
+
+> หมายเหตุ: สคีมาที่แท้จริงขึ้นกับโค้ดแปลง/ตรวจสอบของคุณ ถ้ายังไม่มีสคีมาอย่างเป็นทางการ แนะนำเก็บที่ `contracts/mqtt/` แล้วให้ทั้งระบบอ้างอิงชุดเดียวกัน
+
+---
+
+## การตั้งค่า (Environment Variables)
+
+ไฟล์ `.env` (อาจใช้ร่วมกันหลาย service ได้ แต่ระวังชื่อแปรชนกัน) — **เซอร์วิสนี้**จะอ่านเฉพาะชุด `MQTT_SENSOR_*` เพื่อไม่ชนกับบริการอื่น (เช่น image ingestion)
+
+```dotenv
+## --- Database (Timescale/Postgres) ---
+DB_HOST=timescaledb
+DB_PORT=5432
+DB_NAME=sensors_db
+DB_USER=postgres
+DB_PASSWORD=password
+WRITE_DB=false                 # true = เขียน DB
+
+## --- HTTP server ---
+SENSOR_PORT=6309
+
+## --- MQTT broker ---
+MQTT_BROKER_URL=mqtt://edge-mqtt:1883
+# วิธี A: ใส่ user/pass แยก (สำหรับ sensor-service เท่านั้น)
+MQTT_SENSOR_USER=edge_sensor_svc
+MQTT_SENSOR_PASSWORD=admin1234
+# วิธี B: หรือจะฝังใน URL ก็ได้ (อย่าตั้ง SENSOR_* ซ้ำ)
+# MQTT_BROKER_URL=mqtt://edge_sensor_svc:admin1234@edge-mqtt:1883
+
+## --- Topics / Namespaces ---
+SENSOR_RAW_SUB=sensor.raw/+/+/+
+PUB_NS_CLEAN=sensor.clean
+PUB_NS_ANOMALY=sensor.anomaly
+PUB_NS_DLQ=sensor.dlq
+
+## --- Misc ---
+LOG_LEVEL=info
+```
+
+**สำคัญ:** ถ้าใช้ `.env` รวมหลาย service ให้ตั้งค่าผู้ใช้ MQTT **เฉพาะของบริการนี้** ด้วย `MQTT_SENSOR_USER/MQTT_SENSOR_PASSWORD` และหลีกเลี่ยง `MQTT_USER/MQTT_PASSWORD` เพื่อไม่ชนกัน
+
+---
+
+## การรันด้วย Docker Compose
+
+ในโฟลเดอร์ `edge/`:
+
+```bash
+docker-compose up -d sensor-service
+# ดู log
+docker-compose logs -f sensor-service
+```
+
+log ที่คาดหวัง:
+
+```
+[config] no local .env file; relying on process.env
+🔌 MQTT connecting to mqtt://edge-mqtt:1883 as edge_sensor_svc
+🚀 sensor-service http://0.0.0.0:6309
+📡 MQTT connected: mqtt://edge-mqtt:1883
+☕ Subscribed: sensor.raw/+/+/+
+```
+
+> ถ้าเจอ `Connection refused: Not authorized (code 5)`
+> ให้เช็กว่า user/pass ถูกต้องและถูกส่งเข้าไปจริง
+> ทดสอบจาก host:
+> `mosquitto_sub -h edge-mqtt -p 1883 -u edge_sensor_svc -P 'admin1234' -t '$SYS/#' -C 1 -v`
+> ถ้าไม่ผ่าน ให้รีเซ็ตรหัสผ่านใน broker:
+> `mosquitto_passwd -b /mosquitto/config/passwordfile edge_sensor_svc admin1234 && docker restart edge-mqtt`
+
+---
+
+## Health & Debug
+
+* (ทั่วไป) `GET http://<edge-ip>:6309/health` → สถานะบริการ (ถ้ามี route นี้ในโค้ด)
+* MQTT live test:
+
+  ```bash
+  # ยิง raw
+  mosquitto_pub -h edge-mqtt -p 1883 -u edge_sensor_svc -P 'admin1234' \
+    -t 'sensor.raw/t1/thermo/dev-001' \
+    -m '{"ts":"2025-08-16T07:00:00Z","value":23.5,"unit":"C"}'
+
+  # เปิดดู clean/anomaly
+  mosquitto_sub -h edge-mqtt -p 1883 -u edge_sensor_svc -P 'admin1234' -t 'sensor.clean/#' -v
+  mosquitto_sub -h edge-mqtt -p 1883 -u edge_sensor_svc -P 'admin1234' -t 'sensor.anomaly/#' -v
   ```
 
 ---
 
-## 📈 การขยายเพิ่มเติม
+## การกำหนดสิทธิ์ (Mosquitto ACL)
 
-* **Persist to DB**: ปรับให้อ่าน–เขียน TimescaleDB จริง แทนการใช้ memory cache
-* **Query API**: เพิ่ม endpoints สำหรับ
+ตัวอย่าง ACL ที่เหมาะกับบทบาท `edge_sensor_svc`:
 
-  * ดึง historical data ตามช่วงเวลา `?device_id=&topic=&from=&to=`
-  * สถิติ (avg, min, max) ต่อช่วงเวลาที่กำหนด
-* **Authentication**: ป้องกันการเข้าถึงด้วย JWT
-* **WebSocket / MQTT**: ให้ service subscribe topic แล้วอัปเดต cache และ DB อัตโนมัติ
+```
+user edge_sensor_svc
+topic read  sensor.raw/#
+topic write sensor.clean/#
+topic write sensor.anomaly/#
+topic write sensor.dlq/#
+topic read  cmd/#
+```
+
+และสำหรับอุปกรณ์จริง (username = tenant, clientId = deviceId) สามารถใช้ `pattern` ตามโมเดล multi-tenant ที่มีอยู่แล้วของคุณ
 
 ---
 
-หากต้องการตัวอย่างโค้ดหรือการเชื่อมต่อ MQTT เพิ่มเติม แจ้งได้เลยครับ!
+## การเขียนฐานข้อมูล
+
+เปิดด้วย `WRITE_DB=true` และตั้งค่า DB ให้ถูกต้อง:
+
+```
+DB_HOST=timescaledb
+DB_PORT=5432
+DB_NAME=sensors_db
+DB_USER=postgres
+DB_PASSWORD=password
+```
+
+> แนะนำให้ใช้ Timescale hypertable และสร้างดัชนี (time, device\_id/type) เพื่อ query เร็ว
+> ถ้ายังไม่ต้องการเขียน DB ให้ตั้ง `WRITE_DB=false` (ค่าเริ่ม)
+
+---
+
+## การดีพลอย/ดูแล
+
+* **เวลาระบบ** (Edge/Devices) ต้องตรง NTP เพื่อให้ `ts` และการ associate ข้อมูลถูกต้อง
+* **Retention**: ตั้งนโยบายเก็บข้อมูล (DB/Topic) ตาม SLA
+* **Observability**: เก็บ log 4xx/5xx ของ DB/HTTP, และ capture payload anomaly เพื่อวิเคราะห์
+* **Security**:
+
+  * แยก user ต่อ service (อย่างที่ทำอยู่: `edge_sensor_svc`, `edge_image_ingest`, …)
+  * ใช้ ACL แบบ least-privilege
+  * ถ้าข้ามไซต์/อินเทอร์เน็ต ให้ใช้ `mqtts://` + CA หรือวิธี overlay (WireGuard/Tailscale)
+
+---
+
+## FAQ
+
+**Q: ใช้ `.env` เดียวร่วมกันหลาย service ได้ไหม?**
+A: ได้ แต่ให้ใช้ชื่อตัวแปร **เฉพาะ** ของแต่ละ service เพื่อลดการชนกัน เช่น service นี้ใช้ `MQTT_SENSOR_USER/PASSWORD` ไม่ใช่ `MQTT_USER/PASSWORD`
+
+**Q: ต่อ MQTT แล้วขึ้น code 5?**
+A: ส่วนใหญ่เป็น user/pass ไม่ตรงหรือไม่ได้ส่ง ตรวจ env ในคอนเทนเนอร์, ทดสอบด้วย `mosquitto_sub`, ถ้าไม่ได้ให้ `mosquitto_passwd` รีเซ็ตและ restart broker
+
+**Q: จะให้บริการนี้เขียน DB ไหม?**
+A: เปิด `WRITE_DB=true` และตั้งค่าการเชื่อมต่อ DB ให้ครบ ตรวจ schema/migration ให้พร้อม

@@ -72,7 +72,7 @@
 
 ``` powershell 
     # ชี้โฟลเดอร์ config ของคุณ
-    $CONF = 'D:\farm-ecosystem\edge\mosquitto\config'
+    $CONF = 'D:/FarmIQ/edge/mosquitto/config'
 
     # ครั้งแรก: สร้างไฟล์ passwd พร้อมผู้ใช้ edge_admin (จะถามรหัส)
     docker run --rm -it -v "${CONF}:/mosquitto/config" eclipse-mosquitto:2.0 `

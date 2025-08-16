@@ -92,7 +92,62 @@ services:
       retries: 3
       start_period: 5s
 
-  # 4) image-ingestion-service
+  # 4) sensor-service
+  sensor-service:
+    build:
+      context: ./services/sensor-service
+      dockerfile: Dockerfile
+    container_name: sensor-service
+    restart: unless-stopped
+    ports:
+      - "${SENSOR_PORT:-6309}:6309"
+    env_file:
+      - .env
+    environment:
+      # DB (ถ้าจะใช้)
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      ENV_PATH: /app/.env
+    depends_on:
+      - timescaledb
+      - edge-mqtt
+    networks: [farm_edge]
+    healthcheck:
+      # แนะนำใช้ node แทน curl (image slim ไม่มี curl)
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:6309/sensor/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # 4) weight-associator-service
+  weight-associator:
+    build:
+      context: ./services/weight-associator-service   # <- แก้ path ให้ตรงของจริง
+      dockerfile: Dockerfile
+    container_name: weight-associator
+    restart: unless-stopped
+    ports:
+      - "${WEIGHT_ASSOCIATOR_PORT:-6312}:6312"
+    env_file:
+      - .env
+    environment:
+      # ให้ service ใช้ service-name เป็น host ภายในเครือข่าย
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      # ไม่ต้องตั้ง ENV_PATH เมื่อใช้ env_file; compose จะ inject เข้า ENV อยู่แล้ว
+    depends_on:
+      - timescaledb
+      - edge-mqtt
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6312/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # 5) image-ingestion-service
   image-ingestion:
     build:
       context: ./services/images-ingestion-service   # <- แก้ path ให้ตรงของจริง

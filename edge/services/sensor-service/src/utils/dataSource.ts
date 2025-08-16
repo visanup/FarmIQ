@@ -1,15 +1,9 @@
-// services/sensor-service/src/utils/data-source.ts
+// src/utils/dataSource.ts
 
 import "reflect-metadata";
 import { DataSource } from "typeorm";
-import { SensorData } from "../models/sensorDataModel";
-import {
-  DB_HOST,
-  DB_PORT,
-  DB_USER,
-  DB_PASSWORD,
-  DB_NAME,
-} from "../configs/config";
+import { SensorReading } from "../models/SensorReading";
+import { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } from "../configs/config";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -18,10 +12,8 @@ export const AppDataSource = new DataSource({
   username: DB_USER,
   password: DB_PASSWORD,
   database: DB_NAME,
+  schema: "sensors",
   synchronize: false,
   logging: false,
-  schema: "sensors",
-  entities: [SensorData],
+  entities: [SensorReading],
 });
-
-
