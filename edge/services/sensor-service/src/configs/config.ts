@@ -88,6 +88,9 @@ export const MQTT_TLS = MQTT_PROTOCOL === 'mqtts';
 
 // topics / namespaces
 export const SENSOR_RAW_SUB = process.env.SENSOR_RAW_SUB || 'sensor.raw/+/+/+';
+export const DM_HEALTH_SUB = process.env.DM_HEALTH_SUB || 'dm/+/+/health';
+export const DM_LWT_SUB    = process.env.DM_LWT_SUB    || 'dm/+/+/lwt';
+
 export const PUB_NS_CLEAN   = process.env.PUB_NS_CLEAN || 'sensor.clean';
 export const PUB_NS_ANOMALY = process.env.PUB_NS_ANOMALY || 'sensor.anomaly';
 export const PUB_NS_DLQ     = process.env.PUB_NS_DLQ || 'sensor.dlq';

@@ -1,8 +1,8 @@
 // src/utils/dataSource.ts
-
 import "reflect-metadata";
 import { DataSource } from "typeorm";
-import { SensorReading } from "../models/SensorReading";
+import { SweepReading } from "../models/SweepReading";
+import { DeviceHealth } from "../models/DeviceHealth";
 import { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } from "../configs/config";
 
 export const AppDataSource = new DataSource({
@@ -15,5 +15,6 @@ export const AppDataSource = new DataSource({
   schema: "sensors",
   synchronize: false,
   logging: false,
-  entities: [SensorReading],
+  entities: [SweepReading, DeviceHealth],
 });
+
