@@ -1,11 +1,12 @@
 // src/services/media.service.ts
+// src/services/media.service.ts
 import crypto from 'crypto';
 import path from 'path';
 import sharp from 'sharp';
 import { AppDataSource } from '../utils/dataSource';
 import { MediaObject } from '../models/MediaObject';
 import { ReadingMediaMap } from '../models/ReadingMediaMap';
-import { ensureBucket, minio, MINIO_BUCKET } from '../utils/minio';
+import { minio, MINIO_BUCKETS } from '../utils/minio';
 import { publishIngest } from '../utils/mqtt';
 
 type IngestMeta = {
@@ -31,17 +32,20 @@ export async function ingestImage(
     const info = await sharp(file.buffer).metadata();
     width = info.width ?? null;
     height = info.height ?? null;
-  } catch {}
+  } catch {
+    // ignore EXIF/metadata errors
+  }
 
-  await ensureBucket(MINIO_BUCKET);
+  // ✅ buckets ถูก ensure แล้วตอน start() ใน server.ts (ensureBuckets())
 
   const ext = path.extname(file.originalname) || '.jpg';
   const objectKey = `${meta.tenant_id}/${meta.sensor_id || 'unknown'}/${now.getTime()}-${sha256.slice(0, 10)}${ext}`;
+  const bucket = MINIO_BUCKETS.raw; // 📌 ใช้ bucket ภาพดิบ
 
   const size = typeof file.size === 'number' ? file.size : file.buffer.length;
 
   await minio.putObject(
-    MINIO_BUCKET,
+    bucket,
     objectKey,
     file.buffer,
     size,
@@ -59,7 +63,7 @@ export async function ingestImage(
       time: now,
       tenant_id: meta.tenant_id,
       kind: meta.kind || 'image',
-      bucket: MINIO_BUCKET,
+      bucket,                 // ✅ บันทึกชื่อ bucket ที่ใช้จริง
       object_key: objectKey,
       sha256,
       width: width ?? undefined,
@@ -82,10 +86,11 @@ export async function ingestImage(
 
     await qr.commitTransaction();
 
+    // แจ้ง event เข้า MQTT (non-blocking)
     try {
       publishIngest({
         kind: 'image',
-        bucket: MINIO_BUCKET,
+        bucket,               // ✅ ใช้ bucket จริง
         objectKey,
         media_id: saved.media_id,
         time: now.toISOString(),
@@ -100,9 +105,9 @@ export async function ingestImage(
       });
     } catch (e) {
       console.error('MQTT publish failed:', e);
-}
+    }
 
-    return { ok: true, media_id: saved.media_id, object_key: objectKey, bucket: MINIO_BUCKET };
+    return { ok: true, media_id: saved.media_id, object_key: objectKey, bucket };
   } catch (e) {
     await qr.rollbackTransaction();
     throw e;
@@ -118,4 +123,5 @@ export async function listRecentMedia(limit = 20) {
     .limit(limit)
     .getMany();
 }
+
 

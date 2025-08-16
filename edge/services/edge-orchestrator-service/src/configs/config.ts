@@ -3,7 +3,6 @@
 import * as dotenv from 'dotenv';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
-import { Algorithm } from 'jsonwebtoken';
 
 /** หาไฟล์ .env ให้ฉลาดขึ้น:
  *  - ถ้ามี ENV_PATH และไฟล์มีอยู่ ใช้อันนั้นเลย
@@ -61,40 +60,23 @@ export const DATABASE_URL =
 export const DB_SCHEMA = process.env.DB_SCHEMA || 'sensors';
 
 // ---------- Server ----------
-export const PORT = Number(process.env.IMAGE_INGESTION_SERVICE_PORT || process.env.PORT || 6313);
+export const PORT = Number(process.env.EDGE_ORCHESTRATOR_PORT || process.env.PORT || 6310);
 export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 
 // ---------- Security ----------
-export const API_KEY = requireEnv('API_KEY');
-export const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || '';
-export const ALGORITHM: Algorithm = (process.env.ALGORITHM as Algorithm) || 'HS256';
-export const TOKEN_EXPIRATION_MINUTES = Number(process.env.TOKEN_EXPIRATION_MINUTES || 1440);
+export const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? '';
 
-// ---------- MinIO ----------
-export const MINIO_ENDPOINT   = requireEnv('MINIO_ENDPOINT'); // e.g. http://minio:9000
+// MinIO
+export const MINIO_ENDPOINT = requireEnv('MINIO_ENDPOINT');
 export const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY ?? requireEnv('MINIO_ROOT_USER');
 export const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY ?? requireEnv('MINIO_ROOT_PASSWORD');
 
-/**
- * แยก bucket ตามหน้าที่ให้ชัดเจน
- * - RAW: รูปดิบ
- * - DATASETS: ไฟล์ dataset/manifest
- * - MODELS: ไฟล์โมเดลที่เทรนเสร็จ
- *
- * NOTE: รองรับของเก่าที่เคยตั้ง MINIO_BUCKET=images โดย map ให้ RAW ชี้ไปที่ตัวนั้น
- */
-export const MINIO_BUCKET_RAW      = process.env.MINIO_BUCKET_RAW
-  ?? process.env.MINIO_BUCKET       // backward compat: ถ้ามี MINIO_BUCKET เดิม ให้ถือว่าเป็น RAW
-  ?? 'images';
-
+export const MINIO_BUCKET_RAW =
+  process.env.MINIO_BUCKET_RAW ?? process.env.MINIO_BUCKET ?? 'images';
 export const MINIO_BUCKET_DATASETS = process.env.MINIO_BUCKET_DATASETS ?? 'farmiq-datasets';
-export const MINIO_BUCKET_MODELS   = process.env.MINIO_BUCKET_MODELS   ?? 'farmiq-models';
+export const MINIO_BUCKET_MODELS = process.env.MINIO_BUCKET_MODELS ?? 'farmiq-models';
 
-// (ถ้าจำเป็น ต้องส่งค่า default ออกไปด้วย แต่อย่าใช้แทน RAW/DATASETS/MODELS)
-export const MINIO_BUCKET_DEFAULT  = process.env.MINIO_BUCKET ?? MINIO_BUCKET_RAW;
-
-// รวมไว้ให้ import ง่าย
 export const MINIO_BUCKETS = {
   raw: MINIO_BUCKET_RAW,
   datasets: MINIO_BUCKET_DATASETS,
@@ -110,3 +92,7 @@ export const ROUTING_KEY =
   process.env.ROUTING_KEY ||
   process.env.RAW_ROUTING_KEY || // fallback เผื่อยังตั้งของเดิม
   'image.created';
+
+// External services
+export const INFERENCE_BASE_URL =
+  process.env.INFERENCE_BASE_URL ?? 'http://vision-inference-service:6314';

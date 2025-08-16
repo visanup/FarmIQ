@@ -15,7 +15,7 @@ import { AppDataSource } from './utils/dataSource';
 import routes from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { PORT } from './configs/config';
-import { ensureBucket, MINIO_BUCKET } from './utils/minio';
+import { ensureBuckets } from './utils/minio';
 import { initMqtt } from './utils/mqtt';
 import { buildOpenApiSpec } from './utils/swagger';
 
@@ -26,7 +26,7 @@ async function start() {
     console.log('✅ DataSource initialized');
 
     const mqttClient = initMqtt();
-    await ensureBucket(MINIO_BUCKET);
+    await ensureBuckets();
 
     // 2) App & middlewares
     const app: Application = express();

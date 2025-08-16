@@ -19,8 +19,9 @@ edge/
    ├─ pose-tracker-service-port:6306
    ├─ robot-bridge-port:6307
    ├─ robot-orchestrator-port:6308
+   ├─ station-service-port
    ├─ sensor-service-port:6309
-   ├─ station-service-port:6310
+   ├─ edge-orchestrator-service-port:6310
    ├─ sync-service-port:6311
    ├─ weigh-associator-service-port:6312
    ├─ image-ingestion-service -port:6313

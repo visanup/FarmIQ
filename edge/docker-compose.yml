@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     ports:
       - "1883:1883"
-      - "9002:9001"
+      # - "9002:9001"
     volumes:
       - ./mosquitto/config:/mosquitto/config:ro
       - mosquitto-data:/mosquitto/data
@@ -36,10 +36,12 @@ services:
       '
     networks: [farm_edge]
 
+  # docker compose --profile dev up -d mqtt-explorer
   mqtt-explorer:
     image: smeagolworms4/mqtt-explorer:browser-1.0.0
     container_name: mqtt-explorer
     restart: unless-stopped
+    profiles: ["dev"]
     ports:
       - "8080:4000" 
     environment:
@@ -58,8 +60,10 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
       TZ: Asia/Bangkok
-    ports:
-      - "15432:5432"
+    # ports:
+    #   - "15432:5432"
+    expose:
+      - "5432"
     volumes:
       - timescale-data:/var/lib/postgresql/data
       - ./db/initdb.d:/docker-entrypoint-initdb.d:ro  # ใส่สคริปต์สร้างตาราง/ไฮเปอร์เทเบิล
@@ -78,6 +82,9 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+    expose:
+      - "9000"
+      - "9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -99,8 +106,8 @@ services:
       dockerfile: Dockerfile
     container_name: sensor-service
     restart: unless-stopped
-    ports:
-      - "${SENSOR_PORT:-6309}:6309"
+    # ports:
+    #   - "${SENSOR_PORT:-6309}:6309"
     env_file:
       - .env
     environment:
@@ -119,17 +126,46 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    expose:
+      - "6309"
 
-  # 5) sync-service
+  # 5) edge-orchestrator
+  edge-orchestrator:
+    build:
+      context: ./services/edge-orchestrator-service
+      dockerfile: Dockerfile
+    container_name: edge-orchestrator
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+    depends_on:
+      timescaledb:
+        condition: service_started     # เปลี่ยนเป็น service_healthy ถ้ามี healthcheck
+      edge-mqtt:
+        condition: service_started
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6310/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6310"
+
+  # 6) sync-service
   sync-service:
     build:
       context: ./services/sync-service
       dockerfile: Dockerfile
     container_name: sync-service
     restart: unless-stopped
-    ports:
-      # ผูก host:container ด้วยตัวแปรเดียวกัน ป้องกันพังเมื่อเปลี่ยน SYNC_PORT
-      - "${SYNC_PORT:-6311}:6311"
+    # ports:
+    #   # ผูก host:container ด้วยตัวแปรเดียวกัน ป้องกันพังเมื่อเปลี่ยน SYNC_PORT
+    #   - "${SYNC_PORT:-6311}:6311"
     environment:
       # ให้แน่ใจว่าแอปฟังพอร์ตเดียวกับที่ map
       - SYNC_PORT=${SYNC_PORT:-6311}
@@ -149,16 +185,18 @@ services:
       start_period: 10s
     # ช่วยให้ process ภายในถูกเก็บกวาดดีขึ้น
     init: true
+    expose:
+      - "6311"
 
-  # 6) weight-associator-service
+  # 7) weight-associator-service
   weight-associator:
     build:
       context: ./services/weight-associator-service   # <- แก้ path ให้ตรงของจริง
       dockerfile: Dockerfile
     container_name: weight-associator
     restart: unless-stopped
-    ports:
-      - "${WEIGHT_ASSOCIATOR_PORT:-6312}:6312"
+    # ports:
+    #   - "${WEIGHT_ASSOCIATOR_PORT:-6312}:6312"
     env_file:
       - .env
     environment:
@@ -176,8 +214,10 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    expose:
+      - "6312"
 
-  # 7) image-ingestion-service
+  # 8) image-ingestion-service
   image-ingestion:
     build:
       context: ./services/images-ingestion-service   # <- แก้ path ให้ตรงของจริง
@@ -204,3 +244,5 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    expose:
+      - "6313"
