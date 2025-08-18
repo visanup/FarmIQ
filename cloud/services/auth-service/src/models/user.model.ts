@@ -1,5 +1,5 @@
-// services/auth-service/src/models/user.model.ts
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne } from 'typeorm';
+// /src/models/user.model.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity({ schema: 'auth', name: 'users' })
 export class User {
@@ -21,6 +21,11 @@ export class User {
   @Column({ nullable: true })
   email?: string;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'NOW()' })
   created_at!: Date;
+
+  // ให้ตรงกับคอลัมน์ใน DB + trigger update_updated_at
+  @UpdateDateColumn({ type: 'timestamptz', default: () => 'NOW()' })
+  updated_at!: Date;
 }
+

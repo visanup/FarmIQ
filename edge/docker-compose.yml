@@ -53,15 +53,15 @@ services:
   # 2) TimeSeries DB (TimescaleDB)
   timescaledb:
     image: timescale/timescaledb:latest-pg16
-    container_name: timescaledb
+    # container_name: timescaledb
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
       TZ: Asia/Bangkok
-    # ports:
-    #   - "15432:5432"
+    ports:
+      - "15432:5432"
     expose:
       - "5432"
     volumes:

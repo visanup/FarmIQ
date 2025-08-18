@@ -1,173 +1,75 @@
-// services/auth-service/src/routes/subscription.route.ts
-import { Router, Request, Response, NextFunction } from 'express';
-import { SubscriptionService } from '../services/subscriptions.service';
+// src/routes/subscription.route.ts
+import { Router } from 'express';
+import { SubscriptionService } from '../services';
+import { authenticate, requireTenant, requireRoles } from '../middlewares/auth';
+import { validate } from '../middlewares/validate';
+import {
+  IdParam, SubscriptionCreate, SubscriptionUpdate, SubscriptionIdParam, ChangePlanBody
+} from '../schemas/customer.schemas';
 
-const router = Router();
-const service = new SubscriptionService();
+const r = Router();
+const svc = new SubscriptionService();
 
-/**
- * @swagger
- * tags:
- *   name: Subscriptions
- *   description: Subscription management endpoints
- */
+r.use(authenticate, requireTenant);
 
-/**
- * @swagger
- * /api/subscriptions:
- *   get:
- *     summary: Fetch list of all subscriptions
- *     tags: [Subscriptions]
- *     responses:
- *       200:
- *         description: A list of subscriptions
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- */
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+// GET /api/subscriptions
+r.get('/', async (req: any, res, next) => {
   try {
-    const subs = await service.findAll();
-    res.json(subs);
-  } catch (err) {
-    next(err);
-  }
+    const items = await svc.list(req.user.tenant_id);
+    res.json(items);
+  } catch (e) { next(e); }
 });
 
-/**
- * @swagger
- * /api/subscriptions/{id}:
- *   get:
- *     summary: Fetch a single subscription by ID
- *     tags: [Subscriptions]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *         description: Numeric ID of the subscription to fetch
- *     responses:
- *       200:
- *         description: A single subscription object
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *       404:
- *         description: Subscription not found
- */
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = Number(req.params.id);
-    const sub = await service.findOne(id);
-    if (!sub) return res.status(404).json({ message: 'Subscription not found' });
-    res.json(sub);
-  } catch (err) {
-    next(err);
+// POST /api/subscriptions
+r.post(
+  '/',
+  requireRoles('admin', 'manager'),
+  validate({ body: SubscriptionCreate }),
+  async (req: any, res, next) => {
+    try {
+      const created = await svc.createScoped(req.user.tenant_id, req.body);
+      res.status(201).json(created);
+    } catch (e) { next(e); }
   }
-});
+);
 
-/**
- * @swagger
- * /api/subscriptions:
- *   post:
- *     summary: Create a new subscription
- *     tags: [Subscriptions]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *     responses:
- *       201:
- *         description: Subscription created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- */
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = req.body;
-    const newSub = await service.create(data);
-    res.status(201).json(newSub);
-  } catch (err) {
-    next(err);
+// PUT /api/subscriptions/:id
+r.put(
+  '/:id',
+  requireRoles('admin', 'manager'),
+  validate({ params: SubscriptionIdParam, body: SubscriptionUpdate }),
+  async (req: any, res, next) => {
+    try {
+      const updated = await svc.updateScoped(req.user.tenant_id, Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ message: 'Subscription not found' });
+      res.json(updated);
+    } catch (e) { next(e); }
   }
-});
+);
 
-/**
- * @swagger
- * /api/subscriptions/{id}:
- *   put:
- *     summary: Update an existing subscription
- *     tags: [Subscriptions]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *         description: Numeric ID of the subscription to update
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *     responses:
- *       200:
- *         description: Subscription updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *       404:
- *         description: Subscription not found
- */
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = Number(req.params.id);
-    const data = req.body;
-    const updated = await service.update(id, data);
-    if (!updated) return res.status(404).json({ message: 'Subscription not found' });
-    res.json(updated);
-  } catch (err) {
-    next(err);
+// POST /api/subscriptions/:id/change-plan
+r.post(
+  '/:id/change-plan',
+  requireRoles('admin', 'manager'),
+  validate({ params: SubscriptionIdParam, body: ChangePlanBody }),
+  async (req: any, res, next) => {
+    try {
+      const out = await svc.changePlan(req.user.tenant_id, Number(req.params.id), req.body.plan_code);
+      if (!out) return res.status(404).json({ message: 'Subscription not found' });
+      res.json(out);
+    } catch (e) { next(e); }
   }
-});
+);
 
-/**
- * @swagger
- * /api/subscriptions/{id}:
- *   delete:
- *     summary: Delete a subscription by ID
- *     tags: [Subscriptions]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *         description: Numeric ID of the subscription to delete
- *     responses:
- *       204:
- *         description: Subscription deleted successfully
- */
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = Number(req.params.id);
-    await service.delete(id);
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-});
+// POST /api/subscriptions/:id/pause|resume|cancel
+r.post('/:id/pause',  requireRoles('admin','manager'), validate({ params: SubscriptionIdParam }),
+  async (req:any,res,next)=>{ try { res.json(await svc.pause(req.user.tenant_id, Number(req.params.id))); } catch(e){ next(e);} });
 
-export default router;
+r.post('/:id/resume', requireRoles('admin','manager'), validate({ params: SubscriptionIdParam }),
+  async (req:any,res,next)=>{ try { res.json(await svc.resume(req.user.tenant_id, Number(req.params.id))); } catch(e){ next(e);} });
+
+r.post('/:id/cancel', requireRoles('admin','manager'), validate({ params: SubscriptionIdParam }),
+  async (req:any,res,next)=>{ try { res.json(await svc.cancel(req.user.tenant_id, Number(req.params.id))); } catch(e){ next(e);} });
+
+export default r;
 

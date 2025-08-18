@@ -1,96 +1,86 @@
-// services/data-service/src/server.ts
+// src/server.ts
 
 import 'reflect-metadata';
 import express, { Application, Request, Response, RequestHandler } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import compression from 'compression';
+import swaggerUi from 'swagger-ui-express';
 
-// โหลด swagger-ui-express ด้วย require แล้ว cast type ให้ตรงกับ express ของเรา
-const swaggerUiModule = require('swagger-ui-express') as {
-  serve: RequestHandler[];
-  setup: (swaggerDoc: any, opts?: any) => RequestHandler;
-};
-
-// โหลด swagger-jsdoc ด้วย require เพื่อไม่ต้องรอ types
-const swaggerJSDoc = require('swagger-jsdoc');
-
-import { AppDataSource } from './utils/dataSource';
-import customerRouter from './routes/customer.route';
-import mainRouter from './routes/index';
-import { authenticateToken } from './middlewares/auth';
-import { errorHandler } from './middlewares/errorHandler';
 import { PORT } from './configs/config';
-import { swaggerOptions } from './utils/swagger';
+import { AppDataSource } from './utils/dataSource';
+import apiRouter from './routes';
+import { errorHandler } from './middlewares/errorHandler';
+import { openApiDoc } from './utils/openapi';
+import { PlanCatalogService } from './services/plan_catalog.service';
 
-async function startServer() {
-  try {
-    // 1) Initialize DB connection
-    await AppDataSource.initialize();
-    console.log('✅ DataSource has been initialized');
+async function start() {
+  await AppDataSource.initialize();
+  console.log('✅ DataSource initialized');
 
-    const app: Application = express();
+  const app: Application = express();
+  app.set('trust proxy', true);
 
-    // 2) Security & logging middleware
-    app.use(helmet());
-    app.use(cors());
-    app.use(morgan('combined'));
-    app.use(express.json());
+  app.use(helmet());
+  app.use(cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }));
 
-    // 3) Health-check endpoint
-    app.get('/health', (_req: Request, res: Response) => {
-      res.sendStatus(200);
-    });
+  // บางชุด @types จะงอแงเรื่องชนิด -> cast เป็น RequestHandler
+  const compressionMw: RequestHandler = compression() as unknown as RequestHandler;
+  app.use(compressionMw);
 
-    // --- Dynamic Swagger setup ---
-    const opts = {
-      ...swaggerOptions,
-      definition: {
-        ...swaggerOptions.definition,
-        servers: [
-          {
-            url: `http://localhost:${PORT}`,
-            description: 'Local dev server',
-          },
-        ],
-      },
-    };
-    const swaggerSpec = swaggerJSDoc(opts);
+  app.use(express.json({ limit: '2mb' }));
+  app.use(morgan('combined'));
 
-    // Serve Swagger UI at /api-docs
-    const serveHandlers = swaggerUiModule.serve;
-    const setupHandler = swaggerUiModule.setup(swaggerSpec, { explorer: true });
-    app.use('/api-docs', ...serveHandlers, setupHandler);
+  app.get('/health', (_req: Request, res: Response) => res.sendStatus(200));
+  app.get('/ready', (_req: Request, res: Response) =>
+    AppDataSource.isInitialized ? res.sendStatus(200) : res.sendStatus(503)
+  );
 
-    // 5) Protected routes
-    app.use('/api/customers', customerRouter);
-    app.use('/api', authenticateToken, mainRouter);
+  // Swagger (Zod → OpenAPI) — cast handlers เพื่อเลี่ยง type mismatch หลายเวอร์ชัน
+  const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+  const doc = { ...openApiDoc, servers: [{ url: baseUrl }] };
+  const serveHandlers = swaggerUi.serve as unknown as RequestHandler[];
+  const setupHandler = swaggerUi.setup(doc, { explorer: true }) as unknown as RequestHandler;
+  app.use('/api-docs', ...serveHandlers, setupHandler);
 
-    // 6) Global error handler
-    app.use(errorHandler);
+  app.use('/api', apiRouter);
 
-    // 7) Start server
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
-      console.log(`📖 Swagger UI available at http://localhost:${PORT}/api-docs`);
-    });
+  app.use(errorHandler);
 
-    // 8) Graceful shutdown
-    const shutdown = () => {
-      console.log('⚡️ Shutting down server...');
-      server.close(async () => {
-        await AppDataSource.destroy();
-        console.log('✅ DataSource has been destroyed');
-        process.exit(0);
-      });
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 customer-service listening on ${baseUrl}`);
+    console.log(`📖 OpenAPI docs: ${baseUrl}/api-docs`);
+  });
 
-  } catch (err) {
-    console.error('❌ Error during DataSource initialization:', err);
-    process.exit(1);
+  if (process.env.SEED_PLANS === 'true') {
+    try {
+      await new PlanCatalogService().seedDefaults();
+      console.log('🌱 plan_catalog seeded');
+    } catch (e) {
+      console.warn('⚠️  plan_catalog seed failed:', e);
+    }
   }
+
+  const shutdown = (sig: string) => {
+    console.log(`⚡ Shutting down on ${sig}...`);
+    server.close(async () => {
+      try {
+        await AppDataSource.destroy();
+        console.log('✅ DataSource destroyed');
+      } finally {
+        process.exit(0);
+      }
+    });
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-startServer();
+start().catch((err) => {
+  console.error('❌ Server bootstrap failed:', err);
+  process.exit(1);
+});
+
+
+

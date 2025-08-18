@@ -1,48 +1,56 @@
-// services/data-service/src/middleware/auth.ts
+// src/middlewares/auth.ts
 
 import { Request, Response, NextFunction } from 'express';
-import jwt, { VerifyErrors, JwtPayload } from 'jsonwebtoken';
-import { JWT_SECRET, ALGORITHM } from '../configs/config';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
+import { JWKS_URL, JWT_ALG, JWT_SECRET } from '../configs/config';
+
+export type Claims = JwtPayload & {
+  role?: string;
+  tenant_id?: string;
+  sub?: string; // optional ใน type แต่เราจะเช็คจริงก่อนใช้งาน
+};
 
 export interface AuthRequest extends Request {
-  user?: JwtPayload | string;
+  user?: Claims;
 }
 
-export const authenticateToken = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    res.status(401).json({ message: 'Authorization header missing' });
-    return;
+async function verify(token: string): Promise<Claims> {
+  if (JWKS_URL && JWT_ALG.startsWith('RS')) {
+    const client = jwksClient({ jwksUri: JWKS_URL, cache: true, cacheMaxEntries: 5 });
+    const decoded: any = jwt.decode(token, { complete: true });
+    const kid = decoded?.header?.kid;
+    const key = await client.getSigningKey(kid);
+    const pub = key.getPublicKey();
+    return jwt.verify(token, pub, { algorithms: [JWT_ALG] }) as Claims;
   }
+  return jwt.verify(token, JWT_SECRET, { algorithms: [JWT_ALG] }) as Claims;
+}
 
-  const [scheme, token] = authHeader.split(' ');
-  if (scheme !== 'Bearer' || !token) {
-    res
-      .status(401)
-      .json({ message: 'Malformed authorization header. Expected Bearer <token>' });
-    return;
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const [scheme, token] = (req.headers.authorization || '').split(' ');
+    if (scheme !== 'Bearer' || !token) return res.status(401).json({ message: 'Missing bearer token' });
+
+    const claims = await verify(token);
+    if (!claims.sub) return res.status(400).json({ message: 'Token missing sub' });
+    req.user = claims;
+    return next();
+  } catch (e: any) {
+    const code = e?.name === 'TokenExpiredError' ? 401 : 403;
+    return res.status(code).json({ message: e?.message || 'Invalid token' });
   }
-
-  jwt.verify(
-    token,
-    JWT_SECRET,
-    { algorithms: [ALGORITHM as jwt.Algorithm] },
-    (err: VerifyErrors | null, payload: JwtPayload | string | undefined) => {
-      if (err) {
-        console.error('JWT error:', err);
-        if ((err as any).name === 'TokenExpiredError') {
-          res.status(401).json({ message: 'Token has expired' });
-        } else {
-          res.status(403).json({ message: 'Invalid token: ' + err.message });
-        }
-        return;
-      }
-      req.user = payload!;
-      next();
-    }
-  );
 };
+
+export const requireRoles = (...roles: string[]) =>
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+    const role = req.user?.role;
+    if (!role || !roles.includes(role)) return res.status(403).json({ message: 'Forbidden' });
+    next();
+  };
+
+export const requireTenant = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user?.tenant_id) return res.status(400).json({ message: 'Missing tenant_id in token' });
+  next();
+};
+

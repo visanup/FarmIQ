@@ -1,4 +1,4 @@
-// services/auth-service/src/models/refreshToken.model.ts
+// src/models/refreshToken.model.ts
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from './user.model';
 

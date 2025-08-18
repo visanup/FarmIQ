@@ -1,4 +1,5 @@
-// services/auth-service/src/middleware/auth.middleware.ts
+// src/middleware/auth.middleware.ts
+
 import { Request, Response, NextFunction } from 'express';
 import jwt, { VerifyErrors, JwtPayload } from 'jsonwebtoken';
 import { JWT_SECRET, ALGORITHM } from '../configs/config';
@@ -27,7 +28,7 @@ export const authenticateToken = (
   jwt.verify(
     token,
     JWT_SECRET,
-    { algorithms: [ALGORITHM as jwt.Algorithm] },
+    { algorithms: [ALGORITHM] },
     (err: VerifyErrors | null, payload: JwtPayload | string | undefined) => {
       if (err) {
         return res.status(403).json({ message: 'Invalid or expired token' });
@@ -37,4 +38,5 @@ export const authenticateToken = (
     }
   );
 };
+
 
