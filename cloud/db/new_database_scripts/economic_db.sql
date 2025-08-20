@@ -1,55 +1,43 @@
 
--- database: your_database_name;
-
 CREATE SCHEMA IF NOT EXISTS economics;
+CREATE OR REPLACE FUNCTION economics.touch_updated_at() RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END $$ LANGUAGE plpgsql;
 
--- 1. economic_data with tenant, batch, and feed linkage
-CREATE TABLE economics.economic_data (
-    id                  SERIAL PRIMARY KEY,
-    customer_id         INT             NOT NULL,
-    farm_id             INT             NOT NULL,
-    batch_id            VARCHAR(50),
-    feed_assignment_id  INT,
-    cost_type           VARCHAR(100)    NOT NULL,
-    amount              NUMERIC,
-    animal_price        NUMERIC,
-    feed_cost           NUMERIC,
-    labor_cost          NUMERIC,
-    utility_cost        NUMERIC,
-    medication_cost     NUMERIC,
-    maintenance_cost    NUMERIC,
-    other_costs         NUMERIC,
-    record_date         DATE            NOT NULL,
-    created_at          TIMESTAMPTZ     DEFAULT NOW() NOT NULL,
-    updated_at          TIMESTAMPTZ     DEFAULT NOW() NOT NULL,
-    -- Foreign keys
-    CONSTRAINT fk_econdata_batch
-      FOREIGN KEY(batch_id)
-      REFERENCES farms_master.batches(batch_id),
-    CONSTRAINT fk_econdata_feed_assignment
-      FOREIGN KEY(feed_assignment_id)
-      REFERENCES feeds.feed_batch_assignments(assignment_id)
+-- ledger ตามสคีมาของ mapper econ.ts
+CREATE TABLE IF NOT EXISTS economics.txn (
+  tenant_id     TEXT NOT NULL,
+  txn_id        TEXT NOT NULL,
+  farm_id       TEXT,
+  house_id      TEXT,
+  cost_center   TEXT,
+  device_id     TEXT,
+  category      TEXT NOT NULL,
+  subcategory   TEXT,
+  item_code     TEXT,
+  description   TEXT,
+  amount        NUMERIC,
+  currency      TEXT,
+  quantity      NUMERIC,
+  unit          TEXT,
+  base_currency TEXT,
+  rate_to_base  NUMERIC,
+  vendor_id     TEXT,
+  invoice_id    TEXT,
+  time          TIMESTAMPTZ NOT NULL,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, txn_id)
 );
+CREATE INDEX IF NOT EXISTS ix_txn_time ON economics.txn(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_txn_cat  ON economics.txn(tenant_id, category, subcategory);
+CREATE INDEX IF NOT EXISTS ix_txn_anchor ON economics.txn(tenant_id, house_id, farm_id, cost_center, device_id);
+CREATE TRIGGER trg_upd_txn BEFORE UPDATE ON economics.txn
+FOR EACH ROW EXECUTE PROCEDURE economics.touch_updated_at();
 
--- Composite index for tenant/farm/batch scoped queries
-CREATE INDEX idx_econdata_cust_farm_batch_date
-    ON economics.economic_data(customer_id, farm_id, batch_id, record_date);
--- Index on feed assignment for fast joins
-CREATE INDEX idx_econdata_feed_assignment
-    ON economics.economic_data(feed_assignment_id);
-
--- Trigger function to keep updated_at current
-CREATE OR REPLACE FUNCTION economics.update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Install trigger for BEFORE UPDATE
-DROP TRIGGER IF EXISTS update_economic_data_updated_at
-    ON economics.economic_data;
-CREATE TRIGGER update_economic_data_updated_at
-  BEFORE UPDATE ON economics.economic_data
-  FOR EACH ROW EXECUTE PROCEDURE economics.update_updated_at_column();
+-- outbox
+CREATE TABLE IF NOT EXISTS economics.events_outbox (
+  id BIGSERIAL PRIMARY KEY, topic TEXT NOT NULL, payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(), published_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_econ_outbox_unpub ON economics.events_outbox(published_at) WHERE published_at IS NULL;

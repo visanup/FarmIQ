@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  vision-capture-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # ถ้าใช้ RealSense ให้ตั้งเป็น "true" (หรือ override ตอน build)
+        ENABLE_REALSENSE: "${ENABLE_REALSENSE:-false}"
+    image: vision-capture:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # ถ้าเก็บ .env จริงไว้ใน ./data ให้เปิดบรรทัดนี้ (service จะอ่านผ่าน python-dotenv)
+      DOTENV_PATH: /data/.env
+    volumes:
+      - ./data:/data
+    # ในคอนเทนเนอร์ service ฟังที่ 8081; เอา env IMAGE_INGESTION_PORT มากำหนด port ฝั่ง host
+    ports:
+      - "${IMAGE_INGESTION_PORT:-8081}:8081"
+    user: "10001:100"
+    # ===== เลือกอย่างใดอย่างหนึ่งตามชนิดกล้อง =====
+    # 1) กล้อง USB/UVC (เช่น /dev/video0):
+    devices:
+      - /dev/video0:/dev/video0
+    # 2) ถ้าใช้ RealSense (D457): คอมเมนต์บรรทัด /dev/video0 ข้างบน แล้วปลดบรรทัดด้านล่าง
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+    # 3) ถ้าใช้ RTSP/HTTP URL: ลบทั้งบล็อก devices ออก
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - >
+          import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8081/v1/health', timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - default
+
+networks:
+  default:
+    name: vision_capture_default
+    driver: bridge

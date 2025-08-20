@@ -43,7 +43,7 @@ services:
     restart: unless-stopped
     profiles: ["dev"]
     ports:
-      - "8080:4000" 
+      - "8080:4000"
     environment:
       MQTT_BROKER_URL: mqtt://edge-mqtt:1883
       MQTT_USER: ${MQTT_USER}

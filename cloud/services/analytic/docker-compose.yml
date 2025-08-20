@@ -1,0 +1,83 @@
+name: farmiq-cloud-analytics
+
+networks:
+  farmiq-cloud-analytics:
+    driver: bridge
+
+volumes:
+  redis-data:
+  redisinsight-data:   # ⬅️ สำหรับ RedisInsight
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks: [farmiq-cloud-analytics]   # <-- ใช้ชื่อเดียวกับที่ประกาศด้านบน
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 🔎 Lightweight key browser
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379     # ⬅️ ผูกกับ service "redis" ใน network เดียวกัน
+    ports:
+      - "8081:8081"                      # UI: http://localhost:8081
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [farmiq-cloud-analytics]
+    healthcheck:
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:8081',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # 📊 Full-featured GUI by Redis
+  redisinsight:
+    image: redis/redisinsight:latest
+    restart: unless-stopped
+    ports:
+      - "8001:8001"                      # UI: http://localhost:8001
+    volumes:
+      - redisinsight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [farmiq-cloud-analytics]
+
+  analytics-stream:
+    build:
+      context: ./services/analytics-stream   # ✅ path ถูก
+      dockerfile: Dockerfile
+    container_name: analytics-stream
+    restart: unless-stopped
+    env_file:
+      - ./services/analytics-stream/.env     # ✅ path ถูก
+    environment:
+      # ถ้าใน .env ตั้ง REDIS_URL เป็นอย่างอื่น จะ override ให้ตรง container นี้
+      REDIS_URL: redis://redis:6379
+    networks: [farmiq-cloud-analytics]
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "7303:7303"
+    healthcheck:
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:7303/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+
+
+  

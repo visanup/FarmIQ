@@ -1,64 +1,61 @@
--- database: monitoring_db;
-
 CREATE SCHEMA IF NOT EXISTS monitoring;
+CREATE OR REPLACE FUNCTION monitoring.touch_updated_at() RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END $$ LANGUAGE plpgsql;
 
--- 1. alerts (per-customer)
-DROP TABLE IF EXISTS monitoring.alerts CASCADE;
-CREATE TABLE monitoring.alerts (
-    alert_id     BIGSERIAL       PRIMARY KEY,
-    customer_id  INT             NOT NULL,
-    farm_id      INT             NOT NULL,
-    alert_type   VARCHAR(100)    NOT NULL,
-    description  TEXT,
-    severity     VARCHAR(50)     NOT NULL,
-    status       VARCHAR(50)     NOT NULL DEFAULT 'active',
-    created_at   TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    resolved_at  TIMESTAMPTZ,
-    updated_at   TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    batch_id     VARCHAR(50),
-    feed_assignment_id INT,
-    -- Foreign keys to link batch/feed context
-    CONSTRAINT fk_alerts_batch           FOREIGN KEY(batch_id)           REFERENCES farms_master.batches(batch_id),
-    CONSTRAINT fk_alerts_feed_assignment FOREIGN KEY(feed_assignment_id) REFERENCES feeds.feed_batch_assignments(assignment_id)
+CREATE TABLE IF NOT EXISTS monitoring.alert_rules (
+  tenant_id   TEXT NOT NULL,
+  rule_id     TEXT NOT NULL,
+  metric_name TEXT NOT NULL,
+  threshold   NUMERIC NOT NULL,
+  condition   TEXT NOT NULL,      -- '>', '<', '>=' ...
+  scope       JSONB NOT NULL DEFAULT '{}'::jsonb, -- filter: farm_id/house_id/device_id/tags
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, rule_id)
 );
--- Composite index for tenant/farm/status
-CREATE INDEX idx_alerts_cust_farm_status
-    ON monitoring.alerts(customer_id, farm_id, status);
+CREATE INDEX IF NOT EXISTS ix_rules_metric ON monitoring.alert_rules(tenant_id, metric_name);
+CREATE TRIGGER trg_upd_rules BEFORE UPDATE ON monitoring.alert_rules
+FOR EACH ROW EXECUTE PROCEDURE monitoring.touch_updated_at();
 
--- 2. alert_rules (per-customer)
-DROP TABLE IF EXISTS monitoring.alert_rules CASCADE;
-CREATE TABLE monitoring.alert_rules (
-    rule_id      BIGSERIAL       PRIMARY KEY,
-    customer_id  INT             NOT NULL,
-    metric_name  VARCHAR(100)    NOT NULL,
-    threshold    NUMERIC         NOT NULL,
-    condition    VARCHAR(10)     NOT NULL,  -- e.g. '>', '<', '='
-    created_at   TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    updated_at   TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS monitoring.alerts (
+  tenant_id   TEXT NOT NULL,
+  alert_id    TEXT NOT NULL,
+  alert_type  TEXT NOT NULL,
+  severity    TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'active',
+  description TEXT,
+  farm_id     TEXT,
+  house_id    TEXT,
+  device_id   TEXT,
+  batch_id    TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, alert_id)
 );
--- Composite index for tenant-scoped lookup
-CREATE INDEX idx_alert_rules_cust_metric
-    ON monitoring.alert_rules(customer_id, metric_name);
+CREATE INDEX IF NOT EXISTS ix_alerts_status ON monitoring.alerts(tenant_id, status, severity, created_at DESC);
+CREATE TRIGGER trg_upd_alerts BEFORE UPDATE ON monitoring.alerts
+FOR EACH ROW EXECUTE PROCEDURE monitoring.touch_updated_at();
 
--- 3. Trigger function to auto-update updated_at
-CREATE OR REPLACE FUNCTION monitoring.update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-   NEW.updated_at = NOW();
-   RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- (optional) device health ledger → ใช้ publish 'sensors.device.health'
+CREATE TABLE IF NOT EXISTS monitoring.device_health_log (
+  tenant_id TEXT NOT NULL,
+  id        BIGSERIAL PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  status    TEXT NOT NULL,      -- up/down/degraded
+  time      TIMESTAMPTZ NOT NULL,
+  meta      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_health_time ON monitoring.device_health_log(tenant_id, device_id, time DESC);
 
--- 4. Attach triggers
-DROP TRIGGER IF EXISTS update_alerts_updated_at ON monitoring.alerts;
-CREATE TRIGGER update_alerts_updated_at
-  BEFORE UPDATE ON monitoring.alerts
-  FOR EACH ROW EXECUTE PROCEDURE monitoring.update_updated_at_column();
+-- outbox
+CREATE TABLE IF NOT EXISTS monitoring.events_outbox (
+  id BIGSERIAL PRIMARY KEY, topic TEXT NOT NULL, payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(), published_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_mon_outbox_unpub ON monitoring.events_outbox(published_at) WHERE published_at IS NULL;
 
-DROP TRIGGER IF EXISTS update_alert_rules_updated_at ON monitoring.alert_rules;
-CREATE TRIGGER update_alert_rules_updated_at
-  BEFORE UPDATE ON monitoring.alert_rules
-  FOR EACH ROW EXECUTE PROCEDURE monitoring.update_updated_at_column();
 
 
 

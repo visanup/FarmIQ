@@ -1,226 +1,295 @@
--- database: your_database_name;
-
--- Schema for operational data with batch_id added
 CREATE SCHEMA IF NOT EXISTS farms_operational;
+CREATE EXTENSION IF NOT EXISTS pgcrypto; -- สำหรับ gen_random_uuid()
 
--- 1. Trigger function to keep updated_at current
-CREATE OR REPLACE FUNCTION farms_operational.update_updated_at_column()
+-- touch helper
+CREATE OR REPLACE FUNCTION farms_operational.touch_updated_at()
 RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
--- 2. Operational tables (all include batch_id)
-
--- feed_intake
-CREATE TABLE farms_operational.feed_intake (
-    id             SERIAL PRIMARY KEY,
-    customer_id    INT NOT NULL,
-    farm_id        INT NOT NULL,
-    animal_id      INT,
-    batch_id       VARCHAR(50),
-    feed_quantity  NUMERIC,
-    created_at     TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at     TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_feed_intake_farm   FOREIGN KEY(farm_id)   REFERENCES farms_master.farms(farm_id),
-    CONSTRAINT fk_feed_intake_animal FOREIGN KEY(animal_id) REFERENCES farms_master.animals(animal_id),
-    CONSTRAINT fk_feed_intake_batch  FOREIGN KEY(batch_id)  REFERENCES farms_master.batches(batch_id)
+-- ================== 1) FEED INTAKE ==================
+CREATE TABLE IF NOT EXISTS farms_operational.feed_intake (
+  tenant_id     TEXT NOT NULL,
+  intake_id     TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id       TEXT,
+  house_id      TEXT,
+  animal_id     TEXT,
+  batch_id      TEXT,
+  quantity      NUMERIC,
+  unit          TEXT,
+  time          TIMESTAMPTZ NOT NULL,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, intake_id)
 );
-CREATE INDEX idx_feed_intake_cust_farm_batch ON farms_operational.feed_intake(customer_id, farm_id, batch_id);
-CREATE TRIGGER update_feed_intake_updated_at
+CREATE INDEX IF NOT EXISTS ix_feed_intake_time
+  ON farms_operational.feed_intake(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_feed_intake_anchor
+  ON farms_operational.feed_intake(tenant_id, house_id, farm_id, batch_id);
+CREATE TRIGGER trg_feed_intake_touch
   BEFORE UPDATE ON farms_operational.feed_intake
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- genetic_factors
-CREATE TABLE farms_operational.genetic_factors (
-    id           SERIAL PRIMARY KEY,
-    customer_id  INT NOT NULL,
-    animal_id    INT NOT NULL,
-    batch_id     VARCHAR(50),
-    test_type    VARCHAR(100),
-    result       TEXT,
-    test_date    DATE,
-    created_at   TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at   TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_genetic_factors_animal FOREIGN KEY(animal_id) REFERENCES farms_master.animals(animal_id),
-    CONSTRAINT fk_genetic_factors_batch  FOREIGN KEY(batch_id)  REFERENCES farms_master.batches(batch_id)
+-- ================== 2) GENETIC FACTORS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.genetic_factors (
+  tenant_id     TEXT NOT NULL,
+  id            TEXT NOT NULL DEFAULT gen_random_uuid(),
+  animal_id     TEXT NOT NULL,
+  batch_id      TEXT,
+  test_type     TEXT,
+  result        TEXT,
+  time          TIMESTAMPTZ,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_genetic_factors_cust_animal_batch ON farms_operational.genetic_factors(customer_id, animal_id, batch_id);
-CREATE TRIGGER update_genetic_factors_updated_at
+CREATE INDEX IF NOT EXISTS ix_genetic_time
+  ON farms_operational.genetic_factors(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_genetic_anchor
+  ON farms_operational.genetic_factors(tenant_id, animal_id, batch_id);
+CREATE TRIGGER trg_genetic_touch
   BEFORE UPDATE ON farms_operational.genetic_factors
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- feed_programs
-CREATE TABLE farms_operational.feed_programs (
-    id              SERIAL PRIMARY KEY,
-    customer_id     INT NOT NULL,
-    farm_id         INT NOT NULL,
-    batch_id        VARCHAR(50),
-    name            VARCHAR(100) NOT NULL,
-    description     TEXT,
-    effective_start TIMESTAMPTZ NOT NULL,
-    effective_end   TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at      TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_feed_programs_farm  FOREIGN KEY(farm_id)  REFERENCES farms_master.farms(farm_id),
-    CONSTRAINT fk_feed_programs_batch FOREIGN KEY(batch_id) REFERENCES farms_master.batches(batch_id)
+-- ================== 3) FEED PROGRAMS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.feed_programs (
+  tenant_id       TEXT NOT NULL,
+  program_id      TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id         TEXT,
+  house_id        TEXT,
+  batch_id        TEXT,
+  name            TEXT NOT NULL,
+  description     TEXT,
+  effective_start TIMESTAMPTZ NOT NULL,
+  effective_end   TIMESTAMPTZ,
+  meta            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, program_id)
 );
-CREATE INDEX idx_feed_programs_cust_farm_batch ON farms_operational.feed_programs(customer_id, farm_id, batch_id);
-CREATE TRIGGER update_feed_programs_updated_at
+CREATE INDEX IF NOT EXISTS ix_feed_programs_range
+  ON farms_operational.feed_programs(tenant_id, farm_id, house_id, batch_id, effective_start DESC);
+CREATE TRIGGER trg_feed_programs_touch
   BEFORE UPDATE ON farms_operational.feed_programs
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- environmental_factors
-CREATE TABLE farms_operational.environmental_factors (
-    id               SERIAL PRIMARY KEY,
-    customer_id      INT NOT NULL,
-    farm_id          INT NOT NULL,
-    batch_id         VARCHAR(50),
-    ventilation_rate NUMERIC,
-    note             TEXT,
-    measurement_date DATE,
-    effective_start  TIMESTAMPTZ NOT NULL,
-    effective_end    TIMESTAMPTZ,
-    created_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_env_factors_farm  FOREIGN KEY(farm_id)  REFERENCES farms_master.farms(farm_id),
-    CONSTRAINT fk_env_factors_batch FOREIGN KEY(batch_id) REFERENCES farms_master.batches(batch_id)
+-- ================== 4) ENVIRONMENTAL FACTORS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.environmental_factors (
+  tenant_id        TEXT NOT NULL,
+  id               TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id          TEXT,
+  house_id         TEXT,
+  batch_id         TEXT,
+  ventilation_rate NUMERIC,
+  note             TEXT,
+  time             TIMESTAMPTZ NOT NULL,         -- เดิม measurement_date (DATE)
+  effective_start  TIMESTAMPTZ,
+  effective_end    TIMESTAMPTZ,
+  meta             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_env_factors_cust_farm_batch ON farms_operational.environmental_factors(customer_id, farm_id, batch_id);
-CREATE TRIGGER update_environmental_factors_updated_at
+CREATE INDEX IF NOT EXISTS ix_env_time
+  ON farms_operational.environmental_factors(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_env_anchor
+  ON farms_operational.environmental_factors(tenant_id, house_id, farm_id, batch_id);
+CREATE TRIGGER trg_env_touch
   BEFORE UPDATE ON farms_operational.environmental_factors
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- housing_conditions
-CREATE TABLE farms_operational.housing_conditions (
-    id                SERIAL PRIMARY KEY,
-    customer_id       INT NOT NULL,
-    farm_id           INT NOT NULL,
-    batch_id          VARCHAR(50),
-    flooring_humidity NUMERIC,
-    animal_density    INTEGER,
-    area              NUMERIC,
-    effective_start   TIMESTAMPTZ NOT NULL,
-    effective_end     TIMESTAMPTZ,
-    created_at        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_housing_conds_farm  FOREIGN KEY(farm_id)   REFERENCES farms_master.farms(farm_id),
-    CONSTRAINT fk_housing_conds_batch FOREIGN KEY(batch_id)  REFERENCES farms_master.batches(batch_id)
+-- ================== 5) HOUSING CONDITIONS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.housing_conditions (
+  tenant_id        TEXT NOT NULL,
+  id               TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id          TEXT,
+  house_id         TEXT,
+  batch_id         TEXT,
+  flooring_humidity NUMERIC,
+  animal_density   INTEGER,
+  area             NUMERIC,
+  effective_start  TIMESTAMPTZ NOT NULL,
+  effective_end    TIMESTAMPTZ,
+  meta             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_housing_conds_cust_farm_batch ON farms_operational.housing_conditions(customer_id, farm_id, batch_id);
-CREATE TRIGGER update_housing_conditions_updated_at
+CREATE INDEX IF NOT EXISTS ix_housing_range
+  ON farms_operational.housing_conditions(tenant_id, house_id, farm_id, batch_id, effective_start DESC);
+CREATE TRIGGER trg_housing_touch
   BEFORE UPDATE ON farms_operational.housing_conditions
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- water_quality
-CREATE TABLE farms_operational.water_quality (
-    id               SERIAL PRIMARY KEY,
-    customer_id      INT NOT NULL,
-    farm_id          INT NOT NULL,
-    batch_id         VARCHAR(50),
-    fe               NUMERIC,
-    pb               NUMERIC,
-    note             TEXT,
-    measurement_date DATE,
-    created_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_water_quality_farm  FOREIGN KEY(farm_id)   REFERENCES farms_master.farms(farm_id),
-    CONSTRAINT fk_water_quality_batch FOREIGN KEY(batch_id)  REFERENCES farms_master.batches(batch_id)
+-- ================== 6) WATER QUALITY ==================
+CREATE TABLE IF NOT EXISTS farms_operational.water_quality (
+  tenant_id     TEXT NOT NULL,
+  id            TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id       TEXT,
+  house_id      TEXT,
+  batch_id      TEXT,
+  fe            NUMERIC,
+  pb            NUMERIC,
+  note          TEXT,
+  time          TIMESTAMPTZ,                     -- เดิม measurement_date
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_water_quality_cust_farm_batch ON farms_operational.water_quality(customer_id, farm_id, batch_id);
-CREATE TRIGGER update_water_quality_updated_at
+CREATE INDEX IF NOT EXISTS ix_water_time
+  ON farms_operational.water_quality(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_water_anchor
+  ON farms_operational.water_quality(tenant_id, house_id, farm_id, batch_id);
+CREATE TRIGGER trg_water_touch
   BEFORE UPDATE ON farms_operational.water_quality
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- health_records
-CREATE TABLE farms_operational.health_records (
-    id               SERIAL PRIMARY KEY,
-    customer_id      INT NOT NULL,
-    animal_id        INT NOT NULL,
-    batch_id         VARCHAR(50),
-    health_status    TEXT,
-    disease          VARCHAR(100),
-    vaccine          TEXT,
-    recorded_date    DATE,
-    created_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_health_records_animal FOREIGN KEY(animal_id)  REFERENCES farms_master.animals(animal_id),
-    CONSTRAINT fk_health_records_batch  FOREIGN KEY(batch_id)   REFERENCES farms_master.batches(batch_id)
+-- ================== 7) HEALTH RECORDS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.health_records (
+  tenant_id     TEXT NOT NULL,
+  id            TEXT NOT NULL DEFAULT gen_random_uuid(),
+  animal_id     TEXT NOT NULL,
+  batch_id      TEXT,
+  health_status TEXT,
+  disease       TEXT,
+  vaccine       TEXT,
+  time          TIMESTAMPTZ,                     -- เดิม recorded_date
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_health_records_cust_animal_batch ON farms_operational.health_records(customer_id, animal_id, batch_id);
-CREATE TRIGGER update_health_records_updated_at
+CREATE INDEX IF NOT EXISTS ix_health_time
+  ON farms_operational.health_records(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_health_anchor
+  ON farms_operational.health_records(tenant_id, animal_id, batch_id);
+CREATE TRIGGER trg_health_touch
   BEFORE UPDATE ON farms_operational.health_records
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- welfare_indicators
-CREATE TABLE farms_operational.welfare_indicators (
-    id                SERIAL PRIMARY KEY,
-    customer_id       INT NOT NULL,
-    animal_id         INT NOT NULL,
-    batch_id          VARCHAR(50),
-    footpad_lesion    BOOLEAN,
-    stress_hormone    NUMERIC,
-    recorded_date     DATE,
-    created_at        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at        TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_welfare_inds_animal FOREIGN KEY(animal_id) REFERENCES farms_master.animals(animal_id),
-    CONSTRAINT fk_welfare_inds_batch  FOREIGN KEY(batch_id)   REFERENCES farms_master.batches(batch_id)
+-- ================== 8) WELFARE INDICATORS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.welfare_indicators (
+  tenant_id      TEXT NOT NULL,
+  id             TEXT NOT NULL DEFAULT gen_random_uuid(),
+  animal_id      TEXT NOT NULL,
+  batch_id       TEXT,
+  footpad_lesion BOOLEAN,
+  stress_hormone NUMERIC,
+  time           TIMESTAMPTZ,                    -- เดิม recorded_date
+  meta           JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_welfare_inds_cust_animal_batch ON farms_operational.welfare_indicators(customer_id, animal_id, batch_id);
-CREATE TRIGGER update_welfare_indicators_updated_at
+CREATE INDEX IF NOT EXISTS ix_welfare_time
+  ON farms_operational.welfare_indicators(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_welfare_anchor
+  ON farms_operational.welfare_indicators(tenant_id, animal_id, batch_id);
+CREATE TRIGGER trg_welfare_touch
   BEFORE UPDATE ON farms_operational.welfare_indicators
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- operational_records
-CREATE TABLE farms_operational.operational_records (
-    id               SERIAL PRIMARY KEY,
-    customer_id      INT NOT NULL,
-    farm_id          INT NOT NULL,
-    batch_id         VARCHAR(50),
-    type             VARCHAR(100),
-    description      TEXT,
-    record_date      DATE,
-    created_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at       TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    CONSTRAINT fk_operational_records_farm  FOREIGN KEY(farm_id)  REFERENCES farms_master.farms(farm_id),
-    CONSTRAINT fk_operational_records_batch FOREIGN KEY(batch_id) REFERENCES farms_master.batches(batch_id)
+-- ================== 9) OPERATIONAL RECORDS ==================
+CREATE TABLE IF NOT EXISTS farms_operational.operational_records (
+  tenant_id   TEXT NOT NULL,
+  id          TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id     TEXT,
+  house_id    TEXT,
+  batch_id    TEXT,
+  type        TEXT,
+  description TEXT,
+  time        TIMESTAMPTZ,                       -- เดิม record_date
+  meta        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id)
 );
-CREATE INDEX idx_operational_records_cust_farm_batch ON farms_operational.operational_records(customer_id, farm_id, batch_id);
-CREATE TRIGGER update_operational_records_updated_at
+CREATE INDEX IF NOT EXISTS ix_opsrec_time
+  ON farms_operational.operational_records(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_opsrec_anchor
+  ON farms_operational.operational_records(tenant_id, house_id, farm_id, batch_id);
+CREATE TRIGGER trg_opsrec_touch
   BEFORE UPDATE ON farms_operational.operational_records
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
 
--- performance_metrics (partitioned)
-CREATE TABLE farms_operational.performance_metrics (
-    id                   BIGSERIAL NOT NULL,
-    customer_id          INT NOT NULL,
-    animal_id            INT NOT NULL,
-    batch_id             VARCHAR(50),
-    adg                  NUMERIC,
-    fcr                  NUMERIC,
-    survival_rate        NUMERIC,
-    pi_score             NUMERIC,
-    mortality_rate       NUMERIC,
-    health_score         NUMERIC,
-    behavior_score       NUMERIC,
-    body_condition_score NUMERIC,
-    stress_level         NUMERIC,
-    disease_incidence_rate NUMERIC,
-    vaccination_status   VARCHAR(50),
-    recorded_date        DATE NOT NULL,
-    created_at           TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at           TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    PRIMARY KEY (id, recorded_date),
-    CONSTRAINT fk_perf_metrics_animal FOREIGN KEY(animal_id) REFERENCES farms_master.animals(animal_id),
-    CONSTRAINT fk_perf_metrics_batch  FOREIGN KEY(batch_id)  REFERENCES farms_master.batches(batch_id)
-) PARTITION BY RANGE (recorded_date);
+-- ================== 10) PERFORMANCE METRICS (partition by time) ==================
+CREATE TABLE IF NOT EXISTS farms_operational.performance_metrics (
+  tenant_id            TEXT NOT NULL,
+  id                   BIGSERIAL NOT NULL,
+  animal_id            TEXT NOT NULL,
+  batch_id             TEXT,
+  adg                  NUMERIC,
+  fcr                  NUMERIC,
+  survival_rate        NUMERIC,
+  pi_score             NUMERIC,
+  mortality_rate       NUMERIC,
+  health_score         NUMERIC,
+  behavior_score       NUMERIC,
+  body_condition_score NUMERIC,
+  stress_level         NUMERIC,
+  disease_incidence_rate NUMERIC,
+  vaccination_status   TEXT,
+  recorded_at          DATE NOT NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, id, recorded_at)
+) PARTITION BY RANGE (recorded_at);
 
-CREATE TABLE farms_operational.performance_metrics_2025 PARTITION OF farms_operational.performance_metrics
-    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+-- ตัวอย่างพาร์ทิชัน (เพิ่มตามปีจริงที่ใช้งาน)
+CREATE TABLE IF NOT EXISTS farms_operational.performance_metrics_2025
+  PARTITION OF farms_operational.performance_metrics
+  FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
 
-CREATE INDEX idx_perf_metrics_cust_animal_batch_date ON farms_operational.performance_metrics(customer_id, animal_id, batch_id, recorded_date);
-CREATE TRIGGER update_perf_metrics_updated_at
+CREATE INDEX IF NOT EXISTS ix_perf_metrics_anchor
+  ON farms_operational.performance_metrics(tenant_id, animal_id, batch_id, recorded_at);
+
+CREATE TRIGGER trg_perf_metrics_touch
   BEFORE UPDATE ON farms_operational.performance_metrics
-  FOR EACH ROW EXECUTE PROCEDURE farms_operational.update_updated_at_column();
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
+
+-- ================== 11) OPS EVENT LEDGER (ตรงกับ payload ใน ops.ts) ==================
+CREATE TABLE IF NOT EXISTS farms_operational.ops_event (
+  tenant_id  TEXT NOT NULL,
+  event_id   TEXT NOT NULL DEFAULT gen_random_uuid(),
+  farm_id    TEXT,
+  house_id   TEXT,
+  device_id  TEXT,
+  category   TEXT NOT NULL,
+  type       TEXT NOT NULL,
+  time       TIMESTAMPTZ NOT NULL,
+  quantity   NUMERIC,
+  unit       TEXT,
+  severity   TEXT,
+  actor      TEXT,
+  meta       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS ix_ops_event_time
+  ON farms_operational.ops_event(tenant_id, time DESC);
+CREATE INDEX IF NOT EXISTS ix_ops_event_anchor
+  ON farms_operational.ops_event(tenant_id, house_id, device_id, farm_id);
+CREATE TRIGGER trg_ops_event_touch
+  BEFORE UPDATE ON farms_operational.ops_event
+  FOR EACH ROW EXECUTE PROCEDURE farms_operational.touch_updated_at();
+
+-- ================== 12) OUTBOX สำหรับ Kafka ==================
+CREATE TABLE IF NOT EXISTS farms_operational.events_outbox (
+  id           BIGSERIAL PRIMARY KEY,
+  topic        TEXT NOT NULL,
+  payload      JSONB NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_ops_outbox_unpub
+  ON farms_operational.events_outbox(published_at) WHERE published_at IS NULL;
+
+CREATE OR REPLACE FUNCTION farms_operational.enqueue_event(_topic text, _payload jsonb)
+RETURNS void AS $$
+BEGIN INSERT INTO farms_operational.events_outbox(topic,payload) VALUES (_topic,_payload); END;
+$$ LANGUAGE plpgsql;
+
