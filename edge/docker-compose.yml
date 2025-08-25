@@ -153,8 +153,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
-    ports:
-      - "6315:6315"
+    # ports:
+    #   - "6315:6315"
     expose:
       - "6310"
 
