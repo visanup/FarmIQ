@@ -1,16 +1,23 @@
 // src/utils/zod.ts
 import { z } from "zod";
 
-// sensor reading (raw)
+// sensor reading (raw) - Updated to handle Arduino format
 export const RawReadingSchema = z.object({
   ts: z.coerce.date().optional(),
   value: z.coerce.number(),
+  unit: z.string().optional(), // Arduino sends unit: "C"
+  temp: z.coerce.number().optional(), // Alternative field name
+  temperature: z.coerce.number().optional(), // Alternative field name
   // run-context (robot)
   run_id: z.coerce.number().int().positive().optional(),
   sensor_id: z.string().min(1).optional(),
   zone_id: z.string().min(1).optional(),
   x: z.coerce.number().optional(),
   y: z.coerce.number().optional(),
+  // Arduino metadata
+  meta: z.object({
+    device_id: z.string().optional(),
+  }).optional(),
 }).passthrough();
 
 export type RawReading = z.infer<typeof RawReadingSchema>;
@@ -50,11 +57,23 @@ export function parseHealth(buf: Buffer) {
 // DQ baseline
 export function applyDQ(metric: string, value: number): { quality: "clean" | "anomaly" | "dlq"; reasons?: string[] } {
   if (!Number.isFinite(value)) return { quality: "dlq", reasons: ["not_finite"] };
+  
+  // Normalize metric names for validation
+  const normalizedMetric = metric.toUpperCase();
+  
   const ranges: Record<string, [number, number]> = {
-    TEMP: [-40, 120], HUMID: [0, 100], CO2: [0, 50000],
-    NH3: [0, 200], TVOC: [0, 5000], WEIGHT: [0, 100000],
+    TEMP: [-50, 120], 
+    THERMO: [-50, 120],  // Support for your Arduino "thermo" metric
+    TEMPERATURE: [-50, 120],
+    HUMID: [0, 100], 
+    HUMIDITY: [0, 100],
+    CO2: [0, 50000],
+    NH3: [0, 200], 
+    TVOC: [0, 5000], 
+    WEIGHT: [0, 100000],
   };
-  const [lo, hi] = ranges[metric] || [-1e12, 1e12];
+  
+  const [lo, hi] = ranges[normalizedMetric] || [-1e12, 1e12];
   if (value < lo || value > hi) return { quality: "anomaly", reasons: ["out_of_range"] };
   return { quality: "clean" };
 }
