@@ -377,3 +377,13 @@ services:
 * Run lifecycle → `fn_run_start` / `fn_run_end` → `sweep_runs`
 
 > อ่านสคีมาฉบับเต็มและไฟล์ migrations ได้ใน: **Farm Iq Edge Robot Sweep — Full Sql (lab + Commercial)**
+
+
+1. การส่ง thermo
+{"value": 26.8, "unit": "C", "sensor_id": "TEMP_SENSOR_001", "meta": {"device_id": "1"}}
+
+2. การส่ง HUMIDITY
+{"value": 65, "unit": "%", "sensor_id": "HUMID_SENSOR_002", "meta": {"device_id": "sensor01"}}
+
+3. การส่ง CO2
+{"value": 420, "unit": "ppm", "sensor_id": "CO2_SENSOR_003", "meta": {"device_id": "sensor01"}}
