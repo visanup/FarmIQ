@@ -244,11 +244,31 @@ A: ส่วนใหญ่เป็น user/pass ไม่ตรงหรือ
 **Q: จะให้บริการนี้เขียน DB ไหม?**
 A: เปิด `WRITE_DB=true` และตั้งค่าการเชื่อมต่อ DB ให้ครบ ตรวจ schema/migration ให้พร้อม
 
+์
+_______________________________________________________________________________________________________
+
+Note: Visanup
+
+# ทดสอบ subscribe
+docker run --rm --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_sub -h edge-mqtt -p 1883 -u edge_sensor_svc -P admin1234 -t "#" -v
+
+
 ## ทดสอบส่งข้อมูลโดยใช้ edge_sensor_svc user ที่มี permission แล้ว:
-`docker run --rm --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_pub -h edge-mqtt -p 1883 -u edge_sensor_svc -P admin1234 -i test_publisher -q 1 -t "sensor.raw/farm-001/TEMP/r001" -m '{\"ts\":\"2025-09-02T12:30:00Z\",\"value\":32.0,\"unit\":\"C\",\"sensor_id\":\"TEMP_SENSOR_001\",\"meta\":{\"device_id\":\"1\"}}'`
+docker run --rm --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_pub -h edge-mqtt -p 1883 -u edge_sensor_svc -P admin1234 -i test_publisher -q 1 -t sensor.raw/farm-001/TEMP/r001 -m "{\"ts\":\"2025-09-02T12:30:00Z\", \"value\":32.0, \"unit\":\"C\",\"sensor_id\":\"TEMP_SENSOR_001\", \"meta\":{\"device_id\":\"1\"}}"
 
-`docker run --rm --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_pub -h edge-mqtt -p 1883 -u edge_sensor_svc -P admin1234 -i test_publisher -q 1 -t "sensor.raw/farm-001/HUM/r001" -m '{\"ts\":\"2025-09-02T12:31:00Z\",\"value\":70.0,\"unit\":\"%\",\"sensor_id\":\"HUMID_SENSOR_002\",\"meta\":{\"device_id\":\"sensor01\"}}'`
-
-## เช็คว่าข้อมูลเข้า database หรือไม่:
+## เช็คว่าข้อมูลเข้า database device_readings หรือไม่:
 docker run --rm --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_pub -h edge-mqtt -p 1883 -u edge_sensor_svc -P admin1234 -i test_publisher -q 1 -t "sensor.raw/farm-001/CO2/r001" -m '{\"ts\":\"2025-09-02T12:32:00Z\",\"value\":445.0,\"unit\":\"ppm\",\"sensor_id\":\"CO2_SENSOR_003\",\"meta\":{\"device_id\":\"sensor01\"}}'
 docker exec -it farmiq-edge-timescaledb-1 psql -U postgres -d sensors_db -c "SELECT time, tenant_id, device_id, sensor_id, metric, value, quality FROM sensors.device_readings WHERE tenant_id = 'farm-001' ORDER BY time DESC LIMIT 5;"
+
+## สร้าง user tenat_id
+docker run --rm -v D:/Betagro/FarmIQ/edge/mosquitto/config:/work eclipse-mosquitto:2.0 mosquitto_passwd -b /work/passwd tenant1 admin1234
+**อย่าลืม  docker compose restart edge-mqtt **
+
+## test Heath
+docker run --rm --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_pub ^
+  -h edge-mqtt -p 1883 -u tenant2 -P admin1234 -i tenant2-002 -q 1 ^
+  -t dm/tenant2/tenant2-002/health ^
+  -m "{\"ts\":\"2025-09-02T14:00:30Z\",\"online\":true,\"rssi\":-38,\"uptime_s\":85000,\"temp_c\":26.5,\"meta\":{\"firmware\":\"v2.0.1\",\"model\":\"DHT11\"}}"
+
+
+
