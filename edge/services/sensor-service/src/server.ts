@@ -3,251 +3,189 @@ import "reflect-metadata";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { connect } from "mqtt";
+
+import {
+  PORT,
+  SENSOR_RAW_SUB,
+  PUB_NS_CLEAN,
+  PUB_NS_ANOMALY,
+  PUB_NS_DLQ,
+  WRITE_DB,
+} from "./configs/config";
+
+import { mqttClient, pubJSON } from "./utils/mqtt";
+import { parseRaw, applyDQ, parseHealth } from "./utils/zod";
+import sensorRouter, { stashLatest } from "./routes/sensor.route";
+
 import { AppDataSource } from "./utils/dataSource";
-import { PORT, WRITE_DB, mqttConnectOptions, SENSOR_RAW_SUB, DM_HEALTH_SUB, DM_LWT_SUB } from "./configs/config";
-import { errorHandler } from "./middlewares/errorHandler";
-import sensorRoutes, { stashLatest } from "./routes/sensor.route";
-import { parseRaw, parseHealth, applyDQ } from "./utils/zod";
-import { ingestDeviceReadingSQL, upsertDeviceHealth, saveSweepReading } from "./services/sensor.service";
-import { parsePayload } from "./utils/helpers";
+import {
+  saveSweepReading,
+  upsertDeviceHealth,
+  ingestDeviceReadingSQL,
+} from "./services/sensor.service";
 
-const app = express();
+// เผื่อยังไม่ได้ประกาศใน configs/config.ts — ใช้ค่า env/fallback ที่นี่ได้เลย
+const DM_HEALTH_SUB = process.env.DM_HEALTH_SUB || "dm/+/+/health";
+const DM_LWT_SUB = process.env.DM_LWT_SUB || "dm/+/+/lwt";
 
-// Middleware
-app.use(helmet());
-app.use(cors());
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// ----------------- helpers -----------------
+function parseSensorTopic(topic: string) {
+  // sensor.raw/{tenant}/{metric}/{deviceId}
+  const p = topic.split("/");
+  if (p.length < 4) return null;
+  return { tenant: p[1], metric: p[2], deviceId: p[3] };
+}
 
-// Routes
-app.use("/api/sensor", sensorRoutes);
+function parseDmTopic(topic: string) {
+  // dm/{tenant}/{deviceId}/health or dm/{tenant}/{deviceId}/lwt
+  const p = topic.split("/");
+  if (p.length < 4) return null;
+  return { tenant: p[1], deviceId: p[2], kind: p[3] as "health" | "lwt" };
+}
 
-// Default route
-app.get("/", (_req, res) => {
-  res.json({ service: "sensor-service", status: "running", timestamp: new Date().toISOString() });
-});
+// ----------------- bootstrap -----------------
+async function bootstrap() {
+  // 1) DB init (service นี้เขียน DB เอง)
+  await AppDataSource.initialize();
+  console.log("🔗 Database connected (sensor-service writes)");
 
-// Error handling
-app.use(errorHandler);
-
-// MQTT Client setup
-const mqttClient = connect(mqttConnectOptions);
-
-mqttClient.on("connect", () => {
-  console.log(`📡 MQTT connected: ${mqttConnectOptions.host}:${mqttConnectOptions.port}`);
-  
-  // Subscribe to sensor raw data
-  mqttClient.subscribe(SENSOR_RAW_SUB, (err) => {
-    if (err) {
-      console.error(`❌ Failed to subscribe to ${SENSOR_RAW_SUB}:`, err);
-    } else {
-      console.log(`☕ Subscribed: ${SENSOR_RAW_SUB}`);
-    }
-  });
-  
-  // Subscribe to device health
-  mqttClient.subscribe(DM_HEALTH_SUB, (err) => {
-    if (err) {
-      console.error(`❌ Failed to subscribe to ${DM_HEALTH_SUB}:`, err);
-    } else {
-      console.log(`🏥 Subscribed: ${DM_HEALTH_SUB}`);
-    }
-  });
-  
-  // Subscribe to device LWT
-  mqttClient.subscribe(DM_LWT_SUB, (err) => {
-    if (err) {
-      console.error(`❌ Failed to subscribe to ${DM_LWT_SUB}:`, err);
-    } else {
-      console.log(`💀 Subscribed: ${DM_LWT_SUB}`);
-    }
-  });
-});
-
-mqttClient.on("message", async (topic: string, payload: Buffer) => {
-  try {
-    console.log(`📨 MQTT message received on topic: ${topic}`);
-    console.log(`📨 Payload: ${payload.toString()}`);
-    
-    // Store latest message for debugging
-    stashLatest({ topic, payload: payload.toString(), timestamp: new Date().toISOString() });
-    
-    if (topic.startsWith("sensor.raw/")) {
-      await handleSensorRawMessage(topic, payload);
-    } else if (topic.includes("/health")) {
-      await handleHealthMessage(topic, payload);
-    } else {
-      console.log(`🤷 Unhandled topic: ${topic}`);
-    }
-  } catch (error) {
-    console.error(`❌ Error processing MQTT message on topic ${topic}:`, error);
-  }
-});
-
-mqttClient.on("error", (err) => {
-  console.error("❌ MQTT error:", err);
-});
-
-mqttClient.on("reconnect", () => {
-  console.log("🔁 MQTT reconnecting...");
-});
-
-// Handle sensor raw messages: sensor.raw/{tenant}/{metric}/{device_id}
-async function handleSensorRawMessage(topic: string, payload: Buffer) {
-  try {
-    const topicParts = topic.split("/");
-    if (topicParts.length !== 4) {
-      console.error(`❌ Invalid topic format: ${topic}. Expected: sensor.raw/{tenant}/{metric}/{device_id}`);
-      return;
-    }
-    
-    // Correct parsing: ["sensor.raw", tenant, metric, deviceId]
-    const [, tenant, metric, deviceId] = topicParts;
-    
-    console.log(`🔍 Processing sensor data - Tenant: ${tenant}, Metric: ${metric}, Device: ${deviceId}`);
-    
-    // Parse the payload
-    const data = parsePayload(payload);
-    if (!data) {
-      console.error(`❌ Failed to parse payload for topic ${topic}`);
-      return;
-    }
-    
-    // Extract value from different possible formats
-    let value: number;
-    if (typeof data.value === 'number') {
-      value = data.value;
-    } else if (typeof data.temp === 'number') {
-      value = data.temp;
-    } else if (typeof data.temperature === 'number') {
-      value = data.temperature;
-    } else {
-      console.error(`❌ No valid numeric value found in payload:`, data);
-      return;
-    }
-    
-    console.log(`📊 Extracted value: ${value} for metric: ${metric.toUpperCase()}`);
-    
-    // Apply data quality checks
-    const dqResult = applyDQ(metric.toUpperCase(), value);
-    console.log(`🔍 Data quality result:`, dqResult);
-    
-    const timestamp = data.ts ? new Date(data.ts) : new Date();
-    
-    // If WRITE_DB is enabled, save to database
-    if (WRITE_DB) {
-      try {
-        if (data.run_id) {
-          // Save as sweep reading (robot data)
-          await saveSweepReading({
-            time: timestamp,
-            tenantId: tenant,
-            robotId: deviceId,
-            runId: data.run_id,
-            sensorId: data.sensor_id || deviceId,
-            metric: metric.toUpperCase(),
-            zoneId: data.zone_id,
-            x: data.x,
-            y: data.y,
-            value,
-            quality: dqResult.quality,
-            payload: data
-          });
-          console.log(`✅ Saved sweep reading to database`);
-        } else {
-          // Save as device reading (general sensor data)
-          await ingestDeviceReadingSQL({
-            tenantId: tenant,
-            deviceId: deviceId,
-            time: timestamp,
-            sensorId: data.sensor_id || null,
-            metric: metric.toUpperCase(),
-            value,
-            quality: dqResult.quality === 'clean' ? 'raw' : dqResult.quality,
-            payload: data
-          });
-          console.log(`✅ Saved device reading to database - tenant: ${tenant}, device: ${deviceId}, metric: ${metric.toUpperCase()}, value: ${value}`);
+  // 2) Subscribe MQTT (บน event 'connect' เพื่อให้ re-subscribe ออโต้ตอน reconnect)
+  mqttClient.on("connect", () => {
+    mqttClient.subscribe(
+      [SENSOR_RAW_SUB, DM_HEALTH_SUB, DM_LWT_SUB],
+      { qos: 1 },
+      (err, granted = []) => {          // 👈 default เป็น []
+        if (err) {
+          console.error("❌ Subscribe error:", err);
+          return;
         }
-      } catch (dbError) {
-        console.error(`❌ Database error:`, dbError);
+        console.log("☕ Subscribed:", granted.map(g => `${g.topic}@${g.qos}`).join(", "));
       }
-    } else {
-      console.log(`ℹ️ WRITE_DB is disabled, skipping database write`);
-    }
-    
-  } catch (error) {
-    console.error(`❌ Error handling sensor raw message:`, error);
-  }
-}
+    );
+  });
 
-// Handle health messages: dm/{tenant}/{device_id}/health
-async function handleHealthMessage(topic: string, payload: Buffer) {
-  try {
-    const topicParts = topic.split("/");
-    if (topicParts.length !== 4) {
-      console.error(`❌ Invalid health topic format: ${topic}`);
-      return;
-    }
-    
-    const [, tenant, deviceId] = topicParts;
-    
-    const healthData = parseHealth(payload);
-    if (!healthData) {
-      console.error(`❌ Failed to parse health payload for topic ${topic}`);
-      return;
-    }
-    
-    if (WRITE_DB) {
-      try {
-        await upsertDeviceHealth({
-          time: healthData.ts || new Date(),
-          tenantId: tenant,
-          deviceId: deviceId,
-          online: healthData.online,
-          rssi: healthData.rssi,
-          uptimeS: healthData.uptime_s,
-          meta: healthData
-        });
-        console.log(`✅ Saved device health to database`);
-      } catch (dbError) {
-        console.error(`❌ Database error saving health:`, dbError);
+  // 3) Message handler
+  mqttClient.on("message", async (topic, payload) => {
+    try {
+      // 3.1) Sensor RAW → DQ → publish → write DB
+      if (topic.startsWith("sensor.raw/")) {
+        const tp = parseSensorTopic(topic);
+        if (!tp) return console.warn("⚠️ Bad sensor topic:", topic);
+
+        const raw = parseRaw(payload);
+        if (!raw) return;
+
+        const ts = raw.ts ?? new Date();
+        const dq = applyDQ(tp.metric, raw.value);
+
+        const out = {
+          ts,
+          tenant: tp.tenant,
+          device_id: tp.deviceId, // สำหรับ robot = robot_id
+          metric: tp.metric,
+          value: raw.value,
+          quality: dq.quality,
+          rule_hits: dq.reasons ?? [],
+          // run context (ถ้ามี)
+          run_id: raw.run_id ?? undefined,
+          sensor_id: raw.sensor_id ?? undefined,
+          zone_id: raw.zone_id ?? undefined,
+          x: raw.x ?? undefined,
+          y: raw.y ?? undefined,
+          // เก็บ payload ต้นฉบับ (debug/trace)
+          payload: raw,
+        };
+
+        // forward ตามคุณภาพ
+        const base =
+          dq.quality === "clean"
+            ? PUB_NS_CLEAN
+            : dq.quality === "anomaly"
+            ? PUB_NS_ANOMALY
+            : PUB_NS_DLQ;
+        const outTopic = `${base}/${tp.tenant}/${tp.metric}/${tp.deviceId}`;
+        pubJSON(outTopic, out, 1, false);
+        stashLatest({ topic: outTopic, data: out });
+
+        // เขียน DB ถ้าเปิด
+        if (WRITE_DB) {
+          if (out.run_id && out.sensor_id) {
+            // มี run context → ลง sweep_readings
+            await saveSweepReading({
+              time: new Date(ts),
+              tenantId: tp.tenant,
+              robotId: tp.deviceId,
+              runId: out.run_id,
+              sensorId: out.sensor_id,
+              metric: tp.metric,
+              zoneId: out.zone_id,
+              x: out.x,
+              y: out.y,
+              value: out.value,
+              quality: out.quality as any,
+              payload: out,
+            });
+          } else {
+            // ไม่มี run context → ลง device_readings (ผ่านฟังก์ชัน)
+            await ingestDeviceReadingSQL({
+              tenantId: tp.tenant,
+              deviceId: tp.deviceId,
+              time: new Date(ts),
+              sensorId: out.sensor_id ?? null,
+              metric: tp.metric,
+              value: out.value,
+              quality: out.quality as any,
+              payload: out,
+            });
+          }
+        }
+        return;
       }
+
+      // 3.2) Device Management: health/LWT → device_health
+      if (topic.startsWith("dm/")) {
+        const tp = parseDmTopic(topic);
+        if (!tp) return console.warn("⚠️ Bad dm topic:", topic);
+
+        const h = parseHealth(payload);
+        if (!h) return;
+
+        const ts = h.ts ?? new Date();
+        const online = tp.kind === "lwt" ? false : h.online ?? true;
+
+        if (WRITE_DB) {
+          await upsertDeviceHealth({
+            time: new Date(ts),
+            tenantId: tp.tenant,
+            deviceId: tp.deviceId,
+            online,
+            source: tp.kind,
+            rssi: h.rssi,
+            uptimeS: h.uptime_s,
+            meta: h.meta ?? {},
+          });
+        }
+        return;
+      }
+    } catch (e) {
+      console.error("❌ onMessage error:", e);
     }
-  } catch (error) {
-    console.error(`❌ Error handling health message:`, error);
-  }
+  });
+
+  // 4) HTTP server
+  const app = express();
+  app.use(helmet());
+  app.use(cors());
+  app.use(express.json());
+  app.use("/sensor", sensorRouter);
+
+  app.listen(PORT, () => {
+    console.log(`🚀 sensor-service http://0.0.0.0:${PORT}`);
+  });
 }
 
-// Initialize database and start server
-async function startServer() {
-  try {
-    console.log(`🔌 Initializing database connection...`);
-    await AppDataSource.initialize();
-    console.log(`✅ Database connected`);
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 sensor-service running on http://0.0.0.0:${PORT}`);
-      console.log(`📊 WRITE_DB: ${WRITE_DB}`);
-    });
-  } catch (error) {
-    console.error(`❌ Failed to start server:`, error);
-    process.exit(1);
-  }
-}
-
-// Handle process termination
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM received, shutting down gracefully');
-  mqttClient.end();
-  process.exit(0);
+bootstrap().catch((e) => {
+  console.error("Bootstrap error:", e);
+  process.exit(1);
 });
-
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT received, shutting down gracefully');
-  mqttClient.end();
-  process.exit(0);
-});
-
-startServer();
 

@@ -11,10 +11,13 @@ topic readwrite #
 # sensor-service
 user edge_sensor_svc
 topic read  sensor.raw/#
+topic write sensor.raw/#
 topic write sensor.clean/#
 topic write sensor.anomaly/#
 topic write sensor.dlq/#
 topic read  cmd/#
+topic read  dm/+/+/health
+topic read  dm/+/+/lwt
 
 # edge-agent
 user edge_agent

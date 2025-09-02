@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS sensors.weigh_events (
   media_id    BIGINT REFERENCES sensors.media_objects(media_id), -- เมื่อ kind='frame'
   stable      BOOLEAN,
   meta        JSONB,
-  PRIMARY KEY (session_id, seq)
+  PRIMARY KEY (session_id, time, seq) -- ❗ เปลี่ยนให้มี time
 );
 
 CREATE INDEX IF NOT EXISTS idx_weigh_events_time

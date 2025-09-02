@@ -17,4 +17,5 @@ SELECT create_hypertable('sensors.device_readings','time',
                          if_not_exists => TRUE, chunk_time_interval => INTERVAL '7 days');
 
 CREATE INDEX IF NOT EXISTS idx_device_readings_lookup
-  ON sensors.device_readings (factory_id, machine_id, metric, time DESC);
+  -- ON sensors.device_readings (factory_id, machine_id, metric, time DESC);
+  ON sensors.device_readings (metric, time DESC);  -- ผมแก้ไข

@@ -97,4 +97,14 @@
     docker run --rm -it -v "${CONF}:/mosquitto/config" eclipse-mosquitto:2.0 `
     mosquitto_passwd /mosquitto/config/passwd edge_image_ingest
 ```
+ทดสอบสร้าง edge_viwer
+1.) สร้าง edge_viewer
+docker run --rm -v %cd%/mosquitto/config:/work eclipse-mosquitto:2.0 mosquitto_passwd -b /work/passwd edge_viewer admin1234
+2.) restart mqtt
+docker compose restart edge-mqtt
+3.) ทดสอบ subscribe ด้วย edge_viewer
+docker run --rm -it --network farmiq-edge_farm_edge eclipse-mosquitto:2.0 mosquitto_sub -h edge-mqtt -p 1883 -u edge_viewer -P admin1234 -q 1 -v -t "#"
 
+
+
+```
