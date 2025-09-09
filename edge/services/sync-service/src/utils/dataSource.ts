@@ -21,11 +21,3 @@ export const edgeDataSource = new DataSource({
   synchronize: false, // ใช้ DDL/migrations เอง
   // schema: ไม่ต้องกำหนด เพราะเราใส่ schema ใน @Entity แต่ถ้าต้องการบังคับให้ทั้งคอนเนกชันอยู่ใน sensors: schema: "sensors"
 });
-
-export const cloudDataSource = new DataSource({
-  type: "postgres",
-  url: CLOUD_DATABASE_URL,
-  applicationName: "sync-service-cloud",
-  entities: [SweepReading, LabReading, DeviceReading, DeviceHealth, SyncState],
-  synchronize: false,
-});

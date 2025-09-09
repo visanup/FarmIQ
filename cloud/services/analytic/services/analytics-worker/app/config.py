@@ -81,4 +81,4 @@ class Config:
 
     # API
     API_HOST: str = _env("API_HOST", "0.0.0.0")
-    API_PORT: int = int(_env("ANALYTICS_WORKER_PORT", "7304"))
+    API_PORT: int = int(_env("ANALYTICS_WORKER_PORT", "7305"))

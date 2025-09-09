@@ -1,0 +1,114 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["sensors"]
+}
+
+model SensorReading {
+  id          String   @id @default(cuid())
+  deviceId    String
+  farmId      String?
+  houseId     String?
+  sensorType  String
+  value       Decimal  @db.Decimal(10, 4)
+  unit        String
+  location    Json?    // Store location as JSON {x, y, z}
+  metadata    Json?    // Store additional metadata as JSON
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Indexes for performance
+  @@index([deviceId, timestamp])
+  @@index([sensorType, timestamp])
+  @@index([farmId, timestamp])
+  @@map("sensor_readings")
+  @@schema("sensors")
+}
+
+model DeviceHealth {
+  id            String   @id @default(cuid())
+  deviceId      String   @unique
+  status        DeviceStatus
+  lastSeen      DateTime
+  batteryLevel  Int?
+  signalStrength Int?
+  temperature   Decimal? @db.Decimal(5, 2)
+  errors        String[] // Array of error codes
+  warnings      String[] // Array of warning codes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("device_health")
+  @@schema("sensors")
+}
+
+model LabReading {
+  id          String   @id @default(cuid())
+  sampleId    String
+  farmId      String?
+  testType    String
+  value       Decimal  @db.Decimal(10, 4)
+  unit        String
+  result      String?  // PASS, FAIL, PENDING
+  metadata    Json?    // Store test metadata as JSON
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([sampleId, timestamp])
+  @@index([testType, timestamp])
+  @@index([farmId, timestamp])
+  @@map("lab_readings")
+  @@schema("sensors")
+}
+
+model SweepReading {
+  id          String   @id @default(cuid())
+  deviceId    String
+  farmId      String?
+  sweepId     String
+  data        Json     // Store sweep data as JSON
+  metadata    Json?    // Store additional metadata as JSON
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([deviceId, timestamp])
+  @@index([sweepId, timestamp])
+  @@index([farmId, timestamp])
+  @@map("sweep_readings")
+  @@schema("sensors")
+}
+
+model DataIngestionLog {
+  id          String   @id @default(cuid())
+  source      String   // edge, api, mqtt, etc.
+  dataType    String   // sensor, lab, sweep, etc.
+  recordCount Int
+  status      String   // success, error, partial
+  errorMessage String?
+  metadata    Json?    // Store additional info as JSON
+  timestamp   DateTime @default(now())
+
+  @@index([source, timestamp])
+  @@index([dataType, timestamp])
+  @@map("data_ingestion_logs")
+  @@schema("sensors")
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+  MAINTENANCE
+
+  @@schema("sensors")
+}
+

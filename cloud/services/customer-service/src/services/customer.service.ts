@@ -1,52 +1,134 @@
-// src/services/customer.service.ts
-import { ILike, IsNull } from 'typeorm';
-import { AppDataSource } from '../utils/dataSource';
-import { Customer } from '../models/customer.model';
-import type { Pagination, Scoped } from './types';
-import { publishCustomerEvent } from '../utils/kafka';
+import { prisma } from '../lib/prisma';
+import {
+  CreateCustomerInput,
+  UpdateCustomerInput,
+  CustomerResponse,
+  PaginationQuery,
+} from '../schemas/customer.schemas';
 
 export class CustomerService {
-  private repo = AppDataSource.getRepository(Customer);
-
-  async list(opts: Scoped & Pagination) {
-    const { tenant_id, page = 1, limit = 20, q, sort = 'created_at', order = 'DESC' } = opts;
-    const where: any = { tenant_id, deleted_at: null };
-    if (q) where.name = ILike(`%${q}%`);
-
-    const [items, total] = await this.repo.findAndCount({
-      where,
-      order: { [sort]: order as any },
-      skip: (page - 1) * limit,
-      take: limit,
+  async createCustomer(data: CreateCustomerInput, createdById: string): Promise<CustomerResponse> {
+    // Check if customer with email already exists
+    const existingCustomer = await prisma.customer.findUnique({
+      where: { email: data.email },
     });
-    return { total, page, limit, items };
+
+    if (existingCustomer) {
+      throw new Error('Customer with this email already exists');
+    }
+
+    // Create customer
+    const customer = await prisma.customer.create({
+      data: {
+        ...data,
+        createdById,
+      },
+    });
+
+    return this.formatCustomerResponse(customer);
   }
 
-  async findOneScoped(tenant_id: string, customer_id: number) {
-  return this.repo.findOne({
-    where: { tenant_id, customer_id, deleted_at: IsNull() }
+  async getCustomers(
+    pagination: PaginationQuery,
+    createdById?: string
+  ): Promise<{ customers: CustomerResponse[]; total: number; page: number; limit: number }> {
+    const { page, limit, search } = pagination;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      ...(createdById && { createdById }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { email: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+
+    const [customers, total] = await Promise.all([
+      prisma.customer.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.customer.count({ where }),
+    ]);
+
+    return {
+      customers: customers.map(this.formatCustomerResponse),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async getCustomerById(id: string): Promise<CustomerResponse | null> {
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+    });
+
+    return customer ? this.formatCustomerResponse(customer) : null;
+  }
+
+  async updateCustomer(id: string, data: UpdateCustomerInput): Promise<CustomerResponse> {
+    // Check if customer exists
+    const existingCustomer = await prisma.customer.findUnique({
+      where: { id },
+    });
+
+    if (!existingCustomer) {
+      throw new Error('Customer not found');
+    }
+
+    // Check if email is being changed and if it already exists
+    if (data.email && data.email !== existingCustomer.email) {
+      const emailExists = await prisma.customer.findUnique({
+        where: { email: data.email },
+      });
+
+      if (emailExists) {
+        throw new Error('Customer with this email already exists');
+      }
+    }
+
+    // Update customer
+    const customer = await prisma.customer.update({
+      where: { id },
+      data,
+    });
+
+    return this.formatCustomerResponse(customer);
+  }
+
+  async deleteCustomer(id: string): Promise<void> {
+    // Check if customer exists
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+    });
+
+    if (!customer) {
+      throw new Error('Customer not found');
+    }
+
+    // Soft delete by setting isActive to false
+    await prisma.customer.update({
+      where: { id },
+      data: { isActive: false },
     });
   }
 
-  async create(data: Partial<Customer> & { tenant_id: string }) {
-    const saved = await this.repo.save(this.repo.create(data));
-    await publishCustomerEvent('created', { customer_id: saved.customer_id, tenant_id: saved.tenant_id });
-    return saved;
-  }
-
-  async updateScoped(tenant_id: string, customer_id: number, data: Partial<Customer>) {
-    const item = await this.findOneScoped(tenant_id, customer_id);
-    if (!item) return null;
-    Object.assign(item, data);
-    const saved = await this.repo.save(item);
-    await publishCustomerEvent('updated', { customer_id, tenant_id });
-    return saved;
-  }
-
-  /** soft delete */
-  async softDeleteScoped(tenant_id: string, customer_id: number) {
-    await this.repo.update({ tenant_id, customer_id }, { deleted_at: new Date(), status: 'deleted' as any });
-    await publishCustomerEvent('deleted', { customer_id, tenant_id });
+  private formatCustomerResponse(customer: any): CustomerResponse {
+    return {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+      isActive: customer.isActive,
+      createdAt: customer.createdAt,
+      updatedAt: customer.updatedAt,
+      createdById: customer.createdById,
+    };
   }
 }
-

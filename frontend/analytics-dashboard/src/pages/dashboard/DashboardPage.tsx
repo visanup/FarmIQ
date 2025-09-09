@@ -1,683 +1,372 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
-  Typography,
+  Grid,
   Card,
   CardContent,
+  Typography,
   CircularProgress,
-  useTheme,
-  useMediaQuery,
-  Container,
-  Stack,
-  Chip,
-  Avatar,
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Button,
-  ButtonGroup,
   Alert,
   AlertTitle,
-  Tabs,
-  Tab,
-  Fab,
-  Tooltip
+  Chip,
+  Button,
+  IconButton,
+  Tooltip,
+  Paper,
+  LinearProgress,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  useTheme,
+  useMediaQuery,
+  Avatar,
+  Stack,
+  Badge,
 } from '@mui/material';
 import {
-  TrendingUp,
-  Devices,
-  Warning,
-  CheckCircle,
-  TrendingDown,
-  Refresh,
-  Dashboard,
-  Agriculture,
-  ViewModule,
-  Psychology,
-  MonitorHeart,
-  Sensors
+  Refresh as RefreshIcon,
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Agriculture as FarmIcon,
+  Devices as DeviceIcon,
+  MonitorHeart as AnimalIcon,
+  Sensors as SensorIcon,
+  Assessment as AnalyticsIcon,
+  Notifications as AlertIcon,
+  WaterDrop as WaterDropIcon,
+  Thermostat as TemperatureIcon,
+  Air as AirIcon,
+  Speed as SpeedIcon,
 } from '@mui/icons-material';
-import { format, subDays } from 'date-fns';
+import { format, subDays, subHours } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import { useDashboardStore } from '../../stores/dashboardStore';
+import { useFarms, useDevices, useAnimals, useDeviceHealth, useDashboardSummary } from '../../hooks/useApi';
+import { DashboardLayout } from '../../components/layout/DashboardLayout';
+import { mockAlerts } from '../../services/api/mockData';
+import { TemperatureHumidityChart } from './components/TemperatureHumidityChart';
+import { DeviceStatusChart } from './components/DeviceStatusChart';
+import { ProductionChart } from './components/ProductionChart';
+import { AnimalHealthChart } from './components/AnimalHealthChart';
 
-// Import contexts and services
-import { useDashboard, DashboardProvider } from '../../contexts/DashboardContext';
-import { performanceService } from '../../services/performance';
-import { animalWeightService } from '../../services/weight';
-import { sensorDataService } from '../../services/sensors';
-
-// Import chart components
-import { PerformanceChart, AnimalWeightChart, SensorDataChart } from '../../components/charts';
-
-// Import types
-import type { 
-  PerformanceTimeSeriesData, 
-  WeightTimeSeriesData, 
-  WeightGrowthAnalysis,
-  SensorTimeSeriesData,
-  ComprehensiveSensorData 
-} from '../../services/performance/performanceService';
-
-// Enhanced MetricCard with better responsive design
-const MetricCard: React.FC<{
+// Enhanced Metric Card Component
+interface MetricCardProps {
   title: string;
   value: string | number;
   icon: React.ReactElement;
-  color: string;
-  trend?: 'up' | 'down' | 'stable';
+  color: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+  trend?: {
+    value: number;
+    isPositive: boolean;
+  };
   subtitle?: string;
-}> = ({ title, value, icon, color, trend, subtitle }) => {
+  loading?: boolean;
+  chart?: React.ReactNode;
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({
+  title,
+  value,
+  icon,
+  color,
+  trend,
+  subtitle,
+  loading = false,
+  chart,
+}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
+
+  if (loading) {
+    return (
+      <Card sx={{ height: '100%', p: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 320 }}>
+          <CircularProgress size={60} />
+        </Box>
+      </Card>
+    );
+  }
+
   return (
     <Card 
       sx={{ 
-        height: '100%',
-        transition: 'all 0.2s ease-in-out',
+        height: '320px',
+        background: `linear-gradient(135deg, ${theme.palette[color].main}15, ${theme.palette[color].main}05)`,
+        border: `2px solid ${theme.palette[color].main}30`,
+        borderRadius: 4,
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: `0 4px 20px ${theme.palette[color].main}15`,
         '&:hover': {
-          transform: 'translateY(-2px)',
-        }
+          transform: 'translateY(-8px)',
+          boxShadow: `0 12px 40px ${theme.palette[color].main}25`,
+        },
       }}
     >
-      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-        <Stack spacing={2}>
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box sx={{ flex: 1 }}>
-              <Typography 
-                color="textSecondary" 
-                variant="body2"
-                sx={{ 
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                  fontWeight: 500,
-                  mb: 1
-                }}
-              >
-                {title}
-              </Typography>
-              <Typography 
-                variant={isMobile ? "h5" : "h4"}
-                component="div" 
-                sx={{ 
-                  color, 
-                  fontWeight: 700,
-                  fontSize: { xs: '1.5rem', sm: '2rem' }
-                }}
-              >
-                {value}
-              </Typography>
-              {subtitle && (
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    color: 'text.secondary',
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' }
-                  }}
-                >
-                  {subtitle}
-                </Typography>
-              )}
-            </Box>
-            
-            {/* Icon */}
-            <Avatar
-              sx={{
-                bgcolor: `${color}15`,
-                color: color,
-                width: { xs: 40, sm: 48 },
-                height: { xs: 40, sm: 48 },
+      <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexGrow: 1 }}>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography 
+              variant="h2" 
+              component="div" 
+              sx={{ 
+                fontWeight: 700, 
+                color: theme.palette[color].main,
+                mb: 2,
+                fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4rem' },
+                lineHeight: 1.1
               }}
             >
-              {icon}
-            </Avatar>
+              {value}
+            </Typography>
+            <Typography 
+              variant="h5" 
+              sx={{ 
+                fontWeight: 600, 
+                color: 'text.primary',
+                mb: 1,
+                fontSize: { xs: '1.125rem', sm: '1.25rem', md: '1.375rem' }
+              }}
+            >
+              {title}
+            </Typography>
+            {subtitle && (
+              <Typography 
+                variant="body1" 
+                color="text.secondary"
+                sx={{ 
+                  fontSize: { xs: '0.875rem', sm: '1rem', md: '1.125rem' },
+                  fontWeight: 500
+                }}
+              >
+                {subtitle}
+              </Typography>
+            )}
           </Box>
-          
-          {/* Trend */}
-          {trend && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Chip
-                size={isMobile ? "small" : "medium"}
-                icon={trend === 'up' ? <TrendingUp /> : trend === 'down' ? <TrendingDown /> : undefined}
-                label={trend === 'up' ? 'เพิ่มขึ้น' : trend === 'down' ? 'ลดลง' : 'คงที่'}
-                color={trend === 'up' ? 'success' : trend === 'down' ? 'error' : 'default'}
-                variant="outlined"
-                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
-              />
-            </Box>
-          )}
-        </Stack>
+          <Avatar 
+            sx={{ 
+              bgcolor: theme.palette[color].main,
+              width: { xs: 64, sm: 72, md: 80 },
+              height: { xs: 64, sm: 72, md: 80 },
+              ml: 2,
+              boxShadow: `0 4px 16px ${theme.palette[color].main}30`
+            }}
+          >
+            {React.cloneElement(icon, { 
+              sx: { fontSize: { xs: 32, sm: 36, md: 40 } } 
+            })}
+          </Avatar>
+        </Box>
+
+        {trend && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 'auto' }}>
+            {trend.isPositive ? (
+              <TrendingUpIcon color="success" sx={{ fontSize: 24, mr: 1 }} />
+            ) : (
+              <TrendingDownIcon color="error" sx={{ fontSize: 24, mr: 1 }} />
+            )}
+            <Typography 
+              variant="body1" 
+              color={trend.isPositive ? 'success.dark' : 'error.dark'}
+              fontWeight="600"
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+            >
+              {trend.value}% จากเดือนที่แล้ว
+            </Typography>
+          </Box>
+        )}
+
+        {chart && (
+          <Box sx={{ mt: 3, height: 80 }}>
+            {chart}
+          </Box>
+        )}
       </CardContent>
     </Card>
   );
 };
 
-// Tab Panel Component
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
-  return (
-    <div role="tabpanel" hidden={value !== index}>
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-    </div>
-  );
-};
-
-// Level Selection Component
-const LevelSelector: React.FC = () => {
-  const { state, setLevel, getAvailableFarms, getAvailablePens } = useDashboard();
-  
-  const availableFarms = getAvailableFarms();
-  const availablePens = getAvailablePens();
-
-  return (
-    <Paper sx={{ p: 2, mb: 3 }}>
-      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-        🎯 เลือกระดับการแสดงผล
-      </Typography>
-      
-      <Grid container spacing={2} alignItems="center">
-        <Grid item xs={12} sm={4}>
-          <ButtonGroup variant="outlined" fullWidth>
-            <Button
-              variant={state.filters.level === 'overview' ? 'contained' : 'outlined'}
-              onClick={() => setLevel('overview')}
-              startIcon={<Dashboard />}
-            >
-              ภาพรวม
-            </Button>
-            <Button
-              variant={state.filters.level === 'farm' ? 'contained' : 'outlined'}
-              onClick={() => setLevel('farm')}
-              startIcon={<Agriculture />}
-              disabled={availableFarms.length === 0}
-            >
-              ฟาร์ม
-            </Button>
-            <Button
-              variant={state.filters.level === 'pen' ? 'contained' : 'outlined'}
-              onClick={() => setLevel('pen')}
-              startIcon={<ViewModule />}
-              disabled={availablePens.length === 0}
-            >
-              เล้า
-            </Button>
-          </ButtonGroup>
-        </Grid>
-        
-        {state.filters.level !== 'overview' && (
-          <Grid item xs={12} sm={4}>
-            <FormControl fullWidth size="small">
-              <InputLabel>เลือกฟาร์ม</InputLabel>
-              <Select
-                value={state.filters.farmId || ''}
-                label="เลือกฟาร์ม"
-                onChange={(e) => setLevel('farm', e.target.value)}
-              >
-                {availableFarms.map((farm) => (
-                  <MenuItem key={farm.id} value={farm.id}>
-                    {farm.name} ({farm.penCount} เล้า)
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-        )}
-        
-        {state.filters.level === 'pen' && state.filters.farmId && (
-          <Grid item xs={12} sm={4}>
-            <FormControl fullWidth size="small">
-              <InputLabel>เลือกเล้า</InputLabel>
-              <Select
-                value={state.filters.penId || ''}
-                label="เลือกเล้า"
-                onChange={(e) => setLevel('pen', state.filters.farmId, e.target.value)}
-              >
-                {availablePens.map((pen) => (
-                  <MenuItem key={pen.id} value={pen.id}>
-                    {pen.name} ({pen.currentStock}/{pen.capacity} ตัว)
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-        )}
-      </Grid>
-    </Paper>
-  );
-};
-
-// Main Dashboard Content Component
-const DashboardContent: React.FC = () => {
+const DashboardPage: React.FC = () => {
+  const [refreshKey, setRefreshKey] = useState(0);
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { state, refreshData, setLoading, setError } = useDashboard();
-  
-  // State for data and UI
-  const [activeTab, setActiveTab] = useState(0);
-  const [performanceData, setPerformanceData] = useState<PerformanceTimeSeriesData | null>(null);
-  const [weightData, setWeightData] = useState<WeightTimeSeriesData | null>(null);
-  const [weightAnalysis, setWeightAnalysis] = useState<WeightGrowthAnalysis | null>(null);
-  const [sensorData, setSensorData] = useState<SensorTimeSeriesData | null>(null);
-  const [realTimeSensorData, setRealTimeSensorData] = useState<ComprehensiveSensorData | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Load performance data
-  const loadPerformanceData = async () => {
-    if (!state.currentCustomer && !state.isAdmin) return;
-    
-    setLoading('performance', true);
-    setError('performance', null);
-    
-    try {
-      const data = await performanceService.getPerformanceMetrics({
-        customerId: state.filters.customerId,
-        farmId: state.filters.farmId,
-        penId: state.filters.penId,
-        level: state.filters.level,
-        dateRange: state.filters.dateRange
-      });
-      setPerformanceData(data);
-    } catch (error) {
-      console.error('Error loading performance data:', error);
-      setError('performance', 'ไม่สามารถโหลดข้อมูลประสิทธิภาพได้');
-    } finally {
-      setLoading('performance', false);
-    }
-  };
+  const { data: farms = [], isLoading: farmsLoading } = useFarms();
+  const { data: devices = [], isLoading: devicesLoading } = useDevices();
+  const { data: animals = [], isLoading: animalsLoading } = useAnimals();
+  const { data: deviceHealth = [], isLoading: healthLoading } = useDeviceHealth();
+  const { data: dashboardSummary, isLoading: summaryLoading } = useDashboardSummary();
 
-  // Load weight data
-  const loadWeightData = async () => {
-    if (!state.currentCustomer && !state.isAdmin) return;
-    
-    setLoading('weight', true);
-    setError('weight', null);
-    
-    try {
-      const [weightTimeSeriesData, analysisData] = await Promise.all([
-        animalWeightService.getWeightMeasurements({
-          customerId: state.filters.customerId,
-          farmId: state.filters.farmId,
-          penId: state.filters.penId,
-          level: state.filters.level,
-          dateRange: state.filters.dateRange
-        }),
-        animalWeightService.getWeightGrowthAnalysis({
-          customerId: state.filters.customerId,
-          farmId: state.filters.farmId,
-          penId: state.filters.penId,
-          level: state.filters.level,
-          dateRange: state.filters.dateRange
-        })
-      ]);
-      
-      setWeightData(weightTimeSeriesData);
-      setWeightAnalysis(analysisData);
-    } catch (error) {
-      console.error('Error loading weight data:', error);
-      setError('weight', 'ไม่สามารถโหลดข้อมูลน้ำหนักได้');
-    } finally {
-      setLoading('weight', false);
-    }
-  };
-
-  // Load sensor data
-  const loadSensorData = async () => {
-    if (!state.currentCustomer && !state.isAdmin) return;
-    
-    setLoading('sensors', true);
-    setError('sensors', null);
-    
-    try {
-      const [timeSeriesData, realTimeData] = await Promise.all([
-        sensorDataService.getSensorData({
-          customerId: state.filters.customerId,
-          farmId: state.filters.farmId,
-          penId: state.filters.penId,
-          level: state.filters.level,
-          dateRange: state.filters.dateRange,
-          interval: state.filters.interval
-        }),
-        sensorDataService.getRealTimeSensorStatus({
-          customerId: state.filters.customerId,
-          farmId: state.filters.farmId,
-          penId: state.filters.penId,
-          level: state.filters.level
-        })
-      ]);
-      
-      setSensorData(timeSeriesData);
-      setRealTimeSensorData(realTimeData);
-    } catch (error) {
-      console.error('Error loading sensor data:', error);
-      setError('sensors', 'ไม่สามารถโหลดข้อมูลเซ็นเซอร์ได้');
-    } finally {
-      setLoading('sensors', false);
-    }
-  };
-
-  // Load all data
-  const loadAllData = async () => {
-    await Promise.all([
-      loadPerformanceData(),
-      loadWeightData(),
-      loadSensorData()
-    ]);
-    refreshData();
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
   };
 
   // Auto refresh effect
   useEffect(() => {
-    loadAllData();
-  }, [state.filters, state.currentCustomer]);
-
-  useEffect(() => {
-    if (!autoRefresh) return;
-    
     const interval = setInterval(() => {
-      loadSensorData(); // Only refresh sensor data for real-time updates
-    }, 30000); // 30 seconds
-    
+      setRefreshKey(prev => prev + 1);
+    }, 30000); // Refresh every 30 seconds
+
     return () => clearInterval(interval);
-  }, [autoRefresh, state.filters]);
+  }, []);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-  };
-
-  const handleRefresh = () => {
-    loadAllData();
-  };
-
-  // Customer info display
-  const currentLevelText = () => {
-    if (state.filters.level === 'overview') return 'ภาพรวมทั้งหมด';
-    if (state.filters.level === 'farm') {
-      const farm = state.farms.find(f => f.id === state.filters.farmId);
-      return `ฟาร์ม: ${farm?.name || 'ไม่ระบุ'}`;
-    }
-    if (state.filters.level === 'pen') {
-      const pen = state.pens.find(p => p.id === state.filters.penId);
-      return `เล้า: ${pen?.name || 'ไม่ระบุ'}`;
-    }
-    return '';
-  };
+  const onlineDevices = deviceHealth.filter(h => h.status === 'ONLINE').length;
+  const offlineDevices = deviceHealth.filter(h => h.status === 'OFFLINE').length;
+  const criticalAlerts = mockAlerts.filter(alert => alert.severity === 'critical').length;
 
   return (
-    <Container maxWidth="xl" sx={{ p: 0 }}>
-      {/* Page Header */}
-      <Box sx={{ mb: { xs: 3, sm: 4 } }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box>
-            <Typography 
-              variant={isMobile ? "h5" : "h4"}
-              gutterBottom 
+    <DashboardLayout>
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
+        {/* Header */}
+        <Box sx={{ mb: 6 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+            <Box>
+              <Typography 
+                variant="h3" 
+                component="h1" 
+                gutterBottom
+                sx={{ 
+                  fontSize: { xs: '1.75rem', sm: '2.25rem', md: '3rem' },
+                  fontWeight: 700,
+                  color: 'primary.main',
+                  lineHeight: 1.2
+                }}
+              >
+                ภาพรวมระบบ
+              </Typography>
+              <Typography 
+                variant="h6" 
+                color="text.secondary"
+                sx={{ 
+                  fontSize: { xs: '1rem', sm: '1.125rem', md: '1.25rem' },
+                  fontWeight: 400
+                }}
+              >
+                ข้อมูลเรียลไทม์และการวิเคราะห์ฟาร์ม
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<RefreshIcon />}
+              onClick={handleRefresh}
               sx={{ 
-                fontWeight: 700,
-                fontSize: { xs: '1.5rem', sm: '2rem', md: '2.25rem' },
-                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                mb: 1
+                borderRadius: 3,
+                px: 4,
+                py: 1.5,
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                fontWeight: 600,
+                boxShadow: '0 4px 16px rgba(46, 125, 50, 0.3)',
+                '&:hover': {
+                  boxShadow: '0 6px 20px rgba(46, 125, 50, 0.4)',
+                }
               }}
             >
-              📊 Dashboard FarmIQ Analytics
-            </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              {state.currentCustomer && (
-                <Chip 
-                  label={`ลูกค้า: ${state.currentCustomer.name}`}
-                  color="primary"
-                  variant="outlined"
-                  size="small"
-                />
-              )}
-              {state.isAdmin && (
-                <Chip 
-                  label="ผู้ดูแลระบบ"
-                  color="warning"
-                  variant="filled"
-                  size="small"
-                />
-              )}
-              <Chip 
-                label={currentLevelText()}
-                color="secondary"
-                variant="outlined"
-                size="small"
-              />
-            </Stack>
-          </Box>
-          
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="รีเฟรชข้อมูล">
-              <Button
-                variant="outlined"
-                onClick={handleRefresh}
-                startIcon={<Refresh />}
-                disabled={state.loading.performance || state.loading.weight || state.loading.sensors}
-              >
-                {isMobile ? '' : 'รีเฟรช'}
-              </Button>
-            </Tooltip>
-            
-            <Button
-              variant={autoRefresh ? 'contained' : 'outlined'}
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              color={autoRefresh ? 'success' : 'inherit'}
-              size="small"
-            >
-              {autoRefresh ? '🟢' : '🔴'} {isMobile ? '' : 'Auto'}
+              รีเฟรช
             </Button>
-          </Stack>
+          </Box>
         </Box>
-        
-        <Typography 
-          variant="body1" 
-          color="text.secondary"
-          sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
-        >
-          ติดตามและวิเคราะห์ข้อมูลฟาร์มแบบเรียลไทม์ - อัปเดตล่าสุด: {format(new Date(), 'dd/MM/yyyy HH:mm')}
-        </Typography>
-      </Box>
-      
-      {/* Level Selector */}
-      <LevelSelector />
-      
-      {/* Error Alerts */}
-      {(state.errors.performance || state.errors.weight || state.errors.sensors) && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          <AlertTitle>เกิดข้อผิดพลาดในการโหลดข้อมูล</AlertTitle>
-          {state.errors.performance && <div>ประสิทธิภาพ: {state.errors.performance}</div>}
-          {state.errors.weight && <div>น้ำหนัก: {state.errors.weight}</div>}
-          {state.errors.sensors && <div>เซ็นเซอร์: {state.errors.sensors}</div>}
-        </Alert>
-      )}
 
-      {/* Quick Status Cards */}
-      {realTimeSensorData && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6} sm={3}>
+        {/* Critical Alerts */}
+        {criticalAlerts > 0 && (
+          <Alert 
+            severity="error" 
+            sx={{ 
+              mb: 4,
+              borderRadius: 3,
+              py: 2,
+              '& .MuiAlert-message': {
+                width: '100%'
+              }
+            }}
+          >
+            <AlertTitle sx={{ fontSize: '1.125rem', fontWeight: 600 }}>
+              การแจ้งเตือนสำคัญ
+            </AlertTitle>
+            มีการแจ้งเตือนสำคัญ {criticalAlerts} รายการที่ต้องดำเนินการ
+          </Alert>
+        )}
+
+        {/* Main Metrics Grid */}
+        <Grid container spacing={{ xs: 3, sm: 4 }} sx={{ mb: 6 }}>
+          <Grid item xs={12} sm={6} md={3}>
             <MetricCard
-              title="อุณหภูมิปัจจุบัน"
-              value={`${realTimeSensorData.environment.temperature}°C`}
-              icon={<Devices />}
-              color={realTimeSensorData.environment.alerts.some(a => a.type === 'temperature') ? theme.palette.warning.main : theme.palette.success.main}
-              trend={realTimeSensorData.environment.temperature > 30 ? "up" : "stable"}
-              subtitle="สิ่งแวดล้อม"
+              title="ฟาร์มทั้งหมด"
+              value={farms.length}
+              icon={<FarmIcon />}
+              color="primary"
+              trend={{ value: 12, isPositive: true }}
+              subtitle="6 ฟาร์มที่ใช้งาน"
+              loading={farmsLoading}
             />
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid item xs={12} sm={6} md={3}>
             <MetricCard
-              title="คุณภาพน้ำ"
-              value={`${realTimeSensorData.waterQuality.qualityIndex}%`}
-              icon={<CheckCircle />}
-              color={realTimeSensorData.waterQuality.qualityIndex > 80 ? theme.palette.success.main : theme.palette.warning.main}
-              trend={realTimeSensorData.waterQuality.qualityIndex > 80 ? "up" : "down"}
-              subtitle={`pH ${realTimeSensorData.waterQuality.ph}`}
+              title="สัตว์ทั้งหมด"
+              value={animals.length}
+              icon={<AnimalIcon />}
+              color="success"
+              trend={{ value: 8, isPositive: true }}
+              subtitle="สุขภาพดี 95%"
+              loading={animalsLoading}
             />
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <MetricCard
+              title="อุปกรณ์ออนไลน์"
+              value={`${onlineDevices}/${devices.length}`}
+              icon={<DeviceIcon />}
+              color="info"
+              trend={{ value: 5, isPositive: true }}
+              subtitle={`${Math.round((onlineDevices / devices.length) * 100)}% ใช้งานได้`}
+              loading={devicesLoading}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
             <MetricCard
               title="การแจ้งเตือน"
-              value={realTimeSensorData.environment.alerts.length + realTimeSensorData.waterQuality.alerts.length + realTimeSensorData.housingConditions.alerts.length}
-              icon={<Warning />}
-              color={theme.palette.warning.main}
-              trend="down"
-              subtitle="รายการที่ต้องแก้ไข"
-            />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <MetricCard
-              title="สถานะรวม"
-              value={realTimeSensorData.overallStatus === 'excellent' ? 'ดีเยี่ยม' : 
-                     realTimeSensorData.overallStatus === 'good' ? 'ดี' :
-                     realTimeSensorData.overallStatus === 'fair' ? 'พอใช้' : 'ต้องปรับปรุง'}
-              icon={<TrendingUp />}
-              color={realTimeSensorData.overallStatus === 'excellent' || realTimeSensorData.overallStatus === 'good' ? 
-                     theme.palette.success.main : theme.palette.warning.main}
-              trend="up"
-              subtitle="ประสิทธิภาพโดยรวม"
+              value={mockAlerts.length}
+              icon={<AlertIcon />}
+              color="warning"
+              trend={{ value: -15, isPositive: false }}
+              subtitle={`${criticalAlerts} รายการสำคัญ`}
+              loading={false}
             />
           </Grid>
         </Grid>
-      )}
 
-      {/* Main Content Tabs */}
-      <Paper sx={{ mb: 3 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={handleTabChange} 
-            variant={isMobile ? "scrollable" : "fullWidth"}
-            scrollButtons="auto"
-          >
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Psychology />
-                  ประสิทธิภาพ
-                  {state.loading.performance && <CircularProgress size={16} />}
-                </Box>
-              }
-            />
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <MonitorHeart />
-                  น้ำหนักสัตว์
-                  {state.loading.weight && <CircularProgress size={16} />}
-                </Box>
-              }
-            />
-            <Tab 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Sensors />
-                  เซ็นเซอร์
-                  {state.loading.sensors && <CircularProgress size={16} />}
-                </Box>
-              }
-            />
-          </Tabs>
-        </Box>
+        {/* Charts Section */}
+        <Grid container spacing={{ xs: 3, sm: 4 }} sx={{ mb: 6 }}>
+          {/* Temperature & Humidity Chart */}
+          <Grid item xs={12} lg={8} sx={{ height: { xs: 400, lg: 500 } }}>
+            <TemperatureHumidityChart />
+          </Grid>
 
-        {/* Performance Tab */}
-        <TabPanel value={activeTab} index={0}>
-          {state.loading.performance ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <CircularProgress size={60} />
-              <Typography variant="body1" sx={{ mt: 2 }}>กำลังโหลดข้อมูลประสิทธิภาพ...</Typography>
-            </Box>
-          ) : performanceData ? (
-            <PerformanceChart 
-              data={performanceData}
-              title={`ตัวชี้วัดประสิทธิภาพ - ${currentLevelText()}`}
-              showSummary={true}
-            />
-          ) : (
-            <Alert severity="info">
-              <AlertTitle>ไม่พบข้อมูลประสิทธิภาพ</AlertTitle>
-              กรุณาตรวจสอบการตั้งค่าและลองใหม่อีกครั้ง
-            </Alert>
-          )}
-        </TabPanel>
+          {/* Device Status Chart */}
+          <Grid item xs={12} lg={4}>
+            <DeviceStatusChart />
+          </Grid>
+        </Grid>
 
-        {/* Weight Tab */}
-        <TabPanel value={activeTab} index={1}>
-          {state.loading.weight ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <CircularProgress size={60} />
-              <Typography variant="body1" sx={{ mt: 2 }}>กำลังโหลดข้อมูลน้ำหนัก...</Typography>
-            </Box>
-          ) : weightData ? (
-            <AnimalWeightChart 
-              data={weightData}
-              analysis={weightAnalysis || undefined}
-              title={`การเจริญเติบโตของสัตว์ - ${currentLevelText()}`}
-              showProjections={true}
-              showDistribution={false}
-            />
-          ) : (
-            <Alert severity="info">
-              <AlertTitle>ไม่พบข้อมูลน้ำหนัก</AlertTitle>
-              กรุณาตรวจสอบการตั้งค่าและลองใหม่อีกครั้ง
-            </Alert>
-          )}
-        </TabPanel>
+        {/* Second Row Charts */}
+        <Grid container spacing={{ xs: 3, sm: 4 }} sx={{ mb: 6 }}>
+          {/* Production Chart */}
+          <Grid item xs={12} lg={8} sx={{ height: { xs: 400, lg: 500 } }}>
+            <ProductionChart />
+          </Grid>
 
-        {/* Sensor Tab */}
-        <TabPanel value={activeTab} index={2}>
-          {state.loading.sensors ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <CircularProgress size={60} />
-              <Typography variant="body1" sx={{ mt: 2 }}>กำลังโหลดข้อมูลเซ็นเซอร์...</Typography>
-            </Box>
-          ) : sensorData ? (
-            <SensorDataChart 
-              data={sensorData}
-              realTimeData={realTimeSensorData || undefined}
-              title={`ข้อมูลเซ็นเซอร์ - ${currentLevelText()}`}
-              showRealTime={true}
-              showAlerts={true}
-            />
-          ) : (
-            <Alert severity="info">
-              <AlertTitle>ไม่พบข้อมูลเซ็นเซอร์</AlertTitle>
-              กรุณาตรวจสอบการเชื่อมต่อของเซ็นเซอร์
-            </Alert>
-          )}
-        </TabPanel>
-      </Paper>
-      
-      {/* Floating Action Button for Quick Refresh */}
-      <Fab
-        color="primary"
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          zIndex: 1000
-        }}
-        onClick={handleRefresh}
-        disabled={state.loading.performance || state.loading.weight || state.loading.sensors}
-      >
-        <Refresh />
-      </Fab>
-    </Container>
+          {/* Animal Health Chart */}
+          <Grid item xs={12} lg={4}>
+            <AnimalHealthChart />
+          </Grid>
+        </Grid>
+      </Box>
+    </DashboardLayout>
   );
-};
-
-// Main Dashboard Page Component
-const DashboardPage: React.FC = () => {
-  return <DashboardContent />;
 };
 
 export default DashboardPage;

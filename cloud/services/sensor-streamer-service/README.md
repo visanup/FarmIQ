@@ -1,385 +1,464 @@
-# sensor-streamer-service
+# FarmIQ Sensor Streamer Service
 
-บริการ (Node.js/TypeScript) สำหรับ “ดึงข้อมูลจาก TimescaleDB/ PostgreSQL แล้วสตรีมออก Kafka” เป็นระยะๆ โดยใช้ **lexicographic cursor** เก็บสถานะการอ่านไว้ในตาราง `sensors.stream_state` ทำให้รันซ้ำ/หยุด–เริ่มใหม่ได้โดยไม่อ่านซ้ำ
+A high-performance sensor data streaming service built with Fastify, Prisma, and TimescaleDB for time-series data processing.
 
-> สถานะล่าสุดของคุณ: บริการขึ้นแล้ว, ต่อ Kafka ได้, ต่อ DB ได้ และมีการ bootstrap แถวแรกใน `sensors.stream_state` สำเร็จ ✅
+## 🚀 Features
 
----
+- **Time-series Database**: Built on TimescaleDB for optimal sensor data storage
+- **Fastify Framework**: High-performance web framework with built-in validation
+- **Prisma ORM**: Type-safe database operations with excellent TypeScript support
+- **Batch Ingestion**: Efficient bulk data processing for high-volume sensor data
+- **Real-time APIs**: RESTful APIs for sensor data management
+- **Swagger Documentation**: Interactive API documentation
+- **Data Compression**: Automatic compression for older data
+- **Retention Policies**: Configurable data retention and cleanup
+- **Continuous Aggregates**: Pre-computed time-series aggregations
 
-## คุณสมบัติหลัก
+## 📋 Prerequisites
 
-* อ่านจาก 4 ตารางในสคีมา `sensors`
+- Node.js 18.18.0 or higher
+- Yarn package manager
+- PostgreSQL 13+ with TimescaleDB extension
+- Docker (optional, for containerized PostgreSQL)
 
-  * `device_readings`, `device_health`, `lab_readings`, `sweep_readings`
-* แปลงแถวข้อมูลเป็น JSON และส่งออก Kafka topics:
+## 🛠️ Installation
 
-  * `sensors.device.readings`
-  * `sensors.device.health`
-  * `sensors.lab.readings`
-  * `sensors.sweep.readings`
-* เลือก tenant ได้ (`TENANT_FILTER=tenant-a,tenant-b`)
-* ปลอดภัยต่อการรันซ้ำ (idempotent) ด้วย **cursor** ใน `sensors.stream_state`
-* ปรับ batch, interval, max-lag ได้ผ่าน ENV
-* Health endpoint: `GET /health` (200 OK)
-
----
-
-## สถาปัตยกรรมย่อ
-
-```
-TimescaleDB (schema = sensors)
-   ├─ device_readings       ─┐
-   ├─ device_health          ├─(TypeORM)──► streamer.service ──► (KafkaJS) ──► Kafka
-   ├─ lab_readings          ─┘
-   ├─ sweep_readings
-   └─ stream_state (cursor)
-```
-
----
-
-## โครงสร้างโฟลเดอร์ (ย่อ)
-
-```
-services/sensor-streamer-service/
-├─ src/
-│  ├─ configs/config.ts          # โหลด/validate ENV, สร้าง KAFKA/DB config
-│  ├─ utils/dataSource.ts        # TypeORM DataSource
-│  ├─ utils/kafka.ts             # KafkaJS producer
-│  ├─ models/                    # TypeORM entities (ตารางใน sensors)
-│  │  ├─ DeviceReading.ts
-│  │  ├─ DeviceHealth.ts
-│  │  ├─ LabReading.ts
-│  │  ├─ SweepReading.ts
-│  │  └─ StreamState.ts          # ตารางคอร์สเซอร์ sensors.stream_state
-│  ├─ services/streamer.service.ts
-│  └─ routes/index.ts            # หน้ารวม/health
-├─ Dockerfile
-├─ tsconfig.json
-└─ README.md  (ไฟล์นี้)
-```
-
----
-
-## การตั้งค่า (ENV)
-
-> บริการอ่าน ENV จาก `process.env` และไฟล์ `.env` (มีตัวช่วยค้นหาไฟล์ และรองรับ `ENV_PATH` ให้ชี้ path เองได้)
-> เลขพอร์ตใช้ `SENSOR_STREAMER_PORT` > `PORT` > `7302` ตามลำดับ
-
-### ฐานข้อมูล
-
-| ตัวแปร         | คำอธิบาย         | ตัวอย่าง                                                          |
-| -------------- | ---------------- | ----------------------------------------------------------------- |
-| `DATABASE_URL` | URL แบบ Postgres | `postgresql://postgres:password@timescaledb:5432/sensor_cloud_db` |
-| `DB_SCHEMA`    | ชื่อสคีมา        | `sensors`                                                         |
-
-> ถ้าไม่ตั้ง `DATABASE_URL` ระบบจะสังเคราะห์จาก `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD` ให้โดยอัตโนมัติ
-
-### Kafka
-
-| ตัวแปร                 | คำอธิบาย                                    | ค่าเริ่มต้น       |
-| ---------------------- | ------------------------------------------- | ----------------- |
-| `KAFKA_CLIENT_ID`      | clientId                                    | `sensor-streamer` |
-| `KAFKA_BROKERS`        | ลิสต์ broker คั่นด้วยจุลภาค                 | เช่น `kafka:9092` |
-| `KAFKA_SSL`            | เปิด TLS หรือไม่ (boolean)                  | `false`           |
-| `KAFKA_SASL_MECHANISM` | `plain` / `scram-sha-256` / `scram-sha-512` | (ว่าง)            |
-| `KAFKA_SASL_USERNAME`  | SASL user                                   | (ว่าง)            |
-| `KAFKA_SASL_PASSWORD`  | SASL pass                                   | (ว่าง)            |
-
-### Topics
-
-| ตัวแปร                  | ค่าเริ่มต้น               |
-| ----------------------- | ------------------------- |
-| `TOPIC_DEVICE_READINGS` | `sensors.device.readings` |
-| `TOPIC_DEVICE_HEALTH`   | `sensors.device.health`   |
-| `TOPIC_LAB_READINGS`    | `sensors.lab.readings`    |
-| `TOPIC_SWEEP_READINGS`  | `sensors.sweep.readings`  |
-
-### Streamer & Server
-
-| ตัวแปร                          | คำอธิบาย                                    | ค่าเริ่มต้น       |
-| ------------------------------- | ------------------------------------------- | ----------------- |
-| `TENANT_FILTER`                 | กรอง tenant: `tenant-a,tenant-b`            | ว่าง = ทุก tenant |
-| `BATCH_SIZE`                    | ขนาด batch                                  | `5000`            |
-| `POLL_INTERVAL_MS`              | ระยะเวลาระหว่างรอบ                          | `1000`            |
-| `MAX_LAG_SECONDS`               | ขอบเขตเวลา (ตัดอนาคตเกินไป)                 | `60`              |
-| `SENSOR_STREAMER_PORT` / `PORT` | พอร์ต HTTP                                  | `7302`            |
-| `API_KEY` หรือ `ADMIN_API_KEY`  | key ขั้นต่ำ 8 ตัวอักษร (จำเป็นต้องมีสักตัว) | —                 |
-| `ENABLE_PROMETHEUS`             | สำหรับเปิด metric (ถ้ามี endpoint ในโค้ด)   | `true`            |
-
----
-
-## การรันด้วย Docker Compose
-
-ตัวอย่าง service ใน `docker-compose.yml`:
-
-```yaml
-sensor-streamer:
-  build:
-    context: ./services/sensor-streamer-service
-    dockerfile: Dockerfile
-  container_name: sensor-streamer
-  restart: unless-stopped
-  ports:
-    - "${SENSOR_STREAMER_PORT:-7302}:7302"
-  env_file:
-    - .env
-  environment:
-    DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
-    DB_SCHEMA: sensors
-    KAFKA_BROKERS: "kafka:9092"
-    KAFKA_SSL: "false"
-  networks: [farm_cloud]
-  depends_on:
-    timescaledb:
-      condition: service_healthy
-  healthcheck:
-    test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:7302/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-    interval: 10s
-    timeout: 10s
-    retries: 5
-    start_period: 10s
-```
-
-สั่งรัน:
+### 1. Clone and Install Dependencies
 
 ```bash
-docker-compose up sensor-streamer
+# Clone the repository
+git clone <repository-url>
+cd sensor-streamer-service
+
+# Install dependencies
+yarn install
 ```
 
-ผลลัพธ์ที่คาดหวัง:
+### 2. Database Setup
 
-* `✅ DataSource initialized`
-* `✅ Kafka producer connected`
-* `🚀 sensor-streamer-service on http://localhost:7302`
-* ถ้าเพิ่งรันครั้งแรก จะมี `INSERT INTO sensors.stream_state ...` เพื่อ bootstrap คอร์สเซอร์
+#### Option A: Using Docker (Recommended)
 
----
+```bash
+# Start PostgreSQL with TimescaleDB
+docker run -d \
+  --name farmiq-postgres \
+  -e POSTGRES_DB=farmiq_cloud \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=password \
+  -p 5432:5432 \
+  timescale/timescaledb:latest-pg15
 
-## สคีมา & DDL ที่ใช้งาน
+# Wait for database to be ready
+sleep 10
+```
 
-> ต้องมีตารางเหล่านี้ในสคีมา `sensors` (และแนะนำให้เป็น **hypertable** ถ้าใช้ TimescaleDB)
+#### Option B: Local PostgreSQL Installation
 
-**สรุปคีย์ (สำคัญต่อการจัดลำดับอ่าน):**
-
-* `device_readings`: PK (`time`, `tenant_id`, `device_id`, `metric`)
-* `device_health`:   PK (`time`, `tenant_id`, `device_id`)
-* `lab_readings`:     PK (`time`, `tenant_id`, `station_id`, `sensor_id`, `metric`)
-* `sweep_readings`:   PK (`time`, `tenant_id`, `robot_id`, `run_id`, `sensor_id`, `metric`)
-
-**ตารางคอร์สเซอร์**
+1. Install PostgreSQL 13+ with TimescaleDB extension
+2. Create database and user:
 
 ```sql
-CREATE TABLE IF NOT EXISTS sensors.stream_state (
-  name       text PRIMARY KEY,          -- ตัวระบุแผน เช่น 'sensors.device_readings'
-  last_time  timestamptz NULL,          -- เวลาแถวสุดท้ายที่อ่านแล้ว (cursor)
-  tenant_id  text NULL,
-  robot_id   text NULL,
-  run_id     text NULL,
-  sensor_id  text NULL,
-  metric     text NULL,
-  created_at timestamptz NOT NULL DEFAULT NOW(),
-  updated_at timestamptz NOT NULL DEFAULT NOW()
-);
+CREATE DATABASE farmiq_cloud;
+CREATE USER postgres WITH PASSWORD 'password';
+GRANT ALL PRIVILEGES ON DATABASE farmiq_cloud TO postgres;
 ```
 
-> ถ้าเคยมี `public.stream_state` รูปแบบเก่า (`table_name/last_ts/last_key`) ให้ย้ายไป `sensors.stream_state` ตามโครงสร้างใหม่นี้
+### 3. Environment Configuration
 
----
+Create a `.env` file in the root directory:
 
-## รูปแบบข้อความที่ส่งออก Kafka
+```env
+# Database
+DATABASE_URL="postgresql://postgres:password@localhost:5432/farmiq_cloud?schema=sensors"
 
-> ทุก message เป็น JSON (Content-Type: `application/json`) และใส่ key สำหรับ partition
+# Server
+PORT=7302
+NODE_ENV=development
+HOST=0.0.0.0
 
-* **Topic: `sensors.device.readings`**
+# API Keys
+ADMIN_API_KEY=admin-key
 
-  ```json
-  {
-    "schema": "sensor.device.v1",
-    "ts": "2025-08-18T09:43:04.329Z",
-    "tenant_id": "tenant-a",
-    "device_id": "dev-1",
-    "metric": "temp",
-    "value": 25.3,
-    "quality": "clean",
-    "sensor_id": "s1",
-    "payload": { "src": "test" }
-  }
-  ```
+# Kafka (Optional)
+KAFKA_BROKERS=localhost:9092
+KAFKA_SSL=false
+KAFKA_CLIENT_ID=sensor-streamer-service
 
-* **Topic: `sensors.device.health`**
+# CORS
+CORS_ALLOW_CREDENTIALS=true
+CORS_ALLOWED_ORIGINS=*
+CORS_ALLOW_METHODS=*
+CORS_ALLOW_HEADERS=*
 
-  ```json
-  {
-    "schema": "sensor.health.v1",
-    "ts": "2025-08-18T09:43:04.329Z",
-    "tenant_id": "tenant-a",
-    "device_id": "dev-1",
-    "online": true,
-    "rssi": -60,
-    "uptime_s": 3600,
-    "source": "edge",
-    "meta": {}
-  }
-  ```
+# Logging
+LOG_LEVEL=info
 
-* **Topic: `sensors.lab.readings`**
+# Prometheus (Optional)
+ENABLE_PROMETHEUS=false
 
-  ```json
-  {
-    "schema": "sensor.lab.v1",
-    "ts": "2025-08-18T09:43:04.329Z",
-    "tenant_id": "tenant-a",
-    "station_id": "st-1",
-    "sensor_id": "ph",
-    "metric": "pH",
-    "value": 6.9,
-    "quality": "clean",
-    "payload": {}
-  }
-  ```
-
-* **Topic: `sensors.sweep.readings`**
-
-  ```json
-  {
-    "schema": "sensor.sweep.v1",
-    "ts": "2025-08-18T09:43:04.329Z",
-    "tenant_id": "tenant-a",
-    "robot_id": "rb-1",
-    "run_id": "1001",
-    "sensor_id": "LIDAR",
-    "metric": "intensity",
-    "zone_id": "Z-01",
-    "x": 12.34,
-    "y": 56.78,
-    "value": 0.92,
-    "quality": "clean",
-    "payload": {}
-  }
-  ```
-
----
-
-## ทดสอบแบบเร็ว (seed ข้อมูล + ดู consumer)
-
-> ค่าเริ่มต้นของ `MAX_LAG_SECONDS = 60` ดังนั้นเวลาที่ insert ควร “ย้อนหลัง” เกิน 60 วินาที เพื่อให้ถูกอ่าน
-
-### 1) ใส่ข้อมูลตัวอย่าง (ทุกตาราง)
-
-```bash
-# device_readings
-docker exec -it farmiq-cloud-timescaledb-1 \
-  psql -U postgres -d sensor_cloud_db -c \
-"INSERT INTO sensors.device_readings (time,tenant_id,device_id,metric,sensor_id,value,quality,payload)
- VALUES (now() - interval '2 minutes','tenant-a','dev-1','temp','s1',25.3,'clean','{\"src\":\"seed\"}');"
-
-# device_health
-docker exec -it farmiq-cloud-timescaledb-1 \
-  psql -U postgres -d sensor_cloud_db -c \
-"INSERT INTO sensors.device_health (time,tenant_id,device_id,online,source,rssi,uptime_s,meta)
- VALUES (now() - interval '2 minutes','tenant-a','dev-1',true,'edge',-55,7200,'{}');"
-
-# lab_readings
-docker exec -it farmiq-cloud-timescaledb-1 \
-  psql -U postgres -d sensor_cloud_db -c \
-"INSERT INTO sensors.lab_readings (time,tenant_id,station_id,sensor_id,metric,value,quality,payload)
- VALUES (now() - interval '2 minutes','tenant-a','st-1','ph','pH',6.9,'clean','{}');"
-
-# sweep_readings
-docker exec -it farmiq-cloud-timescaledb-1 \
-  psql -U postgres -d sensor_cloud_db -c \
-"INSERT INTO sensors.sweep_readings (time,tenant_id,robot_id,run_id,sensor_id,metric,zone_id,x,y,value,quality,payload)
- VALUES (now() - interval '2 minutes','tenant-a','rb-1',1001,'LIDAR','intensity','Z-01',12.34,56.78,0.92,'clean','{}');"
+# Streamer
+STREAMER_INTERVAL_MS=5000
+BATCH_SIZE=100
 ```
 
-### 2) เปิด consumer ดูข้อความ
+### 4. Database Migration and TimescaleDB Setup
+
+#### Quick Setup (Automated)
 
 ```bash
-docker exec -it kafka bash -lc "/opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic sensors.device.readings --from-beginning --timeout-ms 5000"
+# For Linux/macOS
+chmod +x scripts/setup-timescaledb.sh
+./scripts/setup-timescaledb.sh
+
+# For Windows
+scripts\setup-timescaledb.bat
 ```
 
-ทำแบบเดียวกันกับ topic อื่นๆ ได้ตามต้องการ
-
----
-
-## Endpoints
-
-* `GET /health` → `200 OK` (พร้อมข้อความสั้นๆ)
-* `GET /` → แสดงรายการสถานะใน `sensors.stream_state` (ขึ้นกับโค้ดใน `routes/index.ts`)
-
----
-
-## เคล็ดลับ & แก้ปัญหา
-
-* **Kafka ต่อไม่ได้ / TLS error (`ECONNRESET`)**
-  ตรวจ `KAFKA_SSL=false` ให้ชัด และ `KAFKA_BROKERS` ต้องใช้ host ภายในเครือข่าย compose เช่น `kafka:9092` (ไม่ใช่พอร์ตที่ map ออกนอก)
-
-* **Timeout: `kafka-1:9092`**
-  ใช้ `kafka:9092` แทนชื่อ `kafka-1` หรือระบุ brokers ให้ตรงกับบริการที่รันจริง
-
-* **`.env not found; using process.env only`**
-  ไม่ใช่ error แค่เตือนว่าไม่พบไฟล์ `.env`; ถ้าใช้ `env_file: .env` ใน compose แล้ว ข้ามได้
-  หรือกำหนด `ENV_PATH=/app/.env` (ตามตำแหน่งไฟล์ใน container) ก็ได้
-
-* **`relation "...sweep_readings" does not exist`**
-  ยังไม่ได้สร้างตาราง/สคีมา หรือ `DB_SCHEMA` ไม่ตรง ให้ apply DDL และตั้ง `DB_SCHEMA=sensors` ให้ตรงกับ entity
-
-* **`EntityMetadataNotFoundError: No metadata for "StreamState"`**
-  ตรวจว่า import เอนทิตีถูกไฟล์/ชื่อ, `AppDataSource` รวม `StreamState` แล้ว, `dist/` สะอาด (ลองลบแล้ว build ใหม่)
-
-* **ไม่มีข้อความออก Kafka**
-
-  * เวลาที่ insert ต้องย้อนหลังเกิน `MAX_LAG_SECONDS`
-  * เช็ค `TENANT_FILTER`
-  * ตารางมีข้อมูลจริง และ topics ถูกสร้างแล้ว (ใช้ `kafka-topics.sh --list` ดู)
-
-* **Partitioner warning (KafkaJS v2)**
-  โค้ดตั้งค่าใช้ `Partitioners.LegacyPartitioner` เพื่อลดคำเตือนแล้ว
-
----
-
-## พัฒนา/รันในเครื่อง (ไม่ใช้ Docker)
+#### Manual Setup
 
 ```bash
-# ติดตั้ง
-yarn
+# 1. Generate Prisma client
+yarn db:generate
 
-# สร้างไฟล์ .env (ดูตัวอย่างตัวแปรด้านบน)
-cp .env.example .env  # ถ้ามี
+# 2. Push schema to database
+yarn db:push
 
-# build
+# 3. Run TimescaleDB setup
+psql -h localhost -U postgres -d farmiq_cloud -f prisma/migrations/001_timescale_setup.sql
+
+# 4. Create helper functions
+psql -h localhost -U postgres -d farmiq_cloud -f prisma/migrations/002_timescale_functions.sql
+```
+
+### 5. Start the Service
+
+```bash
+# Development mode
+yarn dev
+
+# Production mode
 yarn build
-
-# รัน
-node dist/server.js
-# หรือ dev
-yarn ts-node-dev src/server.ts
+yarn start
 ```
 
----
+## 📚 API Documentation
 
-## สิทธิ์ & ความปลอดภัย
+Once the service is running, visit:
+- **Swagger UI**: http://localhost:7302/api-docs
+- **Health Check**: http://localhost:7302/health
 
-* ตั้ง `API_KEY` หรือ `ADMIN_API_KEY` (ยาว ≥ 8 ตัวอักษร) อย่างน้อยหนึ่งตัว
-* ถ้าต้องใช้ TLS/SASL กับ Kafka ให้ตั้งตัวแปร `KAFKA_SSL=true` และ `KAFKA_SASL_*` ให้สอดคล้องกับผู้ให้บริการ
+## 🔧 Available Scripts
 
----
+```bash
+# Development
+yarn dev              # Start in development mode with hot reload
+yarn build            # Build the application
+yarn start            # Start the production server
 
-## License
+# Database
+yarn db:generate      # Generate Prisma client
+yarn db:push          # Push schema changes to database
+yarn db:migrate       # Run database migrations
+yarn db:studio        # Open Prisma Studio
 
-ภายในองค์กร/โปรเจกต์ (กำหนดตามนโยบายทีมของคุณ)
+# Utilities
+yarn typecheck        # Run TypeScript type checking
+yarn lint             # Run ESLint
+```
 
----
+## 📊 Database Schema
 
-## คำถามที่พบบ่อย
+### Tables
 
-**Q: ทำไม service ไม่อ่านข้อมูลล่าสุดในทันที?**
-A: มีการกัน “อนาคต” ด้วย `MAX_LAG_SECONDS` (เช่น 60s) เพื่อรอความเสถียรของข้อมูล/ไทม์สแตมป์ ให้ insert เวลาย้อนหลังเกินช่วงนี้ หรือปรับค่าลดลง
+- **sensor_readings**: Time-series sensor data
+- **sweep_readings**: Sweep operation data
+- **lab_readings**: Laboratory test results
+- **device_health**: Device status and health information
+- **data_ingestion_logs**: Data ingestion tracking
 
-**Q: อยากอ่านเฉพาะบาง tenant**
-A: ตั้ง `TENANT_FILTER=tenant-a,tenant-b`
+### Hypertables
 
-**Q: ตารางคอร์สเซอร์อยู่ที่ไหน?**
-A: `sensors.stream_state` (คีย์หลัก `name` เช่น `sensors.device_readings`) มีคอลัมน์ `last_time` และคีย์ประกอบอื่น ๆ สำหรับช่วยคำนวณ cursor
+All time-series tables are converted to TimescaleDB hypertables for optimal performance:
 
----
+```sql
+-- View hypertables
+SELECT * FROM timescaledb_information.hypertables WHERE schema_name = 'sensors';
+```
+
+### Continuous Aggregates
+
+Pre-computed aggregations for common queries:
+
+- **sensor_readings_hourly**: Hourly sensor data aggregations
+- **sensor_readings_daily**: Daily sensor data aggregations
+
+## 🔍 Time-series Queries
+
+### Using Prisma + Raw SQL
+
+```typescript
+// Get latest sensor reading
+const latestReading = await prisma.$queryRaw`
+  SELECT * FROM sensors.get_latest_sensor_reading('device_001');
+`;
+
+// Get aggregated data
+const aggregatedData = await prisma.$queryRaw`
+  SELECT * FROM sensors.get_aggregated_sensor_data(
+    'device_001',
+    'temperature',
+    '1 hour'::INTERVAL,
+    NOW() - INTERVAL '24 hours',
+    NOW()
+  );
+`;
+
+// Time-bucket queries
+const hourlyData = await prisma.$queryRaw`
+  SELECT 
+    time_bucket('1 hour', timestamp) as bucket,
+    AVG(value) as avg_value,
+    MAX(value) as max_value,
+    MIN(value) as min_value
+  FROM sensors.sensor_readings
+  WHERE device_id = 'device_001'
+    AND timestamp >= NOW() - INTERVAL '24 hours'
+  GROUP BY bucket
+  ORDER BY bucket;
+`;
+```
+
+## 📈 Performance Optimization
+
+### Indexes
+
+The service automatically creates optimized indexes:
+
+- `idx_sensor_readings_device_timestamp`: Device + timestamp queries
+- `idx_sensor_readings_sensor_type_timestamp`: Sensor type + timestamp queries
+- `idx_sweep_readings_device_timestamp`: Sweep data queries
+- `idx_lab_readings_sample_timestamp`: Lab data queries
+
+### Data Compression
+
+Older data is automatically compressed:
+
+```sql
+-- Check compression status
+SELECT * FROM timescaledb_information.compression_settings;
+```
+
+### Retention Policies
+
+Data retention is automatically managed:
+
+- **Sensor data**: 1 year retention
+- **Sweep data**: 1 year retention
+- **Lab data**: 1 year retention
+
+## 🔐 API Authentication
+
+The service uses API key authentication for sensitive endpoints:
+
+```bash
+# Include API key in requests
+curl -H "x-api-key: admin-key" \
+     -H "Content-Type: application/json" \
+     -X POST http://localhost:7302/api/sensor-readings/batch \
+     -d '[{"deviceId":"device_001","sensorType":"temperature","value":25.5,"unit":"celsius"}]'
+```
+
+## 📝 Batch Data Ingestion
+
+### Sensor Readings
+
+```bash
+curl -X POST http://localhost:7302/api/sensor-readings/batch \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: admin-key" \
+  -d '[
+    {
+      "deviceId": "device_001",
+      "sensorType": "temperature",
+      "value": 25.5,
+      "unit": "celsius",
+      "timestamp": "2024-01-01T00:00:00Z"
+    }
+  ]'
+```
+
+### Sweep Readings
+
+```bash
+curl -X POST http://localhost:7302/api/sweep-readings/batch \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: admin-key" \
+  -d '[
+    {
+      "deviceId": "device_001",
+      "sweepId": "sweep_001",
+      "data": {"x": 10, "y": 20, "z": 30},
+      "timestamp": "2024-01-01T00:00:00Z"
+    }
+  ]'
+```
+
+### Lab Readings
+
+```bash
+curl -X POST http://localhost:7302/api/lab-readings/batch \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: admin-key" \
+  -d '[
+    {
+      "sampleId": "sample_001",
+      "testType": "ph",
+      "value": 7.2,
+      "unit": "ph",
+      "timestamp": "2024-01-01T00:00:00Z"
+    }
+  ]'
+```
+
+### Device Health
+
+```bash
+curl -X POST http://localhost:7302/api/device-health/batch \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: admin-key" \
+  -d '[
+    {
+      "deviceId": "device_001",
+      "status": "ONLINE",
+      "lastSeen": "2024-01-01T00:00:00Z",
+      "batteryLevel": 85,
+      "signalStrength": -45
+    }
+  ]'
+```
+
+## 🔧 Maintenance
+
+### Data Cleanup
+
+```sql
+-- Manual cleanup (keep last 365 days)
+SELECT sensors.cleanup_old_data(365);
+
+-- Check data retention policies
+SELECT * FROM timescaledb_information.data_retention_policies;
+```
+
+### Monitoring
+
+```sql
+-- Check hypertable sizes
+SELECT 
+    hypertable_name,
+    pg_size_pretty(hypertable_size) as size
+FROM timescaledb_information.hypertables;
+
+-- Check compression ratio
+SELECT 
+    hypertable_name,
+    compression_ratio
+FROM timescaledb_information.compression_settings;
+```
+
+## 🐳 Docker Support
+
+### Dockerfile
+
+The service includes a Dockerfile for containerized deployment:
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN yarn install --frozen-lockfile
+COPY . .
+RUN yarn build
+EXPOSE 7302
+CMD ["yarn", "start"]
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: farmiq_cloud
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  sensor-streamer:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/farmiq_cloud?schema=sensors
+      PORT: 7302
+    ports:
+      - "7302:7302"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **TimescaleDB Extension Not Found**
+   ```bash
+   # Install TimescaleDB extension
+   psql -d farmiq_cloud -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+   ```
+
+2. **Hypertable Creation Failed**
+   ```bash
+   # Check if tables exist
+   psql -d farmiq_cloud -c "SELECT * FROM sensors.sensor_readings LIMIT 1;"
+   ```
+
+3. **Permission Denied**
+   ```bash
+   # Grant necessary permissions
+   psql -d farmiq_cloud -c "GRANT ALL PRIVILEGES ON SCHEMA sensors TO postgres;"
+   ```
+
+### Logs
+
+```bash
+# View service logs
+yarn dev 2>&1 | tee logs/sensor-streamer.log
+
+# View database logs (Docker)
+docker logs farmiq-postgres
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📞 Support
+
+For support and questions:
+- Create an issue in the repository
+- Contact the development team
+- Check the documentation at http://localhost:7302/api-docs

@@ -1,45 +1,104 @@
-// src/schemas/auth.schemas.ts
-import { z } from '../utils/zod';
+import { z } from 'zod';
 
-export const CustomerSchema = z.object({
-  name: z.string().trim().min(1, 'customer.name is required').max(100),
-  email: z.string().trim().email().optional(),
-  phone: z.string().trim().max(30).optional(),
+// User schemas
+export const UserRoleSchema = z.enum(['ADMIN', 'USER', 'VIEWER']);
+
+export const CreateUserSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  name: z.string().min(1, 'Name is required').optional(),
+  role: UserRoleSchema.optional(),
 });
 
-const PasswordSchema = z
-  .string()
-  .min(8, 'password must be at least 8 characters')
-  .max(128, 'password too long')
-  .refine(
-    (v: string) => /[A-Za-z]/.test(v) && /[0-9]/.test(v),
-    'password must contain letters and numbers'
-  );
-
-export const SignupBodySchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  username: z
-    .string()
-    .trim()
-    .min(3, 'username must be at least 3 chars')
-    .max(32, 'username too long')
-    .regex(/^[a-zA-Z0-9._-]+$/, 'username allows a-z, 0-9, dot, underscore, dash'),
-  password: PasswordSchema,
-  customer: CustomerSchema,
+export const UpdateUserSchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  role: UserRoleSchema.optional(),
+  isActive: z.boolean().optional(),
 });
 
-export const LoginBodySchema = z.object({
-  username: z.string().trim().min(1, 'username is required'),
-  password: z.string().min(1, 'password is required'),
+export const UserResponseSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string().nullable(),
+  role: UserRoleSchema,
+  isActive: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
 });
 
-export const RefreshBodySchema = z.object({
-  refreshToken: z.string().min(1, 'refreshToken is required'),
+// Auth schemas
+export const LoginSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(1, 'Password is required'),
 });
 
-export type SignupBody = z.infer<typeof SignupBodySchema>;
-export type LoginBody = z.infer<typeof LoginBodySchema>;
-export type RefreshBody = z.infer<typeof RefreshBodySchema>;
+export const RegisterSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  name: z.string().min(1, 'Name is required'),
+});
 
+export const RefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
 
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
 
+// Response schemas
+export const AuthResponseSchema = z.object({
+  user: UserResponseSchema,
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  expiresIn: z.number(),
+});
+
+export const TokenResponseSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  expiresIn: z.number(),
+});
+
+// Customer schemas
+export const CreateCustomerSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email format'),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+});
+
+export const UpdateCustomerSchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  email: z.string().email('Invalid email format').optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const CustomerResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  phone: z.string().nullable(),
+  address: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  createdById: z.string(),
+});
+
+// Type exports
+export type CreateUserInput = z.infer<typeof CreateUserSchema>;
+export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
+export type UserResponse = z.infer<typeof UserResponseSchema>;
+export type LoginInput = z.infer<typeof LoginSchema>;
+export type RegisterInput = z.infer<typeof RegisterSchema>;
+export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
+export type AuthResponse = z.infer<typeof AuthResponseSchema>;
+export type TokenResponse = z.infer<typeof TokenResponseSchema>;
+export type CreateCustomerInput = z.infer<typeof CreateCustomerSchema>;
+export type UpdateCustomerInput = z.infer<typeof UpdateCustomerSchema>;
+export type CustomerResponse = z.infer<typeof CustomerResponseSchema>;

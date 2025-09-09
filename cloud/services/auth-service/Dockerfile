@@ -1,26 +1,42 @@
-# -------- build stage --------
-FROM node:20-bookworm-slim AS build
+FROM node:18-alpine
+
+# Install dependencies for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
-# ติดตั้ง yarn classic ผ่าน corepack (มากับ Node 20)
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
-
+# Copy package files
 COPY package.json yarn.lock ./
+
+# Install dependencies
 RUN yarn install --frozen-lockfile
-COPY tsconfig.json ./
-COPY src ./src
+
+# Copy source code
+COPY . .
+
+# Generate Prisma client
+RUN yarn db:generate
+
+# Build the application
 RUN yarn build
 
-# -------- runtime stage --------
-FROM node:20-bookworm-slim AS runtime
-ENV NODE_ENV=production
-WORKDIR /app
+# Remove dev dependencies
+RUN yarn install --production --frozen-lockfile && yarn cache clean
 
-# ไม่จำเป็นต้องลง yarn ใน runtime ก็ได้ แต่ลงไว้ก็ไม่เสียหาย
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
 
-COPY --from=build /app/package.json ./
-COPY --from=build /app/yarn.lock ./
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
+# Change ownership
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Expose port
+EXPOSE 7300
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "http=require('http');http.get('http://localhost:7300/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
+# Start the application
 CMD ["node", "dist/server.js"]

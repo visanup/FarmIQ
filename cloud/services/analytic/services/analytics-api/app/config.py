@@ -45,7 +45,7 @@ def _env(key: str, default: str) -> str:
 # ---------- config ----------
 class Config:
     # Identity
-    APP_NAME: str = "analytics-worker"
+    APP_NAME: str = "analytics-api"
     ENV: str = _env("ENV", "dev")
 
     # ---- Database (cloud) ----

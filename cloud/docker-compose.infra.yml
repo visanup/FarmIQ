@@ -1,0 +1,204 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    container_name: farmiq-postgres
+    environment:
+      POSTGRES_DB: farmiq_cloud
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres1611
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "25432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./services/sensor-streamer-service/prisma/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d farmiq_cloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - farmiq-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: farmiq-redis
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - farmiq-network
+
+  # 📊 Full-featured GUI by Redis
+  redisinsight:
+    image: redis/redisinsight:latest
+    restart: unless-stopped
+    ports:
+      - "8001:8001"                      # UI: http://localhost:8001
+    volumes:
+      - redisinsight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - farmiq-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: farmiq-prometheus
+    ports:
+      - "19090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - farmiq-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: farmiq-grafana
+    ports:
+      - "13000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - farmiq-network
+  
+  # --- Kafka (KRaft, single-broker) ---
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: farmiq-kafka
+    restart: unless-stopped
+    networks: [farmiq-network]
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    volumes:
+      - kafka_data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      start_period: 40s   # เพิ่มเวลาให้บูต
+      retries: 12
+
+  # one-shot init (หยุดเมื่อทำงานเสร็จ ถือว่าปกติ)
+  kafka-init-topics:
+    image: bitnami/kafka:3.7
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [farmiq-network]
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+
+        # ==== ของเดิม (คงไว้เหมือนเดิม) ====
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.readings  --partitions 6 --replication-factor 1
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.health    --partitions 3 --replication-factor 1
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.lab.readings     --partitions 3 --replication-factor 1
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.sweep.readings   --partitions 6 --replication-factor 1
+
+        # ==== เพิ่มหัวข้อแบบมีเวอร์ชัน (.v1) ====
+        # Sensors (append-only, เก็บ 365 วัน)
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.readings.v1  --partitions 6 --replication-factor 1 --config retention.ms=31536000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.health.v1    --partitions 3 --replication-factor 1 --config retention.ms=15552000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.lab.readings.v1     --partitions 3 --replication-factor 1 --config retention.ms=15552000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.sweep.readings.v1   --partitions 6 --replication-factor 1 --config retention.ms=31536000000
+
+        # Master snapshots (ต้องการค่า "ล่าสุด" → compact)
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic devices.device.snapshot.v1  --partitions 6 --replication-factor 1 --config cleanup.policy=compact
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.farm.snapshot.v1      --partitions 6 --replication-factor 1 --config cleanup.policy=compact
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.house.snapshot.v1     --partitions 6 --replication-factor 1 --config cleanup.policy=compact
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.flock.snapshot.v1     --partitions 6 --replication-factor 1 --config cleanup.policy=compact
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic formula.recipe.snapshot.v1  --partitions 3 --replication-factor 1 --config cleanup.policy=compact
+            
+        # Operational / Feed / Economics / External (append-only, 180 วัน)
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.operational.event.v1      --partitions 6 --replication-factor 1 --config retention.ms=15552000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic feed.batch.created.v1           --partitions 6 --replication-factor 1 --config retention.ms=15552000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic feed.quality.result.v1          --partitions 3 --replication-factor 1 --config retention.ms=15552000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic economics.cost.txn.v1           --partitions 6 --replication-factor 1 --config retention.ms=31536000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic external.weather.observation.v1 --partitions 6 --replication-factor 1 --config retention.ms=15552000000
+
+        # Analytics outputs (append-only, 90 วัน)
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic analytics.features.materialized.v1 --partitions 6 --replication-factor 1 --config retention.ms=7776000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic analytics.prediction.v1           --partitions 6 --replication-factor 1 --config retention.ms=7776000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic analytics.anomaly.v1              --partitions 6 --replication-factor 1 --config retention.ms=7776000000
+
+        # DLQ (30 วัน) — อย่างน้อยสำหรับสตรีมหลัก
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.readings.v1.dlq      --partitions 6 --replication-factor 1 --config retention.ms=2592000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.operational.event.v1.dlq      --partitions 6 --replication-factor 1 --config retention.ms=2592000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic feed.batch.created.v1.dlq           --partitions 6 --replication-factor 1 --config retention.ms=2592000000
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic external.weather.observation.v1.dlq --partitions 3 --replication-factor 1 --config retention.ms=2592000000
+
+        # List สรุป
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+    restart: "no" 
+
+  # --- Kafka UI ---
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: farmiq-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      SERVER_PORT: 8080
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+    networks: [farmiq-network]
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  kafka_data:
+    driver: local
+  redisinsight-data:
+    driver: local
+
+networks:
+  farmiq-network:
+    driver: bridge

@@ -11,7 +11,7 @@ export async function runConsumers() {
   await consumer.connect();
   await producer.connect();
 
-  await consumer.subscribe({ topic: 'sensors.device.readings', fromBeginning: false });
+  await consumer.subscribe({ topic: 'sensors.device.readings.v1', fromBeginning: false });
 
   await consumer.run({
     eachBatchAutoResolve: true,

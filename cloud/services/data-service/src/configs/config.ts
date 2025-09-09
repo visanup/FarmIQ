@@ -1,41 +1,60 @@
-// services/data-service/src/configs/config.ts
+import { z } from 'zod';
 import * as dotenv from 'dotenv';
-import { join } from 'path';
-import { Algorithm } from 'jsonwebtoken';
 
-// โหลดค่าจากไฟล์ .env.common (อยู่ที่ services/.env.common)
-dotenv.config({ path: join(__dirname, '../../../../.env') });
+// Load environment variables
+dotenv.config();
 
+const configSchema = z.object({
+  // Server
+  PORT: z.string().transform(Number).default('7303'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  HOST: z.string().default('0.0.0.0'),
 
-// 4) Database settings
-export const DB_HOST = process.env.DB_HOST!;
-export const DB_PORT = Number(process.env.DB_PORT) || 5432;
-export const DB_NAME = process.env.DB_NAME!;
-export const DB_USER = process.env.DB_USER!;
-export const DB_PASSWORD = process.env.DB_PASSWORD!;
+  // Database
+  DATABASE_URL: z.string().min(1),
 
-export const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+  // JWT
+  JWT_SECRET: z.string().min(1),
+  JWT_ALGORITHM: z.enum(['HS256', 'HS384', 'HS512']).default('HS256'),
 
-// 5) Server port
-export const PORT = Number(process.env.DATA_SERVICE_PORT) || 4107;
-console.log("Port:", PORT)
+  // Kafka
+  KAFKA_BROKERS: z.string().default('localhost:9092'),
+  KAFKA_SSL: z.string().transform(val => val === 'true').default('false'),
+  KAFKA_CLIENT_ID: z.string().default('data-service'),
 
-// 6) JWT settings
-const secret = process.env.JWT_SECRET_KEY;
-if (!secret) {
-  console.error('❌ Missing JWT_SECRET_KEY! Check your .env files and paths.');
-  process.exit(1);
-}
-export const JWT_SECRET = process.env.JWT_SECRET_KEY!;
+  // CORS
+  CORS_ALLOW_CREDENTIALS: z.string().transform(val => val === 'true').default('true'),
+  CORS_ALLOWED_ORIGINS: z.string().default('*'),
+  CORS_ALLOW_METHODS: z.string().default('*'),
+  CORS_ALLOW_HEADERS: z.string().default('*'),
 
-export const ACCESS_TOKEN_EXPIRE_MINUTES =
-  Number(process.env.TOKEN_EXPIRATION_MINUTES) || 1440;
+  // Logging
+  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
-export const REFRESH_TOKEN_EXPIRE_DAYS =
-  Number(process.env.REFRESH_TOKEN_EXPIRE_DAYS) || 7;
+  // Data Processing
+  BATCH_SIZE: z.string().transform(Number).default('100'),
+  CACHE_TTL: z.string().transform(Number).default('300'), // 5 minutes
+});
 
-// 7) Algorithm (fixed syntax)
-export const ALGORITHM: Algorithm =
-  (process.env.ALGORITHM as Algorithm) || 'HS256';
+const config = configSchema.parse(process.env);
+
+export const {
+  PORT,
+  NODE_ENV,
+  HOST,
+  DATABASE_URL,
+  JWT_SECRET,
+  JWT_ALGORITHM,
+  KAFKA_BROKERS,
+  KAFKA_SSL,
+  KAFKA_CLIENT_ID,
+  CORS_ALLOW_CREDENTIALS,
+  CORS_ALLOWED_ORIGINS,
+  CORS_ALLOW_METHODS,
+  CORS_ALLOW_HEADERS,
+  LOG_LEVEL,
+  BATCH_SIZE,
+  CACHE_TTL,
+} = config;
+
+export type Config = typeof config;

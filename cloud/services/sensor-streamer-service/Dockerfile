@@ -1,26 +1,48 @@
-# -------- build stage --------
-FROM node:20-bookworm-slim AS build
+# Use Node.js 20 Alpine
+FROM node:20-alpine
+
+# Set working directory
 WORKDIR /app
 
-# ติดตั้ง yarn classic ผ่าน corepack (มากับ Node 20)
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    dumb-init
 
+# Copy package files
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
-COPY tsconfig.json ./
-COPY src ./src
+
+# Install all dependencies (including dev dependencies for build)
+RUN yarn install
+
+# Copy source code
+COPY . .
+
+# Generate Prisma client
+RUN yarn db:generate
+
+# Build the application
 RUN yarn build
 
-# -------- runtime stage --------
-FROM node:20-bookworm-slim AS runtime
-ENV NODE_ENV=production
-WORKDIR /app
+# Remove dev dependencies but keep Prisma client
+RUN yarn install --production --ignore-scripts
+RUN yarn add @prisma/client
 
-# ไม่จำเป็นต้องลง yarn ใน runtime ก็ได้ แต่ลงไว้ก็ไม่เสียหาย
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
 
-COPY --from=build /app/package.json ./
-COPY --from=build /app/yarn.lock ./
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
+# Change ownership of the app directory
+RUN chown -R nextjs:nodejs /app
+USER nextjs
+
+# Expose port
+EXPOSE 7302
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:7302/health || exit 1
+
+# Start the application
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/server.js"]

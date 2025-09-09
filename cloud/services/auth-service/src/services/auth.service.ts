@@ -1,131 +1,266 @@
-//services/auth-service/src/services/auth.service.ts
-
-import { Repository } from 'typeorm';
-import { User } from '../models/user.model';
-import { RefreshToken } from '../models/refreshToken.model';
-import { hashPassword, comparePassword } from '../utils/hash';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { prisma } from '../lib/prisma';
+import {
+  CreateUserInput,
+  LoginInput,
+  RegisterInput,
+  RefreshTokenInput,
+  ChangePasswordInput,
+  AuthResponse,
+  TokenResponse,
+  UserResponse,
+} from '../schemas/auth.schemas';
 import {
   JWT_SECRET,
+  JWT_ALGORITHM,
   ACCESS_TOKEN_EXPIRE_MINUTES,
   REFRESH_TOKEN_EXPIRE_DAYS,
-  CUSTOMER_SERVICE_URL,
 } from '../configs/config';
-import fetch from 'node-fetch';
 
 export class AuthService {
-  constructor(
-    private userRepo: Repository<User>,
-    private tokenRepo: Repository<RefreshToken>
-  ) {}
+  private readonly saltRounds = 12;
 
-  async signup(
-    email: string,
-    username: string,
-    password: string,
-    customerData: { name: string; email?: string; phone?: string }
-  ) {
-    const existingUser = await this.userRepo.findOneBy({ username });
-    if (existingUser) throw new Error('Username already exists');
-
-    // สร้าง customer ผ่าน customer-service
-    const resp = await fetch(CUSTOMER_SERVICE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(customerData),
-    });
-    if (!resp.ok) throw new Error(`Failed to create customer (${resp.status})`);
-    const customer = await resp.json();
-
-    const password_hash = await hashPassword(password);
-    const user = this.userRepo.create({
-      email,
-      username,
-      password_hash,
-      customer_id: customer.customer_id,
-    });
-    await this.userRepo.save(user);
-
-    return { message: 'User created' };
-  }
-
-  async login(username: string, password: string) {
-    const user = await this.userRepo.findOneBy({ username });
-    if (!user) throw new Error('Invalid username or password');
-
-    const valid = await comparePassword(password, user.password_hash);
-    if (!valid) throw new Error('Invalid username or password');
-
-    const accessToken = jwt.sign(
-      { sub: user.user_id, username: user.username, role: user.role, customer_id: user.customer_id },
-      JWT_SECRET,
-      { expiresIn: `${ACCESS_TOKEN_EXPIRE_MINUTES}m` }
-    );
-
-    const refreshTokenValue = jwt.sign({ sub: user.user_id }, JWT_SECRET, {
-      expiresIn: `${REFRESH_TOKEN_EXPIRE_DAYS}d`,
+  async register(data: RegisterInput): Promise<AuthResponse> {
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: data.email },
     });
 
-    const refreshToken = this.tokenRepo.create({
-      user,
-      refresh_token: refreshTokenValue,
-      expires_at: new Date(Date.now() + REFRESH_TOKEN_EXPIRE_DAYS * 86400000),
+    if (existingUser) {
+      throw new Error('User with this email already exists');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(data.password, this.saltRounds);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        password: hashedPassword,
+        name: data.name,
+        role: 'USER',
+      },
     });
-    await this.tokenRepo.save(refreshToken);
+
+    // Generate tokens
+    const tokens = await this.generateTokens(user.id);
 
     return {
-      accessToken,
-      refreshToken: refreshTokenValue,
-      tokenType: 'bearer',
-      userId: user.user_id,
+      user: this.formatUserResponse(user),
+      ...tokens,
     };
   }
 
-  async refresh(oldRefreshToken: string) {
-    const stored = await this.tokenRepo.findOne({
-      where: { refresh_token: oldRefreshToken, revoked: false },
-      relations: ['user'],
+  async login(data: LoginInput): Promise<AuthResponse> {
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email: data.email },
     });
-    if (!stored) throw new Error('Invalid refresh token');
 
-    if (stored.expires_at && stored.expires_at < new Date()) {
-      throw new Error('Refresh token expired');
+    if (!user || !user.isActive) {
+      throw new Error('Invalid credentials');
     }
 
-    try {
-      jwt.verify(oldRefreshToken, JWT_SECRET);
-    } catch {
+    // Verify password
+    const isValidPassword = await bcrypt.compare(data.password, user.password);
+    if (!isValidPassword) {
+      throw new Error('Invalid credentials');
+    }
+
+    // Generate tokens
+    const tokens = await this.generateTokens(user.id);
+
+    return {
+      user: this.formatUserResponse(user),
+      ...tokens,
+    };
+  }
+
+  async refreshToken(data: RefreshTokenInput): Promise<TokenResponse> {
+    // Find refresh token
+    const refreshToken = await prisma.refreshToken.findUnique({
+      where: { token: data.refreshToken },
+      include: { user: true },
+    });
+
+    if (!refreshToken || refreshToken.isRevoked || refreshToken.expiresAt < new Date()) {
       throw new Error('Invalid refresh token');
     }
 
-    const user = stored.user;
+    if (!refreshToken.user.isActive) {
+      throw new Error('User account is inactive');
+    }
 
-    // ออก access token ใหม่
+    // Revoke old refresh token
+    await prisma.refreshToken.update({
+      where: { id: refreshToken.id },
+      data: { isRevoked: true },
+    });
+
+    // Generate new tokens
+    const tokens = await this.generateTokens(refreshToken.user.id);
+
+    return tokens;
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    await prisma.refreshToken.updateMany({
+      where: { token: refreshToken },
+      data: { isRevoked: true },
+    });
+  }
+
+  async changePassword(userId: string, data: ChangePasswordInput): Promise<void> {
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(data.currentPassword, user.password);
+    if (!isValidPassword) {
+      throw new Error('Current password is incorrect');
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(data.newPassword, this.saltRounds);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    // Revoke all refresh tokens
+    await prisma.refreshToken.updateMany({
+      where: { userId },
+      data: { isRevoked: true },
+    });
+  }
+
+  async createUser(data: CreateUserInput): Promise<UserResponse> {
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existingUser) {
+      throw new Error('User with this email already exists');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(data.password, this.saltRounds);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        password: hashedPassword,
+        name: data.name,
+        role: data.role || 'USER',
+      },
+    });
+
+    return this.formatUserResponse(user);
+  }
+
+  async updateUser(userId: string, data: any): Promise<UserResponse> {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+
+    return this.formatUserResponse(user);
+  }
+
+  async getUserById(userId: string): Promise<UserResponse | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    return user ? this.formatUserResponse(user) : null;
+  }
+
+  async getUserByEmail(email: string): Promise<UserResponse | null> {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    return user ? this.formatUserResponse(user) : null;
+  }
+
+  async verifyToken(token: string): Promise<{ userId: string; email: string }> {
+    try {
+      const payload = jwt.verify(token, JWT_SECRET, { algorithms: [JWT_ALGORITHM] }) as any;
+      return { userId: payload.userId, email: payload.email };
+    } catch (error) {
+      throw new Error('Invalid token');
+    }
+  }
+
+  private async generateTokens(userId: string): Promise<TokenResponse> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Generate access token
     const accessToken = jwt.sign(
-      { sub: user.user_id, username: user.username, role: user.role, customer_id: user.customer_id },
+      { userId: user.id, email: user.email, role: user.role },
       JWT_SECRET,
-      { expiresIn: `${ACCESS_TOKEN_EXPIRE_MINUTES}m` }
+      {
+        algorithm: JWT_ALGORITHM,
+        expiresIn: `${ACCESS_TOKEN_EXPIRE_MINUTES}m`,
+      }
     );
 
-    // หมุน refresh token (revoke เดิม + สร้างใหม่)
-    stored.revoked = true;
-    await this.tokenRepo.save(stored);
+    // Generate refresh token
+    const refreshToken = jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      JWT_SECRET,
+      {
+        algorithm: JWT_ALGORITHM,
+        expiresIn: `${REFRESH_TOKEN_EXPIRE_DAYS}d`,
+      }
+    );
 
-    const newRefreshToken = jwt.sign({ sub: user.user_id }, JWT_SECRET, {
-      expiresIn: `${REFRESH_TOKEN_EXPIRE_DAYS}d`,
-    });
+    // Store refresh token in database
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRE_DAYS);
 
-    const newTokenRow = this.tokenRepo.create({
-      user,
-      refresh_token: newRefreshToken,
-      expires_at: new Date(Date.now() + REFRESH_TOKEN_EXPIRE_DAYS * 86400000),
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt,
+      },
     });
-    await this.tokenRepo.save(newTokenRow);
 
     return {
       accessToken,
-      refreshToken: newRefreshToken,
-      tokenType: 'bearer',
+      refreshToken,
+      expiresIn: ACCESS_TOKEN_EXPIRE_MINUTES * 60, // Convert to seconds
+    };
+  }
+
+  private formatUserResponse(user: any): UserResponse {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 }

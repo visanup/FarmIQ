@@ -1,25 +1,28 @@
-// services/economic-service/src/utils/dataSource.ts
-
+// src/utils/dataSource.ts
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
-import * as dotenv from 'dotenv';
-import { join } from 'path';
-import { EconomicData } from '../models/economicData.model';
+import { Alert } from '../models/alert.model';
+import { DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SCHEMA, ENV } from '../configs/config';
 
-// load .env from project root
-dotenv.config({ path: join(__dirname, '../../.env') });
-
+// Initialize TypeORM data source
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  username: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  schema: 'economics',
-  entities: [EconomicData],
+  host: DB_HOST,
+  port: parseInt(DB_PORT),
+  username: DB_USER,
+  password: DB_PASSWORD,
+  database: DB_NAME,
+  schema: DB_SCHEMA,
+  entities: [Alert],
   synchronize: false,
-  logging: false,
+  logging: ENV === 'dev',
+  poolSize: 20,
+  maxQueryExecutionTime: 30000,
+  connectTimeoutMS: 30000,
+  extra: {
+    max: 20,
+    min: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  }
 });
-
-

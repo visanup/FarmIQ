@@ -1,478 +1,693 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
-  Typography,
   Card,
   CardContent,
+  Typography,
+  Grid,
   Chip,
-  Avatar,
-  useTheme,
-  useMediaQuery,
-  Container,
-  Stack,
   Button,
   IconButton,
-  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Paper,
+  Avatar,
+  Tooltip,
   LinearProgress,
-  Badge,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
+  Switch,
+  FormControlLabel,
+  Tabs,
+  Tab,
+  Alert,
+  AlertTitle,
 } from '@mui/material';
 import {
-  Devices as DevicesIcon,
-  Router as RouterIcon,
-  Sensors as SensorsIcon,
-  WifiOff as OfflineIcon,
-  Wifi as OnlineIcon,
-  Battery3Bar as BatteryIcon,
-  SignalWifi4Bar as SignalIcon,
-  MoreVert as MoreIcon,
+  Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Visibility as ViewIcon,
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
-  Add as AddIcon,
+  Sensors as SensorsIcon,
+  DeviceHub as DeviceHubIcon,
+  Wifi as WifiIcon,
+  WifiOff as WifiOffIcon,
+  BatteryAlert as BatteryAlertIcon,
+  Thermostat as TemperatureIcon,
+  WaterDrop as WaterDropIcon,
+  Air as AirIcon,
+  CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
-import { useDashboard } from '../../contexts/DashboardContext';
-import CustomerAwarePageHeader from '../../components/common/CustomerAwarePageHeader';
+import { DashboardLayout } from '../../components/layout/DashboardLayout';
+import { useDevices, useDeviceHealth, useSensorReadings } from '../../hooks/useApi';
+import { Device, DeviceHealth, SensorReading } from '../../types/api';
 
-interface Device {
-  id: string;
-  name: string;
-  customerId: number; // Add customer ID for filtering
-  type: 'sensor' | 'gateway' | 'controller';
-  status: 'online' | 'offline' | 'warning';
-  farm: string;
-  location: string;
-  battery?: number;
-  signal?: number;
-  lastSeen: string;
-  version: string;
-  data?: {
-    temperature?: number;
-    humidity?: number;
-    soilMoisture?: number;
-  };
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
 }
 
-const mockDevices: Device[] = [
-  {
-    id: 'TEMP-001',
-    name: 'เซ็นเซอร์อุณหภูมิ #1',
-    customerId: 1,
-    type: 'sensor',
-    status: 'online',
-    farm: 'ฟาร์มเกษตรอินทรีย์',
-    location: 'โรงเรือน A',
-    battery: 85,
-    signal: 92,
-    lastSeen: '2024-01-15T14:30:00Z',
-    version: '1.2.3',
-    data: { temperature: 28.5, humidity: 65 }
-  },
-  {
-    id: 'GATEWAY-001',
-    name: 'เกตเวย์หลัก',
-    customerId: 1,
-    type: 'gateway',
-    status: 'online',
-    farm: 'ฟาร์มเกษตรอินทรีย์',
-    location: 'คลังสินค้า',
-    signal: 88,
-    lastSeen: '2024-01-15T14:29:00Z',
-    version: '2.1.0'
-  },
-  {
-    id: 'WATER-002',
-    name: 'เซ็นเซอร์ระดับน้ำ',
-    customerId: 2,
-    type: 'sensor',
-    status: 'warning',
-    farm: 'ฟาร์มไฮโดรโปนิกส์',
-    location: 'ถังเก็บน้ำ',
-    battery: 23,
-    signal: 67,
-    lastSeen: '2024-01-15T12:15:00Z',
-    version: '1.1.8',
-    data: { soilMoisture: 45 }
-  },
-  {
-    id: 'CTRL-001',
-    name: 'ตัวควบคุมรดน้ำ',
-    customerId: 1,
-    type: 'controller',
-    status: 'offline',
-    farm: 'ฟาร์มผักปลอดสาร',
-    location: 'แปลง C',
-    signal: 0,
-    lastSeen: '2024-01-14T18:30:00Z',
-    version: '3.0.1'
-  },
-  {
-    id: 'TEMP-002',
-    name: 'เซ็นเซอร์ความชื้น',
-    customerId: 2,
-    type: 'sensor',
-    status: 'online',
-    farm: 'ฟาร์มไฮโดรโปนิกส์',
-    location: 'บ่อเลี้ยง B',
-    battery: 78,
-    signal: 84,
-    lastSeen: '2024-01-15T14:25:00Z',
-    version: '1.3.2',
-    data: { humidity: 72 }
-  }
-];
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`devices-tabpanel-${index}`}
+      aria-labelledby={`devices-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 const DevicesPage: React.FC = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { state } = useDashboard();
-  
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-  
-  // Customer filtering for devices
-  const [allDevices] = useState<Device[]>(mockDevices);
-  const [devices, setDevices] = useState<Device[]>([]);
-  
-  // Filter devices based on customer context
-  useEffect(() => {
-    if (state.isAdmin) {
-      // Admin can see all devices
-      setDevices(allDevices);
-    } else if (state.currentCustomer) {
-      // Regular customer sees only their devices
-      const customerDevices = allDevices.filter(device => device.customerId === state.currentCustomer?.id);
-      setDevices(customerDevices);
+  const [tabValue, setTabValue] = useState(0);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | 'view'>('create');
+  const [formData, setFormData] = useState({
+    name: '',
+    serialNumber: '',
+    deviceTypeId: '',
+    farmId: '',
+    houseId: '',
+    location: { x: 0, y: 0, z: 0 },
+  });
+
+  const { data: devices = [], isLoading: devicesLoading } = useDevices();
+  const { data: deviceHealth = [], isLoading: healthLoading } = useDeviceHealth();
+  const { data: sensorReadings = [], isLoading: readingsLoading } = useSensorReadings();
+
+  const handleOpenDialog = (mode: 'create' | 'edit' | 'view', device?: Device) => {
+    setDialogMode(mode);
+    if (device) {
+      setSelectedDevice(device);
+      setFormData({
+        name: device.name,
+        serialNumber: device.serialNumber,
+        deviceTypeId: device.deviceTypeId,
+        farmId: device.farmId,
+        houseId: device.houseId || '',
+        location: device.location,
+      });
     } else {
-      // No access
-      setDevices([]);
+      setSelectedDevice(null);
+      setFormData({
+        name: '',
+        serialNumber: '',
+        deviceTypeId: '',
+        farmId: '',
+        houseId: '',
+        location: { x: 0, y: 0, z: 0 },
+      });
     }
-  }, [state.currentCustomer, state.isAdmin, allDevices]);
-
-  const getDeviceIcon = (type: string) => {
-    switch (type) {
-      case 'sensor': return <SensorsIcon />;
-      case 'gateway': return <RouterIcon />;
-      case 'controller': return <SettingsIcon />;
-      default: return <DevicesIcon />;
-    }
+    setOpenDialog(true);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return theme.palette.success.main;
-      case 'warning': return theme.palette.warning.main;
-      case 'offline': return theme.palette.error.main;
-      default: return theme.palette.grey[500];
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'online': return <OnlineIcon sx={{ color: theme.palette.success.main }} />;
-      case 'offline': return <OfflineIcon sx={{ color: theme.palette.error.main }} />;
-      default: return <OnlineIcon sx={{ color: theme.palette.warning.main }} />;
-    }
-  };
-
-  const onlineDevices = devices.filter(d => d.status === 'online').length;
-  const offlineDevices = devices.filter(d => d.status === 'offline').length;
-  const warningDevices = devices.filter(d => d.status === 'warning').length;
-
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, deviceId: string) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedDevice(deviceId);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
     setSelectedDevice(null);
+    setFormData({
+      name: '',
+      serialNumber: '',
+      deviceTypeId: '',
+      farmId: '',
+      houseId: '',
+      location: { x: 0, y: 0, z: 0 },
+    });
   };
+
+  const handleSave = () => {
+    // Mock save functionality
+    console.log('Saving device:', formData);
+    handleCloseDialog();
+  };
+
+  const getDeviceStatus = (deviceId: string) => {
+    const health = deviceHealth.find(h => h.deviceId === deviceId);
+    if (!health) return { status: 'unknown', color: 'default', icon: <ErrorIcon /> };
+    
+    switch (health.status) {
+      case 'ONLINE':
+        return { status: 'ออนไลน์', color: 'success', icon: <CheckCircleIcon /> };
+      case 'OFFLINE':
+        return { status: 'ออฟไลน์', color: 'error', icon: <WifiOffIcon /> };
+      case 'WARNING':
+        return { status: 'เตือน', color: 'warning', icon: <WarningIcon /> };
+      default:
+        return { status: 'ไม่ทราบ', color: 'default', icon: <ErrorIcon /> };
+    }
+  };
+
+  const getDeviceTypeIcon = (deviceTypeId: string) => {
+    switch (deviceTypeId) {
+      case 'sensor-temp':
+        return <TemperatureIcon />;
+      case 'sensor-humidity':
+        return <WaterDropIcon />;
+      case 'sensor-air':
+        return <AirIcon />;
+      default:
+        return <SensorsIcon />;
+    }
+  };
+
+  const getDeviceTypeLabel = (deviceTypeId: string) => {
+    switch (deviceTypeId) {
+      case 'sensor-temp':
+        return 'เซ็นเซอร์อุณหภูมิ';
+      case 'sensor-humidity':
+        return 'เซ็นเซอร์ความชื้น';
+      case 'sensor-air':
+        return 'เซ็นเซอร์คุณภาพอากาศ';
+      default:
+        return 'อุปกรณ์อื่นๆ';
+    }
+  };
+
+  const getDeviceTypeColor = (deviceTypeId: string) => {
+    switch (deviceTypeId) {
+      case 'sensor-temp':
+        return 'error';
+      case 'sensor-humidity':
+        return 'info';
+      case 'sensor-air':
+        return 'success';
+      default:
+        return 'default';
+    }
+  };
+
+  // Calculate statistics
+  const onlineDevices = deviceHealth.filter(h => h.status === 'ONLINE').length;
+  const offlineDevices = deviceHealth.filter(h => h.status === 'OFFLINE').length;
+  const warningDevices = deviceHealth.filter(h => h.status === 'WARNING').length;
+  const totalDevices = devices.length;
+
+  const criticalAlerts = deviceHealth.filter(h => 
+    h.errors.length > 0 || h.warnings.some(w => w.includes('Critical'))
+  ).length;
+
+  const lowBatteryDevices = deviceHealth.filter(h => (h.batteryLevel || 0) < 20).length;
+
+  if (devicesLoading || healthLoading) {
+    return (
+      <DashboardLayout>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <Typography>กำลังโหลดข้อมูลอุปกรณ์...</Typography>
+        </Box>
+      </DashboardLayout>
+    );
+  }
 
   return (
-    <Container maxWidth="xl" sx={{ p: 0 }}>
-      <CustomerAwarePageHeader
-        title="📱 จัดการอุปกรณ์และเซ็นเซอร์"
-        subtitle="ติดตามสถานะและจัดการอุปกรณ์ IoT ในฟาร์ม"
-        actionButton={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            sx={{ borderRadius: 2 }}
-          >
-            เพิ่มอุปกรณ์
-          </Button>
-        }
-        noDataMessage={devices.length === 0 ? "ไม่พบอุปกรณ์สำหรับลูกค้ารายนี้" : undefined}
-      />
-
-      {/* Return early if no access */}
-      {!state.currentCustomer && !state.isAdmin && (
-        <Box sx={{ mt: 3 }}>
-          {/* This will be handled by CustomerAwarePageHeader */}
-        </Box>
-      )}
-
-      {/* Summary Cards */}
-      <Box 
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: 'repeat(2, 1fr)',
-            sm: 'repeat(4, 1fr)'
-          },
-          gap: { xs: 2, sm: 3 },
-          mb: { xs: 3, sm: 4 }
-        }}
-      >
-        <Card>
-          <CardContent sx={{ textAlign: 'center', p: { xs: 2, sm: 3 } }}>
-            <Avatar sx={{ bgcolor: theme.palette.success.main + '15', color: theme.palette.success.main, mx: 'auto', mb: 2 }}>
-              <OnlineIcon />
-            </Avatar>
-            <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-              {onlineDevices}
+    <DashboardLayout>
+      <Box sx={{ p: 3 }}>
+        {/* Header */}
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Box>
+            <Typography variant="h4" component="h1" gutterBottom>
+              จัดการอุปกรณ์
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              ออนไลน์
+            <Typography variant="body1" color="text.secondary">
+              ดูและจัดการอุปกรณ์เซ็นเซอร์ทั้งหมดในระบบ
             </Typography>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent sx={{ textAlign: 'center', p: { xs: 2, sm: 3 } }}>
-            <Avatar sx={{ bgcolor: theme.palette.warning.main + '15', color: theme.palette.warning.main, mx: 'auto', mb: 2 }}>
-              <WarningIcon />
-            </Avatar>
-            <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-              {warningDevices}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              คำเตือน
-            </Typography>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent sx={{ textAlign: 'center', p: { xs: 2, sm: 3 } }}>
-            <Avatar sx={{ bgcolor: theme.palette.error.main + '15', color: theme.palette.error.main, mx: 'auto', mb: 2 }}>
-              <OfflineIcon />
-            </Avatar>
-            <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-              {offlineDevices}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              ออฟไลน์
-            </Typography>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent sx={{ textAlign: 'center', p: { xs: 2, sm: 3 } }}>
-            <Avatar sx={{ bgcolor: theme.palette.primary.main + '15', color: theme.palette.primary.main, mx: 'auto', mb: 2 }}>
-              <DevicesIcon />
-            </Avatar>
-            <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-              {devices.length}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              ทั้งหมด
-            </Typography>
-          </CardContent>
-        </Card>
-      </Box>
-
-      {/* Devices Table */}
-      <Card>
-        <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            รายการอุปกรณ์
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            <Button 
-              size="small" 
+          </Box>
+          <Box display="flex" gap={2}>
+            <Button
+              variant="outlined"
               startIcon={<RefreshIcon />}
-              sx={{ borderRadius: 2 }}
+              onClick={() => window.location.reload()}
             >
               รีเฟรช
             </Button>
-            <Button 
-              variant="contained" 
-              size="small" 
+            <Button
+              variant="contained"
               startIcon={<AddIcon />}
-              sx={{ borderRadius: 2 }}
+              onClick={() => handleOpenDialog('create')}
             >
               เพิ่มอุปกรณ์
             </Button>
-          </Stack>
+          </Box>
         </Box>
-        
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>อุปกรณ์</TableCell>
-                <TableCell>สถานะ</TableCell>
-                <TableCell>ฟาร์ม/ตำแหน่ง</TableCell>
-                <TableCell>แบตเตอรี่</TableCell>
-                <TableCell>สัญญาณ</TableCell>
-                <TableCell>ข้อมูลล่าสุด</TableCell>
-                <TableCell>จัดการ</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {devices.map((device) => (
-                <TableRow key={device.id} hover>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar
-                        sx={{
-                          bgcolor: getStatusColor(device.status) + '15',
-                          color: getStatusColor(device.status),
-                          width: { xs: 32, sm: 40 },
-                          height: { xs: 32, sm: 40 }
-                        }}
-                      >
-                        {getDeviceIcon(device.type)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                          {device.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {device.id} • v{device.version}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {getStatusIcon(device.status)}
-                      <Chip
-                        label={device.status}
-                        size="small"
-                        sx={{
-                          backgroundColor: getStatusColor(device.status) + '15',
-                          color: getStatusColor(device.status),
-                          fontWeight: 500
-                        }}
-                      />
-                    </Box>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        {device.farm}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {device.location}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  
-                  <TableCell>
-                    {device.battery !== undefined ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 60 }}>
-                        <BatteryIcon 
-                          sx={{ 
-                            color: device.battery > 30 ? theme.palette.success.main : theme.palette.warning.main,
-                            fontSize: { xs: '1rem', sm: '1.25rem' }
-                          }} 
-                        />
-                        <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                          {device.battery}%
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">-</Typography>
-                    )}
-                  </TableCell>
-                  
-                  <TableCell>
-                    {device.signal !== undefined ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 60 }}>
-                        <SignalIcon 
-                          sx={{ 
-                            color: device.signal > 70 ? theme.palette.success.main : 
-                                  device.signal > 30 ? theme.palette.warning.main : theme.palette.error.main,
-                            fontSize: { xs: '1rem', sm: '1.25rem' }
-                          }} 
-                        />
-                        <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                          {device.signal}%
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">-</Typography>
-                    )}
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(device.lastSeen).toLocaleString('th-TH')}
-                    </Typography>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => handleMenuClick(e, device.id)}
-                    >
-                      <MoreIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Card>
 
-      {/* Context Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleMenuClose}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>แก้ไข</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleMenuClose}>
-          <ListItemIcon>
-            <SettingsIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>ตั้งค่า</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleMenuClose}>
-          <ListItemIcon>
-            <RefreshIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>รีสตาร์ท</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleMenuClose} sx={{ color: 'error.main' }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
-          </ListItemIcon>
-          <ListItemText>ลบ</ListItemText>
-        </MenuItem>
-      </Menu>
-    </Container>
+        {/* Stats Cards */}
+        <Grid container spacing={3} mb={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'success.main', mr: 2 }}>
+                    <CheckCircleIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{onlineDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      ออนไลน์
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'error.main', mr: 2 }}>
+                    <WifiOffIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{offlineDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      ออฟไลน์
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'warning.main', mr: 2 }}>
+                    <BatteryAlertIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{lowBatteryDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      แบตเตอรี่ต่ำ
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'info.main', mr: 2 }}>
+                    <DeviceHubIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{totalDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      อุปกรณ์ทั้งหมด
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Critical Alerts */}
+        {criticalAlerts > 0 && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            <AlertTitle>การแจ้งเตือนสำคัญ</AlertTitle>
+            มีอุปกรณ์ {criticalAlerts} ตัวที่มีปัญหาที่ต้องแก้ไขด่วน
+          </Alert>
+        )}
+
+        {/* Tabs */}
+        <Card>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
+              <Tab label="รายการอุปกรณ์" />
+              <Tab label="สถานะสุขภาพ" />
+              <Tab label="ข้อมูลเซ็นเซอร์" />
+            </Tabs>
+          </Box>
+
+          {/* Devices List Tab */}
+          <TabPanel value={tabValue} index={0}>
+            <Grid container spacing={3}>
+              {devices.map((device) => {
+                const health = deviceHealth.find(h => h.deviceId === device.id);
+                const status = getDeviceStatus(device.id);
+                const recentReadings = sensorReadings
+                  .filter(r => r.deviceId === device.id)
+                  .slice(0, 3);
+
+                return (
+                  <Grid item xs={12} sm={6} md={4} key={device.id}>
+                    <Card 
+                      sx={{ 
+                        height: '100%',
+                        transition: 'transform 0.2s',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: 4,
+                        }
+                      }}
+                    >
+                      <CardContent>
+                        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+                          <Box display="flex" alignItems="center">
+                            <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
+                              {getDeviceTypeIcon(device.deviceTypeId)}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="h6" component="h3">
+                                {device.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {device.serialNumber}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Chip
+                            icon={status.icon}
+                            label={status.status}
+                            color={status.color as any}
+                            size="small"
+                          />
+                        </Box>
+
+                        <Box mb={2}>
+                          <Chip
+                            label={getDeviceTypeLabel(device.deviceTypeId)}
+                            color={getDeviceTypeColor(device.deviceTypeId) as any}
+                            size="small"
+                            sx={{ mb: 1 }}
+                          />
+                        </Box>
+
+                        {/* Device Health */}
+                        {health && (
+                          <Box mb={2}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                              <Typography variant="body2" color="text.secondary">
+                                แบตเตอรี่
+                              </Typography>
+                              <Typography variant="body2">
+                                {health.batteryLevel}%
+                              </Typography>
+                            </Box>
+                            <LinearProgress
+                              variant="determinate"
+                              value={health.batteryLevel || 0}
+                              color={health.batteryLevel && health.batteryLevel < 20 ? 'error' : 'primary'}
+                              sx={{ mb: 1 }}
+                            />
+                            
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                              <Typography variant="body2" color="text.secondary">
+                                สัญญาณ
+                              </Typography>
+                              <Typography variant="body2">
+                                {health.signalStrength}%
+                              </Typography>
+                            </Box>
+                            <LinearProgress
+                              variant="determinate"
+                              value={health.signalStrength || 0}
+                              color="secondary"
+                            />
+                          </Box>
+                        )}
+
+                        {/* Recent Readings */}
+                        {recentReadings.length > 0 && (
+                          <Box mb={2}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              ข้อมูลล่าสุด:
+                            </Typography>
+                            {recentReadings.map((reading, index) => (
+                              <Box key={index} display="flex" justifyContent="space-between" alignItems="center">
+                                <Typography variant="caption">
+                                  {reading.sensorType === 'temperature' ? 'อุณหภูมิ' :
+                                   reading.sensorType === 'humidity' ? 'ความชื้น' : reading.sensorType}
+                                </Typography>
+                                <Typography variant="caption" fontWeight="medium">
+                                  {reading.value} {reading.unit}
+                                </Typography>
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+
+                        {/* Action Buttons */}
+                        <Box display="flex" gap={1}>
+                          <Button
+                            size="small"
+                            startIcon={<ViewIcon />}
+                            onClick={() => handleOpenDialog('view', device)}
+                            fullWidth
+                          >
+                            ดูรายละเอียด
+                          </Button>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenDialog('edit', device)}
+                            color="primary"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => console.log('Delete device:', device.id)}
+                            color="error"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </TabPanel>
+
+          {/* Health Status Tab */}
+          <TabPanel value={tabValue} index={1}>
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>อุปกรณ์</TableCell>
+                    <TableCell>สถานะ</TableCell>
+                    <TableCell>แบตเตอรี่</TableCell>
+                    <TableCell>สัญญาณ</TableCell>
+                    <TableCell>อุณหภูมิ</TableCell>
+                    <TableCell>การแจ้งเตือน</TableCell>
+                    <TableCell>อัปเดตล่าสุด</TableCell>
+                    <TableCell>การดำเนินการ</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {devices.map((device) => {
+                    const health = deviceHealth.find(h => h.deviceId === device.id);
+                    const status = getDeviceStatus(device.id);
+                    
+                    return (
+                      <TableRow key={device.id}>
+                        <TableCell>
+                          <Box display="flex" alignItems="center">
+                            <Avatar sx={{ bgcolor: 'primary.main', mr: 2, width: 32, height: 32 }}>
+                              {getDeviceTypeIcon(device.deviceTypeId)}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium">
+                                {device.name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {device.serialNumber}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={status.icon}
+                            label={status.status}
+                            color={status.color as any}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center">
+                            <LinearProgress
+                              variant="determinate"
+                              value={health?.batteryLevel || 0}
+                              sx={{ width: 60, mr: 1 }}
+                            />
+                            <Typography variant="body2">
+                              {health?.batteryLevel || 0}%
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center">
+                            <LinearProgress
+                              variant="determinate"
+                              value={health?.signalStrength || 0}
+                              sx={{ width: 60, mr: 1 }}
+                            />
+                            <Typography variant="body2">
+                              {health?.signalStrength || 0}%
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {health?.temperature ? `${health.temperature}°C` : '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" gap={0.5}>
+                            {health?.errors.length > 0 && (
+                              <Tooltip title={`ข้อผิดพลาด: ${health.errors.join(', ')}`}>
+                                <ErrorIcon color="error" fontSize="small" />
+                              </Tooltip>
+                            )}
+                            {health?.warnings.length > 0 && (
+                              <Tooltip title={`คำเตือน: ${health.warnings.join(', ')}`}>
+                                <WarningIcon color="warning" fontSize="small" />
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {health?.lastSeen ? new Date(health.lastSeen).toLocaleString('th-TH') : '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" gap={0.5}>
+                            <IconButton size="small" color="primary">
+                              <SettingsIcon />
+                            </IconButton>
+                            <IconButton size="small" color="secondary">
+                              <RefreshIcon />
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </TabPanel>
+
+          {/* Sensor Data Tab */}
+          <TabPanel value={tabValue} index={2}>
+            <Grid container spacing={3}>
+              {sensorReadings.map((reading) => (
+                <Grid item xs={12} sm={6} md={4} key={reading.id}>
+                  <Card>
+                    <CardContent>
+                      <Box display="flex" alignItems="center" mb={2}>
+                        <Avatar sx={{ bgcolor: 'secondary.main', mr: 2 }}>
+                          {getDeviceTypeIcon(reading.deviceId)}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="h6">
+                            {reading.value} {reading.unit}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {reading.sensorType === 'temperature' ? 'อุณหภูมิ' :
+                             reading.sensorType === 'humidity' ? 'ความชื้น' : reading.sensorType}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        อัปเดต: {new Date(reading.timestamp).toLocaleString('th-TH')}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </TabPanel>
+        </Card>
+
+        {/* Device Dialog */}
+        <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            {dialogMode === 'create' && 'เพิ่มอุปกรณ์ใหม่'}
+            {dialogMode === 'edit' && 'แก้ไขข้อมูลอุปกรณ์'}
+            {dialogMode === 'view' && 'รายละเอียดอุปกรณ์'}
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ pt: 1 }}>
+              <TextField
+                fullWidth
+                label="ชื่ออุปกรณ์"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                margin="normal"
+                disabled={dialogMode === 'view'}
+              />
+              <TextField
+                fullWidth
+                label="หมายเลขซีเรียล"
+                value={formData.serialNumber}
+                onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
+                margin="normal"
+                disabled={dialogMode === 'view'}
+              />
+              <FormControl fullWidth margin="normal" disabled={dialogMode === 'view'}>
+                <InputLabel>ประเภทอุปกรณ์</InputLabel>
+                <Select
+                  value={formData.deviceTypeId}
+                  onChange={(e) => setFormData({ ...formData, deviceTypeId: e.target.value })}
+                  label="ประเภทอุปกรณ์"
+                >
+                  <MenuItem value="sensor-temp">เซ็นเซอร์อุณหภูมิ</MenuItem>
+                  <MenuItem value="sensor-humidity">เซ็นเซอร์ความชื้น</MenuItem>
+                  <MenuItem value="sensor-air">เซ็นเซอร์คุณภาพอากาศ</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl fullWidth margin="normal" disabled={dialogMode === 'view'}>
+                <InputLabel>ฟาร์ม</InputLabel>
+                <Select
+                  value={formData.farmId}
+                  onChange={(e) => setFormData({ ...formData, farmId: e.target.value })}
+                  label="ฟาร์ม"
+                >
+                  <MenuItem value="farm-1">ฟาร์มโคนมสวนผัก</MenuItem>
+                  <MenuItem value="farm-2">ฟาร์มไก่ไข่บ้านนา</MenuItem>
+                  <MenuItem value="farm-3">ฟาร์มหมูออร์แกนิก</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog}>
+              {dialogMode === 'view' ? 'ปิด' : 'ยกเลิก'}
+            </Button>
+            {dialogMode !== 'view' && (
+              <Button onClick={handleSave} variant="contained">
+                {dialogMode === 'create' ? 'เพิ่ม' : 'บันทึก'}
+              </Button>
+            )}
+          </DialogActions>
+        </Dialog>
+      </Box>
+    </DashboardLayout>
   );
 };
 

@@ -1,39 +1,46 @@
-// src/configs/config.ts
+import { z } from 'zod';
 import * as dotenv from 'dotenv';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import type { Algorithm } from 'jsonwebtoken';
 
-function findEnv(): string | undefined {
-  const fromEnv = process.env.ENV_PATH;
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
-  const roots = [process.cwd(), __dirname, join(__dirname, '..')];
-  for (const r of roots) {
-    let d = r;
-    for (let i = 0; i < 4; i++) {
-      const p = join(d, '.env');
-      if (existsSync(p)) return p;
-      d = dirname(d);
-    }
-  }
-}
-const envPath = findEnv();
-envPath ? dotenv.config({ path: envPath }) : dotenv.config();
+// Load environment variables
+dotenv.config();
 
-export const PORT = Number(process.env.CUSTOMER_SERVICE_PORT ?? 7301);
+const configSchema = z.object({
+  // Server
+  PORT: z.string().transform(Number).default('7301'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  HOST: z.string().default('0.0.0.0'),
 
-// Prefer DATABASE_URL; fallback to discrete fields
-export const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  `postgres://${encodeURIComponent(process.env.DB_USER ?? 'postgres')}:${encodeURIComponent(
-    process.env.DB_PASSWORD ?? 'password'
-  )}@${process.env.DB_HOST ?? 'localhost'}:${process.env.DB_PORT ?? '5432'}/${process.env.DB_NAME ?? '03_customers_db'}`;
+  // Database
+  DATABASE_URL: z.string().min(1),
 
-export const JWT_ALG: Algorithm = (process.env.ALGORITHM as Algorithm) || 'HS256';
-export const JWT_SECRET = process.env.JWT_SECRET_KEY || ''; // for HS256
-export const JWKS_URL = process.env.JWKS_URL;               // for RS256 (optional)
+  // Kafka
+  KAFKA_BROKERS: z.string().default('localhost:9092'),
+  KAFKA_SSL: z.string().transform(val => val === 'true').default('false'),
 
-if (JWT_ALG.startsWith('HS') && !JWT_SECRET) {
-  console.error('❌ Missing JWT_SECRET_KEY for HS* algorithm');
-  process.exit(1);
-}
+  // CORS
+  CORS_ALLOW_CREDENTIALS: z.string().transform(val => val === 'true').default('true'),
+  CORS_ALLOWED_ORIGINS: z.string().default('*'),
+  CORS_ALLOW_METHODS: z.string().default('*'),
+  CORS_ALLOW_HEADERS: z.string().default('*'),
+
+  // Logging
+  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+});
+
+const config = configSchema.parse(process.env);
+
+export const {
+  PORT,
+  NODE_ENV,
+  HOST,
+  DATABASE_URL,
+  KAFKA_BROKERS,
+  KAFKA_SSL,
+  CORS_ALLOW_CREDENTIALS,
+  CORS_ALLOWED_ORIGINS,
+  CORS_ALLOW_METHODS,
+  CORS_ALLOW_HEADERS,
+  LOG_LEVEL,
+} = config;
+
+export type Config = typeof config;

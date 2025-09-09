@@ -1,6 +1,6 @@
 // src/pipelines/dimUpserts.ts
 import { z } from 'zod';
-import { AppDataSource } from '../utils/dataSource';
+import { prisma } from '../lib/prisma';
 import { db } from '../configs/config';
 
 /** ---------- helpers ---------- */
@@ -62,7 +62,7 @@ async function upsertRow(
     DO UPDATE SET ${updateList};
   `;
 
-  await AppDataSource.query(sql, values);
+  await prisma.$executeRaw`${sql}`;
 }
 
 /** ---------- table names (แก้ได้ตามจริงของคุณ) ---------- */

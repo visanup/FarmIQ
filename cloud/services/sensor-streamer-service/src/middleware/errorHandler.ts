@@ -1,10 +1,21 @@
 // src/middleware/errorHandler.ts
+import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
 
-import { Request, Response, NextFunction } from 'express';
-
-export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
-  console.error('❌', err);
-  res.status(err?.status || 500).json({
-    error: err?.message || 'Internal Server Error'
+export const errorHandler = (
+  error: FastifyError,
+  request: FastifyRequest,
+  reply: FastifyReply
+) => {
+  const status = error?.statusCode ?? 500;
+  const message = error?.message ?? 'Internal Server Error';
+  
+  if (status >= 500) {
+    console.error('❌ Server Error:', error);
+  }
+  
+  reply.status(status).send({ 
+    error: message,
+    statusCode: status 
   });
-}
+};
+

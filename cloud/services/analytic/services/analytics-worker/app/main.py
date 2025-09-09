@@ -6,6 +6,7 @@ import threading
 from typing import Optional
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import Config
 from app.api.v1.endpoint import router
@@ -38,7 +39,24 @@ async def lifespan(app: FastAPI):
     yield
     shutdown_scheduler()
 
-app = FastAPI(title=Config.APP_NAME, lifespan=lifespan)
+app = FastAPI(
+    title=Config.APP_NAME,
+    description="Analytics worker service for FarmIQ - processes real-time data from Kafka",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router)
 
 if __name__ == "__main__":

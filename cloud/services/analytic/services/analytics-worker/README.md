@@ -1,375 +1,253 @@
-# analytics-worker
+# Analytics Worker Service
 
-Kafka → (normalize/aggregate/anomaly/KPI) → TimescaleDB
-พร้อม **FastAPI** endpoint เล็ก ๆ เพื่อ health/metrics และ **registry** สำหรับต่อโดเมนใหม่แบบปลั๊กอิน
+Analytics worker service for FarmIQ - processes real-time data from Kafka, performs aggregations, and runs scheduled analytics jobs.
 
-> จุดประสงค์: “กินข้อมูลจาก edge หลายโดเมน แล้วสรุปลงตาราง analytics ให้ `analytics-api` อ่านได้ไว”
-> ทำงานแบบ **streaming** (low-latency) + **idempotent** (รันซ้ำได้ ปลอดภัย)
+## 🏗️ Architecture
 
----
+- **Framework**: FastAPI + SQLAlchemy + APScheduler
+- **Database**: PostgreSQL with TimescaleDB (analytics schema)
+- **Message Queue**: Kafka (consumer)
+- **Scheduler**: APScheduler for background jobs
+- **Port**: 7305
 
-## TL;DR — อยากให้รันเลย ทำแบบนี้
+## 📋 Prerequisites
+
+- Python 3.11+
+- PostgreSQL with TimescaleDB extension
+- Kafka
+- Docker & Docker Compose (optional)
+
+## 🚀 Quick Start
+
+### 1. Database Setup
+
+Create the analytics schema and tables in PostgreSQL:
+
+```sql
+-- Connect to your PostgreSQL database
+\c farmiq_cloud
+
+-- Create analytics schema
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+-- Create analytics_agg table (aggregated data)
+CREATE TABLE analytics.analytics_agg (
+    bucket_start TIMESTAMPTZ NOT NULL,
+    window_s INTEGER NOT NULL,
+    tenant_id TEXT NOT NULL,
+    factory_id TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    sensor_id TEXT,
+    metric TEXT NOT NULL,
+    count_n BIGINT DEFAULT 0,
+    sum_val DOUBLE PRECISION DEFAULT 0,
+    avg_val DOUBLE PRECISION DEFAULT 0,
+    min_val DOUBLE PRECISION DEFAULT 0,
+    max_val DOUBLE PRECISION DEFAULT 0,
+    stddev_val DOUBLE PRECISION DEFAULT 0,
+    p95_val DOUBLE PRECISION DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (bucket_start, window_s, tenant_id, factory_id, machine_id, sensor_id, metric)
+);
+
+-- Convert to TimescaleDB hypertable
+SELECT create_hypertable('analytics.analytics_agg', 'bucket_start');
+```
+
+### 2. Environment Setup
+
+Create `.env` file:
 
 ```bash
-# 1) สร้าง .env
-cat > .env <<'ENV'
-# --- DB ---
-DB_HOST=timescaledb
+# Database
+DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=sensor_cloud_db
+DB_NAME=farmiq_cloud
 DB_USER=postgres
-DB_PASSWORD=password
+DB_PASSWORD=postgres1611
 DB_SCHEMA=analytics
 
-# --- Kafka (ตัวอย่างใน Docker compose) ---
+# Kafka
 KAFKA_BROKERS=kafka:9092
-KAFKA_CLIENT_ID=analytics-stream
 CONSUMER_GROUP=analytic-service.v1
+KAFKA_CLIENT_ID=analytics-worker
 
-# โดเมนที่เปิดใช้ + ท็อปปิคที่กิน
-DOMAINS_ENABLED=sensor,device,lab,sweep
-KAFKA_TOPICS=["sensors.device.readings","device.health","sensors.sweep.readings","lab.results"]
+# Topics (comma-separated)
+KAFKA_TOPICS=sensors.device.readings.v1,sensors.device.health.v1,sensors.lab.readings.v1
 
-# หน้าต่างเวลา (วินาที)
-WINDOWS=[60,300,3600]
+# Aggregation windows (comma-separated)
+WINDOWS=60,300,3600
 
-# API/Worker flags
-ENABLE_WORKER=1
-ENABLE_SCHEDULER=0
+# API
 API_HOST=0.0.0.0
-ANALYTICS_WORKER_PORT=7304
-ENV=prod
-ENV
+ANALYTICS_WORKER_PORT=7305
+ENV=dev
 
-# 2) รัน migrations (ต้องมี TimescaleDB)
-psql "postgresql://postgres:password@localhost:5432/sensor_cloud_db" -f sql/01_analytics_core.sql
-psql "postgresql://postgres:password@localhost:5432/sensor_cloud_db" -f sql/02_analytics_events.sql  # ถ้าใช้ device/sweep/lab events
+# Worker settings
+ENABLE_WORKER=1
+ENABLE_SCHEDULER=1
+```
 
-# 3) Docker (แนะนำ)
-docker compose up analytics-worker
-# หรือ dev local:
+### 3. Installation & Development
+
+```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Development mode
 python -m app.main
+
+# Or with uvicorn
+uvicorn app.main:app --host 0.0.0.0 --port 7305 --reload
 ```
 
-ทดสอบเร็ว:
+### 4. Docker Deployment
 
 ```bash
-curl http://localhost:7304/v1/health   # {"status":"ok"}
+# Build and run with Docker Compose
+docker-compose -f ../../../docker-compose.apps.yml up analytics-worker --build
 ```
 
----
+## 🧪 Testing
 
-## สถาปัตยกรรมย่อ
-
-```
-Kafka topics ──► stream_worker ─┬─► normalize (registry mappers)
-                                 ├─► aggregate (WINDOWS: 60,300,3600) ─► analytics.analytics_agg
-                                 ├─► anomalies/KPI (optional) ────────► analytics.analytics_anomaly / analytics.analytics_kpi
-                                 └─► events + rollup (device/sweep/ops/econ) ─► analytics.analytics_event[_rollup]
-
-FastAPI (port 7304):
-  GET /v1/health    → liveness/readiness
-  GET /v1/metrics   → Prometheus metrics
-```
-
----
-
-## โครงไฟล์
-
-```
-analytics-worker/
-  app/
-    main.py                      # start FastAPI + worker (และ scheduler แบบ optional)
-    config.py                    # อ่าน .env และ build DATABASE_URL (มี search_path)
-    database.py                  # SQLAlchemy engine/session
-    v1/
-      endpoint.py                # /v1/health, /v1/metrics
-    adapters/
-      kafka_consumer.py          # build_consumer() (confluent-kafka)
-      repository.py              # upsert_agg / insert_event / upsert_event_rollup / ...
-    domain/
-      models.py                  # Pydantic models (Measurement, Aggregate, Anomaly)
-      rules.py, windows.py
-    pipelines/
-      registry.py                # register(topic→handler), topics(), handler_for()
-      map/
-        sensor.py                # handle_sensor_reading()
-        device_health.py         # handle_device_health()
-        sweep.py                 # handle_sweep_reading()
-        lab.py                   # handle_lab_record()
-        # เพิ่มโดเมนใหม่วางที่นี่
-      __init__.py                # init_registry() : register ทุก handler
-    services/
-      aggregator.py              # aggregate(measurements, WINDOWS)
-      anomaly_detector.py        # (optional)
-      kpi.py                     # (optional)
-      backfill.py                # (optional)
-    instrumentation/
-      metrics.py, tracing.py
-    utils/
-      time.py, ids.py, stats.py, serialization.py
-    workers/
-      stream_worker.py           # วน consume → map → write DB
-      scheduler.py               # APScheduler (optional)
-  Dockerfile
-  requirements.txt
-  sql/
-    01_analytics_core.sql
-    02_analytics_events.sql
-    10_analytics_views.sql
-```
-
----
-
-## Handlers & Topics ที่รองรับ (เริ่มต้น)
-
-| Topic                     | Handler                 | kind         | ลงตาราง                     |
-| ------------------------- | ----------------------- | ------------ | --------------------------- |
-| `sensors.device.readings` | `handle_sensor_reading` | measurement  | `analytics_agg`             |
-| `device.health`           | `handle_device_health`  | event/metric | `analytics_event` / `agg`   |
-| `sensors.sweep.readings`  | `handle_sweep_reading`  | event        | `analytics_event` (+rollup) |
-| `lab.results`             | `handle_lab_record`     | measurement  | `analytics_agg`             |
-
-> เปิด/ปิดโดเมนด้วย `DOMAINS_ENABLED` และกำหนด topics ใน `KAFKA_TOPICS`
-> ถ้าไม่ได้ตั้ง `KAFKA_TOPICS` worker จะ subscribe ตาม `registry.topics()` (ที่กรองด้วย `DOMAINS_ENABLED`)
-> **ไม่ว่าอย่างไร handler ต้องถูก register** (เรียก `init_registry()` ตอนบูตแล้ว)
-
----
-
-## รูปแบบ Payload (ตัวอย่างจาก edge)
-
-**sensor (numeric → agg)**
-
-```json
-{
-  "time":"2025-08-20T03:12:00Z",
-  "tenant_id":"t1", "factory_id":"f1", "machine_id":"mc-01",
-  "sensor_id":"s-001", "metric":"temp", "value":23.7
-}
-```
-
-**device.health (event หรือ metric)**
-
-```json
-{ "time":"2025-08-20T03:12:00Z", "tenant_id":"t1","factory_id":"f1","machine_id":"mc-01",
-  "status":"online","level":"ok" }
-```
-
-หรือ
-
-```json
-{ "time":"2025-08-20T03:12:00Z", "tenant_id":"t1","factory_id":"f1","machine_id":"mc-01",
-  "health_score":0.96 }
-```
-
-**sweep (event summary)**
-
-```json
-{ "time":"2025-08-20T03:20:00Z", "tenant_id":"t1","factory_id":"f1","machine_id":"mc-01",
-  "metric":"temp", "readings":[{"value":23.1},{"value":22.9},{"value":23.6}] }
-```
-
-**lab (measurement → agg)**
-
-```json
-{ "time":"2025-08-20T03:25:00Z", "tenant_id":"t1","factory_id":"f1",
-  "station_id":"lab-01","sample_id":"S-8892",
-  "analyte":"Moisture","value":12.4,"unit":"%" }
-```
-
----
-
-## Environment Variables
-
-| Key                     | Example                                                                              | หมายเหตุ                                               |
-| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| `DB_HOST`               | `timescaledb`                                                                        | host DB                                                |
-| `DB_PORT`               | `5432`                                                                               | —                                                      |
-| `DB_NAME`               | `sensor_cloud_db`                                                                    | —                                                      |
-| `DB_USER`               | `postgres`                                                                           | แนะนำ user เฉพาะงาน (RW)                               |
-| `DB_PASSWORD`           | `password`                                                                           | —                                                      |
-| `DB_SCHEMA`             | `analytics`                                                                          | search\_path ถูกตั้งโดย `Config`                       |
-| `KAFKA_BROKERS`         | `kafka:9092`                                                                         | ถ้ารันนอก Docker ใช้ `localhost:9092` หรือ broker จริง |
-| `KAFKA_CLIENT_ID`       | `analytics-stream`                                                                   | —                                                      |
-| `CONSUMER_GROUP`        | `analytic-service.v1`                                                                | —                                                      |
-| `KAFKA_TOPICS`          | `["sensors.device.readings","device.health","sensors.sweep.readings","lab.results"]` | JSON list หรือปล่อยว่างให้ `registry` ดูแล             |
-| `DOMAINS_ENABLED`       | `sensor,device,lab,sweep`                                                            | กรอง domain ใน `registry`                              |
-| `WINDOWS`               | `[60,300,3600]`                                                                      | หน้าต่างเวลา (วินาที)                                  |
-| `ENABLE_WORKER`         | `1`                                                                                  | เปิด/ปิด thread worker                                 |
-| `ENABLE_SCHEDULER`      | `0`                                                                                  | ต้องติดตั้ง `apscheduler` ก่อนถ้าจะเปิด                |
-| `API_HOST`              | `0.0.0.0`                                                                            | host FastAPI                                           |
-| `ANALYTICS_WORKER_PORT` | `7304`                                                                               | port FastAPI                                           |
-| `ENV`                   | `dev`/`prod`                                                                         | ป้ายสภาพแวดล้อม                                        |
-
----
-
-## การรัน (3 วิธี)
-
-### 1) Docker Compose (แนะนำ)
+### Health Checks
 
 ```bash
-docker compose up analytics-worker
+# Health check
+curl http://localhost:7305/v1/health
+
+# Metrics
+curl http://localhost:7305/v1/metrics
 ```
 
-healthcheck ใน compose เช็ค `/v1/health` ภายในคอนเทนเนอร์โดยตรง
+## 📊 API Endpoints
 
-### 2) Docker build + run
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/health` | Health check with worker status |
+| GET | `/v1/metrics` | Prometheus metrics |
 
-```bash
-docker build -t analytics-worker .
-docker run --rm --name analytics-worker --env-file .env -p 7304:7304 analytics-worker
-```
+## 🔧 Configuration
 
-### 3) Dev local (Windows/macOS/Linux)
+### Environment Variables
 
-> ต้องติดตั้ง `confluent-kafka` ให้สำเร็จ + ตั้ง `KAFKA_BROKERS` ให้ชี้ถึง broker ได้จริง
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `timescaledb` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `sensor_cloud_db` | Database name |
+| `DB_USER` | `postgres` | Database user |
+| `DB_PASSWORD` | `password` | Database password |
+| `DB_SCHEMA` | `analytics` | Database schema |
+| `KAFKA_BROKERS` | `kafka:9092` | Kafka broker addresses |
+| `CONSUMER_GROUP` | `analytic-service.v1` | Kafka consumer group |
+| `KAFKA_TOPICS` | - | Comma-separated list of topics to consume |
+| `WINDOWS` | `60,300,3600` | Aggregation windows (seconds) |
+| `API_HOST` | `0.0.0.0` | API host |
+| `ANALYTICS_WORKER_PORT` | `7305` | API port |
+| `ENABLE_WORKER` | `1` | Enable Kafka consumer worker |
+| `ENABLE_SCHEDULER` | `1` | Enable background scheduler |
 
-```bash
-pip install -r requirements.txt
-python -m app.main
-```
+## 🔄 Data Processing Flow
 
-**Windows tip (ถ้า pip มีปัญหา)**
-ลอง:
+### 1. **Kafka Consumer**
+- Consumes messages from configured topics
+- Handles batch processing (500 messages per batch)
+- Implements graceful shutdown on SIGTERM/SIGINT
 
-```bash
-conda install -c conda-forge librdkafka=2.3.* confluent-kafka=2.4.0
-```
+### 2. **Data Processing**
+- **Measurements**: Aggregated into time windows (60s, 300s, 3600s)
+- **Events**: Rolled up by entity and event type
+- **Snapshots**: Stored as dimension data
 
----
+### 3. **Background Jobs**
+- **KPI Calculation**: Runs every 5 minutes
+- **Anomaly Detection**: Real-time processing
+- **Data Aggregation**: Continuous processing
 
-## Database Schema (จำเป็น)
+### 4. **Database Operations**
+- **Upsert Operations**: Prevents duplicates
+- **Batch Processing**: Optimizes database performance
+- **Transaction Management**: Ensures data consistency
 
-รันตามลำดับ:
+## 📈 Monitoring
 
-* `sql/01_analytics_core.sql` → `analytics_agg`, `analytics_anomaly`, `analytics_kpi`, `analytics_spec_limits`, `worker_checkpoints`
-* `sql/02_analytics_events.sql` → `analytics_event`, `analytics_event_rollup` (จำเป็นถ้าใช้ device/sweep/ops/econ/vet แบบ event)
-* (optional) `sql/10_analytics_views.sql` → views สะดวกใช้
+### Prometheus Metrics
 
-> สคริปต์ตั้ง compression & retention policy ให้ตารางใหญ่ ๆ แบบ idempotent
+- `aw_ingested_msgs` - Messages ingested from Kafka
+- `aw_consumer_lag` - Consumer lag (approximate)
+- `aw_proc_time_seconds` - Batch processing time
+- `aw_worker_status` - Worker thread status
+- `aw_scheduler_jobs` - Scheduled job count
 
----
+## 🚨 Troubleshooting
 
-## วิธีทดสอบ end-to-end
+### Common Issues
 
-1. ส่ง message ตัวอย่างเข้าคิว:
+1. **Kafka Connection Failed**
+   ```bash
+   # Check Kafka status
+   docker exec -it farmiq-kafka kafka-topics.sh --bootstrap-server localhost:9092 --list
+   ```
 
-```bash
-docker exec -it analytics-worker python - <<'PY'
-from confluent_kafka import Producer; import json, datetime
-p=Producer({'bootstrap.servers':'kafka:9092'})
-msg={"time":datetime.datetime.utcnow().replace(microsecond=0).isoformat()+"Z",
-     "tenant_id":"t1","factory_id":"f1","machine_id":"mc-01",
-     "sensor_id":"s-001","metric":"temp","value":23.7}
-p.produce("sensors.device.readings", json.dumps(msg).encode()); p.flush(); print("sent", msg)
-PY
-```
+2. **Database Connection Failed**
+   ```bash
+   # Check database connectivity
+   docker exec -it farmiq-postgres psql -U postgres -d farmiq_cloud -c "SELECT 1;"
+   ```
 
-2. ดูผลใน DB:
+3. **Worker Not Processing Messages**
+   ```bash
+   # Check worker status
+   curl http://localhost:7305/v1/health
+   ```
 
-```bash
-docker exec -it farmiq-cloud-timescaledb-1 psql -U postgres -d sensor_cloud_db -c \
-"SELECT bucket_start,window_s,tenant_id,factory_id,machine_id,metric,avg_val,count_n
- FROM analytics.analytics_agg
- ORDER BY bucket_start DESC LIMIT 5;"
-```
-
-3. (ถ้าใช้ event) ดู `analytics_event`/`analytics_event_rollup`:
-
-```bash
-docker exec -it farmiq-cloud-timescaledb-1 psql -U postgres -d sensor_cloud_db -c \
-"SELECT time,domain,entity_type,entity_id,event_type,value FROM analytics.analytics_event ORDER BY time DESC LIMIT 5;"
-```
-
----
-
-## การเพิ่มโดเมน/ท็อปปิคใหม่ (How-to)
-
-1. **เขียน handler** ใน `app/pipelines/map/<domain>.py`
-
-   * รับ `dict` → คืน `(kind, payload_dict)` โดย `kind` เป็น `"measurement"` หรือ `"event"`
-
-2. **register** ใน `app/pipelines/__init__.py`
-
-```python
-from app.pipelines.registry import register
-from app.pipelines.map.my_domain import handle_my_domain
-
-def init_registry():
-    register("my.topic.name", handle_my_domain, domain="my_domain")
-```
-
-3. ตั้งค่า `.env`
+## 📁 Project Structure
 
 ```
-DOMAINS_ENABLED=sensor,my_domain
-KAFKA_TOPICS=["sensors.device.readings","my.topic.name"]
+app/
+├── adapters/
+│   ├── kafka_consumer.py    # Kafka consumer setup
+│   ├── kafka_producer.py    # Kafka producer setup
+│   └── repository.py        # Database repository
+├── api/
+│   └── v1/
+│       └── endpoint.py      # Health & metrics endpoints
+├── config.py                # Configuration management
+├── database.py              # Database connection
+├── domain/
+│   ├── models.py            # Domain models
+│   ├── rules.py             # Business rules
+│   └── windows.py           # Time window utilities
+├── instrumentation/
+│   ├── metrics.py           # Prometheus metrics
+│   └── tracing.py           # Distributed tracing
+├── pipelines/
+│   ├── map/                 # Data mapping functions
+│   └── registry.py          # Pipeline registry
+├── services/
+│   ├── aggregator.py        # Data aggregation
+│   ├── anomaly_detector.py  # Anomaly detection
+│   ├── kpi.py              # KPI calculations
+│   └── spec_limits.py      # Specification limits
+├── utils/
+│   ├── time.py             # Time utilities
+│   ├── stats.py            # Statistical functions
+│   └── serialization.py    # Data serialization
+├── workers/
+│   ├── scheduler.py        # Background scheduler
+│   └── stream_worker.py    # Kafka stream worker
+└── main.py                 # FastAPI application
 ```
 
-4. รีสตาร์ต worker
+## 🤝 Contributing
 
-> **measurement** → ไป `analytics_agg`
-> **event** → ไป `analytics_event` + rollup (`analytics_event_rollup`)
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
----
+## 📄 License
 
-## Observability
-
-* **/v1/health** — liveness/readiness
-* **/v1/metrics** — Prometheus (รวม process/http metrics)
-* **Logs** — stdout (uvicorn + worker)
-* **Tracing (optional)** — `app/instrumentation/tracing.py` (รองรับ OTEL ถ้าติดตั้ง)
-
----
-
-## Performance & Reliability Notes
-
-* **Batch consume**: `consume(num_messages=500, timeout=1.0)` → ปรับเพิ่ม/ลดตาม throughput
-* **Commit**: commit หลังเขียน DB สำเร็จ (at-least-once); ใช้ upsert/PK เพื่อ idempotency
-* **Windows**: หน้าต่างเวลาใน `WINDOWS` ส่งผลต่อจำนวนแถวใน `analytics_agg` — เลือกเท่าที่ต้องใช้
-* **Retention**: นโยบายเก็บข้อมูลอยู่ในไฟล์ SQL (ปรับให้เหมาะกับปริมาณจริง)
-* **Graceful shutdown**: ใช้ `tini` + signal handler (`_stop` event) ปิด worker นิ่ม ๆ
-
----
-
-## Troubleshooting
-
-* `No module named 'confluent_kafka'`
-  → ติดตั้ง `confluent-kafka` และมี `librdkafka` runtime (ใน Docker เราใส่ `librdkafka1` ให้แล้ว)
-
-* `unsupported operand type(s) for |: '_CallableGenericAlias' and 'NoneType'`
-  → เกิดจาก type hint `A | None` บางไฟล์ใน Python เก่า แก้เป็น `Optional[A]` (โปรเจกต์นี้แก้ให้แล้ว)
-
-* ได้ `[]` ในตาราง aggregate/จาก API
-  → ตรวจว่า handler ของ topic นั้นถูก `register` แล้ว, `DOMAINS_ENABLED` เปิด domain นั้น, และช่วงเวลาที่ query ครอบเวลาข้อมูล
-
-* ต่อ Kafka ไม่ติดใน dev local
-  → ตั้ง `KAFKA_BROKERS=localhost:9092` (ไม่ใช่ `kafka:9092` ถ้าไม่ได้อยู่ใน Docker network เดียวกัน) และตรวจ `advertised.listeners` ของ broker
-
-* compose เตือน `"The "p" variable is not set."`
-  → มี `${p}` ในไฟล์ compose ที่ไม่ได้กำหนดค่า—ลบหรือกำหนดค่าให้มัน
-
----
-
-## ความปลอดภัย
-
-* Worker ต้องใช้ DB user ที่มีสิทธิ์ **INSERT/UPDATE** ใน `analytics` schema
-* แยก user สำหรับ **API (read-only)** ออกจาก **worker (write)**
-* ถ้าต้องการ multi-tenant แนะนำเติม Row Level Security (RLS) ในภายหลัง
-
----
-
-## Roadmap (สั้น ๆ)
-
-* Continuous Aggregates (Timescale) สำหรับบาง metric หนัก ๆ
-* Backfill tooling แบบ CLI (อ่านจาก raw view)
-* Rule engine (WE rules) + auto-anomaly insert
-* Retries/Dead-letter queue (DLQ) สำหรับ payload พัง
-
----
-
-## License
-
-ภายในองค์กร / ตามที่ทีมของคุณกำหนด
-
+This project is part of the FarmIQ platform.

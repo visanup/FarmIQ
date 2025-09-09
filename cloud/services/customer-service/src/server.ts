@@ -1,86 +1,155 @@
-// src/server.ts
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { prisma } from './lib/prisma';
+import { PORT, HOST, NODE_ENV, CORS_ALLOWED_ORIGINS } from './configs/config';
+import { customerRoutes } from './routes/customer.routes';
+import { planRoutes } from './routes/plan.routes';
+import { subscriptionRoutes } from './routes/subscription.routes';
+import { contactRoutes } from './routes/contact.routes';
 
-import 'reflect-metadata';
-import express, { Application, Request, Response, RequestHandler } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import compression from 'compression';
-import swaggerUi from 'swagger-ui-express';
+const fastify = Fastify({
+  logger: {
+    level: NODE_ENV === 'development' ? 'info' : 'warn',
+  },
+});
 
-import { PORT } from './configs/config';
-import { AppDataSource } from './utils/dataSource';
-import apiRouter from './routes';
-import { errorHandler } from './middlewares/errorHandler';
-import { openApiDoc } from './utils/openapi';
-import { PlanCatalogService } from './services/plan_catalog.service';
-
-async function start() {
-  await AppDataSource.initialize();
-  console.log('✅ DataSource initialized');
-
-  const app: Application = express();
-  app.set('trust proxy', true);
-
-  app.use(helmet());
-  app.use(cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }));
-
-  // บางชุด @types จะงอแงเรื่องชนิด -> cast เป็น RequestHandler
-  const compressionMw: RequestHandler = compression() as unknown as RequestHandler;
-  app.use(compressionMw);
-
-  app.use(express.json({ limit: '2mb' }));
-  app.use(morgan('combined'));
-
-  app.get('/health', (_req: Request, res: Response) => res.sendStatus(200));
-  app.get('/ready', (_req: Request, res: Response) =>
-    AppDataSource.isInitialized ? res.sendStatus(200) : res.sendStatus(503)
-  );
-
-  // Swagger (Zod → OpenAPI) — cast handlers เพื่อเลี่ยง type mismatch หลายเวอร์ชัน
-  const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
-  const doc = { ...openApiDoc, servers: [{ url: baseUrl }] };
-  const serveHandlers = swaggerUi.serve as unknown as RequestHandler[];
-  const setupHandler = swaggerUi.setup(doc, { explorer: true }) as unknown as RequestHandler;
-  app.use('/api-docs', ...serveHandlers, setupHandler);
-
-  app.use('/api', apiRouter);
-
-  app.use(errorHandler);
-
-  const server = app.listen(PORT, () => {
-    console.log(`🚀 customer-service listening on ${baseUrl}`);
-    console.log(`📖 OpenAPI docs: ${baseUrl}/api-docs`);
+// Register plugins
+async function registerPlugins() {
+  // CORS
+  await fastify.register(cors, {
+    origin: CORS_ALLOWED_ORIGINS === '*' ? true : CORS_ALLOWED_ORIGINS.split(','),
+    credentials: true,
   });
 
-  if (process.env.SEED_PLANS === 'true') {
-    try {
-      await new PlanCatalogService().seedDefaults();
-      console.log('🌱 plan_catalog seeded');
-    } catch (e) {
-      console.warn('⚠️  plan_catalog seed failed:', e);
-    }
-  }
+  // Helmet for security
+  await fastify.register(helmet);
 
-  const shutdown = (sig: string) => {
-    console.log(`⚡ Shutting down on ${sig}...`);
-    server.close(async () => {
-      try {
-        await AppDataSource.destroy();
-        console.log('✅ DataSource destroyed');
-      } finally {
-        process.exit(0);
-      }
-    });
-  };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  // Swagger documentation
+  await fastify.register(swagger, {
+    openapi: {
+      openapi: '3.0.0',
+      info: {
+        title: 'FarmIQ Customer Service API',
+        description: 'Customer, plan, and subscription management service for FarmIQ',
+        version: '1.0.0',
+      },
+      servers: [
+        {
+          url: `http://${HOST}:${PORT}`,
+          description: 'Development server',
+        },
+      ],
+    },
+  });
+
+  await fastify.register(swaggerUi, {
+    routePrefix: '/api-docs',
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: false,
+    },
+    staticCSP: true,
+    transformStaticCSP: (header) => header,
+    transformSpecification: (swaggerObject, request, reply) => {
+      return swaggerObject;
+    },
+    transformSpecificationClone: true,
+  });
 }
 
-start().catch((err) => {
-  console.error('❌ Server bootstrap failed:', err);
+// Register routes
+async function registerRoutes() {
+  // Health check
+  fastify.get('/health', async (request, reply) => {
+    return {
+      ok: true,
+      service: 'customer-service',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    };
+  });
+
+  // API routes
+  await fastify.register(customerRoutes, { prefix: '/api/customers' });
+  await fastify.register(planRoutes, { prefix: '/api/plans' });
+  await fastify.register(subscriptionRoutes, { prefix: '/api/subscriptions' });
+  await fastify.register(contactRoutes, { prefix: '/api/contacts' });
+
+  // Root redirect to docs
+  fastify.get('/', async (request, reply) => {
+    return reply.redirect('/api-docs');
+  });
+}
+
+// Add Prisma to Fastify instance
+fastify.decorate('prisma', prisma);
+
+// Error handler
+fastify.setErrorHandler((error, request, reply) => {
+  fastify.log.error(error);
+  
+  if (error.validation) {
+    return reply.status(400).send({
+      error: 'Validation error',
+      details: error.validation,
+    });
+  }
+
+  return reply.status(500).send({
+    error: 'Internal server error',
+    message: NODE_ENV === 'development' ? error.message : 'Something went wrong',
+  });
+});
+
+// Graceful shutdown
+const gracefulShutdown = async (signal: string) => {
+  fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+  
+  try {
+    await fastify.close();
+    await prisma.$disconnect();
+    fastify.log.info('Server closed successfully');
+    process.exit(0);
+  } catch (error) {
+    fastify.log.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Start server
+async function start() {
+  try {
+    // Register plugins and routes
+    await registerPlugins();
+    await registerRoutes();
+
+    // Start server
+    await fastify.listen({ port: PORT, host: HOST });
+    
+    console.log(`🚀 Customer service running on http://${HOST}:${PORT}`);
+    console.log(`📖 Swagger UI: http://${HOST}:${PORT}/api-docs`);
+  } catch (error) {
+    fastify.log.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Handle shutdown signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle unhandled rejections
+process.on('unhandledRejection', (reason) => {
+  fastify.log.error('Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  fastify.log.error('Uncaught exception:', error);
   process.exit(1);
 });
 
-
-
+// Start the server
+start();

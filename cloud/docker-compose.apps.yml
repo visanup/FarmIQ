@@ -1,0 +1,150 @@
+name: farmiq-cloud
+
+networks:
+  default:
+    name: cloud_farmiq-network
+    external: true
+
+services:
+  sensor-streamer:
+    build: 
+      context: ./services/sensor-streamer-service
+      dockerfile: Dockerfile
+    container_name: farmiq-sensor-streamer
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres1611@postgres:5432/farmiq_cloud?schema=sensors
+      PORT: 7302
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      ADMIN_API_KEY: admin-key
+      LOG_LEVEL: info
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_SSL: false
+      KAFKA_CLIENT_ID: sensor-streamer-service
+    ports:
+      - "7302:7302"
+    # depends_on: postgres (external service from docker-compose.infra.yml)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7302/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - default
+
+  # --- Analytics Services (apps) ---
+  analytics-alerts:
+    build:
+      context: ./services/analytic/services/analytics-alerts
+      dockerfile: Dockerfile
+    container_name: farmiq-analytics-alerts
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
+      - DB_HOST=farmiq-postgres
+      - DB_PORT=5432
+      - DB_NAME=farmiq_cloud
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres1611
+      - DB_SCHEMA=analytics
+      - KAFKA_BROKERS=kafka:9092
+      - DATA_SERVICE_PORT=7306
+      - JWT_SECRET_KEY=your-jwt-secret-key-here
+      - ENV=dev
+    ports:
+      - "7306:7306"
+    healthcheck:
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:7306/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - default
+
+  analytics-stream:
+    build:
+      context: ./services/analytic/services/analytics-stream
+      dockerfile: Dockerfile
+    container_name: farmiq-analytics-stream
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
+      - DATABASE_URL=postgresql://postgres:postgres1611@farmiq-postgres:5432/farmiq_cloud?schema=analytics
+      - DB_HOST=farmiq-postgres
+      - DB_PORT=5432
+      - DB_NAME=farmiq_cloud
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres1611
+      - DB_SCHEMA=analytics
+      - KAFKA_BROKERS=kafka:9092
+      - REDIS_URL=redis://redis:6379
+      - ANALYTIC_STREAM_PORT=7303
+      - ENV=dev
+    ports:
+      - "7303:7303"
+    healthcheck:
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:7303/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - default
+
+  analytics-api:
+    build:
+      context: ./services/analytic/services/analytics-api
+      dockerfile: Dockerfile
+    container_name: farmiq-analytics-api
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
+      - DB_HOST=farmiq-postgres
+      - DB_PORT=5432
+      - DB_NAME=farmiq_cloud
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres1611
+      - DB_SCHEMA=analytics
+      - KAFKA_BROKERS=kafka:9092
+      - ANALYTICS_API_PORT=7304
+      - ENV=dev
+    ports:
+      - "7304:7304"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:7304/v1/health', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - default
+
+  analytics-worker:
+    build:
+      context: ./services/analytic/services/analytics-worker
+      dockerfile: Dockerfile
+    container_name: farmiq-analytics-worker
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
+      - DB_HOST=farmiq-postgres
+      - DB_PORT=5432
+      - DB_NAME=farmiq_cloud
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres1611
+      - DB_SCHEMA=analytics
+      - KAFKA_BROKERS=kafka:9092
+      - ANALYTICS_WORKER_PORT=7305
+      - ENV=dev
+    ports:
+      - "7305:7305"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:7305/v1/health', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - default

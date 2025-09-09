@@ -1,352 +1,447 @@
-# analytics-stream
+# Analytics Stream Service
 
-Stream processor สำหรับ IoT/telemetry ที่อ่านข้อมูลจาก **Kafka**, ทำ **minute-bucket aggregation** ลง **TimescaleDB**, แคช feature ล่าสุดใน **Redis**, และเผยแพร่สรุปเป็น event ออกไปยัง Kafka อีก topic
+Analytics stream service for FarmIQ - processes real-time sensor data from Kafka and generates analytics features.
 
-* ✔️ **At-least-once & Idempotent**: ใช้ UPSERT ต่อ `bucket`/`tenant`/`device`/`metric`
-* ✔️ **Continuous Aggregates** (5 นาที, 1 ชั่วโมง) ด้วย Timescale
-* ✔️ **DLQ** สำหรับ payload พัง ๆ (เก็บ error+payload เดิม)
-* ✔️ ยืดหยุ่นเรื่องเวลา: รองรับ `time` หรือ `ts` เป็น ISO/epoch(ms|sec)/`YYYY-MM-DD HH:mm:ss`
+## 🏗️ Architecture
 
----
+- **Framework**: Fastify + Prisma + TypeScript
+- **Database**: PostgreSQL with TimescaleDB (analytics schema)
+- **Message Queue**: Kafka
+- **Cache**: Redis
+- **Port**: 7303
 
-## แกนของระบบ
+## 📋 Prerequisites
 
-```
-Kafka (sensors.device.readings) ──▶ analytics-stream
-                                     ├─ upsert → Timescale: analytics.analytics_minute_features (1m bucket)
-                                     ├─ publish finalized 1m features → Kafka: analytics.features
-                                     └─ cache last features → Redis (TTL=FEATURE_TTL_SECONDS)
-```
+- Node.js 18+
+- Docker & Docker Compose
+- PostgreSQL with TimescaleDB extension
+- Kafka
+- Redis
 
-### Kafka topics (ค่าเริ่มต้น)
+## 🚀 Quick Start
 
-* **IN**  : `sensors.device.readings`
-* **OUT** : `analytics.features`
-* **DLQ** : `analytics.invalid-readings`
+### 1. Database Setup
 
----
+#### Option A: Using Ultimate Schema (Recommended)
 
-## สคีมาข้อมูล
-
-### Input (Kafka → `KAFKA_TOPICS_IN`)
-
-```json
-{
-  "tenant_id": "tenant-b",
-  "device_id": "dev-02",
-  "sensor_id": "s-temp",
-  "metric": "temp",
-  "value": 23.9,
-  "time": "2025-08-18T10:51:08.174Z",     // หรือใช้ "ts" แทนได้
-  "tags": { "unit": "C" }
-}
-```
-
-> `time`/`ts` รองรับ: ISO 8601, epoch **ms**, epoch **sec**, หรือ `"YYYY-MM-DD HH:mm:ss[.SSS]"`
-
-### Raw minute bucket (Timescale)
-
-ตาราง: `analytics.analytics_minute_features`
-PRIMARY KEY: `(bucket, tenant_id, device_id, metric)`
-
-คอลัมน์:
-
-* `bucket timestamptz` — ปัดลงเป็นจุดนาที
-* `tenant_id text`, `device_id text`, `metric text`
-* `count bigint`, `sum double`, `min double`, `max double`, `sumsq double`
-
-### Continuous aggregates
-
-* View: `analytics.analytics_5m` (time\_bucket 5 นาที)
-* View: `analytics.analytics_1h` (time\_bucket 1 ชั่วโมง)
-  มี policy refresh อัตโนมัติ (idempotent migration ป้องกันซ้ำแล้ว)
-
-### Output (Kafka → `KAFKA_TOPIC_OUT`)
-
-ตัวอย่าง payload ที่ publish ต่อ 1 นาที/อุปกรณ์/metric
-
-```json
-{
-  "bucket": "2025-08-18T10:51:00.000Z",
-  "tenant_id": "tenant-b",
-  "device_id": "dev-02",
-  "metric": "temp",
-  "count": 133,
-  "min": 23.9,
-  "max": 23.9,
-  "avg": 23.9,
-  "stddev": 0,
-  "window": "1m"
-}
-```
-
-### Redis cache
-
-* key: `feat:<tenant_id>:<device_id>:<metric>:<bucketISO>`
-* value: JSON เหมือน payload ที่ publish
-* TTL: `FEATURE_TTL_SECONDS` (ค่าเริ่มต้น 86400s = 1 วัน)
-
-### DLQ payload (เมื่อ parse ไม่ผ่าน)
-
-```json
-{
-  "error": "zod-parse-error",
-  "issues": [ ... ],
-  "payload": "{...raw-json-string...}"
-}
-```
-
----
-
-## การติดตั้ง
-
-### Prerequisites
-
-* Node.js ≥ 18.18
-* Kafka cluster (หรือ Redpanda)
-* Postgres + TimescaleDB
-* Redis
-
-### ติดตั้งและรัน (โหมดโลคอล)
+Run the complete analytics schema that includes all tables, views, and TimescaleDB configurations:
 
 ```bash
+# Connect to PostgreSQL and run the ultimate schema
+psql -h localhost -U postgres -d farmiq_cloud -f ../../../db/11_analytics_ultimate_schema.sql
+```
+
+This will create:
+- ✅ Complete analytics schema with all tables
+- ✅ TimescaleDB hypertables with compression and retention policies
+- ✅ Continuous aggregates (5m, 1h, 1d)
+- ✅ Dimension tables (device, farm, house, flock)
+- ✅ Analytics tables (agg, events, kpi, anomaly, alerts)
+- ✅ Views and functions
+- ✅ Proper indexes and permissions
+
+#### Option B: Manual Database Setup
+
+If you prefer to set up manually:
+
+```sql
+-- Connect to your PostgreSQL database
+\c farmiq_cloud
+
+-- Create analytics schema
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+-- Enable TimescaleDB extension
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+-- Create minute_features table (main hypertable)
+CREATE TABLE analytics.minute_features (
+    bucket TIMESTAMPTZ NOT NULL,
+    tenant_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    sensor_id TEXT NOT NULL DEFAULT '',
+    metric TEXT NOT NULL,
+    tags JSONB NOT NULL DEFAULT '{}'::jsonb,
+    tags_hash TEXT GENERATED ALWAYS AS (md5(tags::text)) STORED,
+    value_count BIGINT NOT NULL DEFAULT 0,
+    value_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+    value_min DOUBLE PRECISION NOT NULL,
+    value_max DOUBLE PRECISION NOT NULL,
+    value_sumsq DOUBLE PRECISION NOT NULL DEFAULT 0,
+    CONSTRAINT minute_features_pk
+        PRIMARY KEY (bucket, tenant_id, device_id, metric, sensor_id, tags_hash)
+);
+
+-- Convert to TimescaleDB hypertable
+SELECT create_hypertable('analytics.minute_features','bucket',
+                         chunk_time_interval => INTERVAL '7 days',
+                         if_not_exists => TRUE);
+
+-- Create indexes
+CREATE INDEX ix_minute_features_brin_bucket
+  ON analytics.minute_features USING BRIN (bucket);
+CREATE INDEX ix_minute_features_metric_time
+  ON analytics.minute_features (tenant_id, metric, bucket DESC);
+CREATE INDEX ix_minute_features_device_time
+  ON analytics.minute_features (tenant_id, device_id, bucket DESC);
+CREATE INDEX ix_minute_features_tags_gin
+  ON analytics.minute_features USING GIN (tags);
+
+-- Set compression and retention policies
+ALTER TABLE analytics.minute_features
+  SET (timescaledb.compress,
+       timescaledb.compress_segmentby = 'tenant_id, device_id, metric, sensor_id, tags_hash',
+       timescaledb.compress_orderby   = 'bucket');
+
+SELECT add_compression_policy('analytics.minute_features', INTERVAL '3 days');
+SELECT add_retention_policy('analytics.minute_features', INTERVAL '180 days');
+```
+
+### 2. Environment Setup
+
+Create `.env` file:
+
+```bash
+# Database
+DATABASE_URL="postgresql://postgres:postgres1611@postgres:5432/farmiq_cloud?schema=analytics"
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=farmiq_cloud
+DB_USER=postgres
+DB_PASSWORD=postgres1611
+DB_SCHEMA=analytics
+
+# Kafka
+KAFKA_BROKERS=kafka:9092
+KAFKA_CLIENT_ID=analytics-stream
+CONSUMER_GROUP=analytic-service.v1
+
+# Redis
+REDIS_URL=redis://redis:6379
+
+# Service
+ANALYTIC_STREAM_PORT=7303
+ENV=dev
+LOG_LEVEL=info
+
+# Topics (comma-separated)
+KAFKA_TOPICS_IN=sensors.device.readings.v1,sensors.device.health.v1,sensors.lab.readings.v1,sensors.sweep.readings.v1,external.weather.observation.v1,farms.operational.event.v1,feed.batch.created.v1,feed.quality.result.v1,economics.cost.txn.v1,devices.device.snapshot.v1,farms.farm.snapshot.v1,farms.house.snapshot.v1,farms.flock.snapshot.v1
+```
+
+### 3. Prisma Setup
+
+After setting up the database, configure Prisma:
+
+```bash
+# Install dependencies
 yarn install
+
+# Generate Prisma client from the database schema
+yarn prisma generate
+
+# (Optional) Push schema changes to database
+yarn prisma db push
+
+# (Optional) View database in Prisma Studio
+yarn prisma studio
+```
+
+### 4. Installation & Development
+
+```bash
+# Development mode
+yarn dev
+
+# Build
 yarn build
+
+# Production
 yarn start
-# dev (ถ้ามี ts-node-dev): yarn dev
+
+# Type checking
+yarn typecheck
+
+# Linting
+yarn lint
 ```
 
-### ตัวแปรแวดล้อม (สำคัญ)
-
-| ชื่อ                                          | ค่าเริ่มต้น                  | คำอธิบาย                                              |
-| --------------------------------------------- | ---------------------------- | ----------------------------------------------------- |
-| `SERVICE_NAME`                                | `analytics-stream`           | ชื่อ service                                          |
-| `ANALYTIC_STREAM_PORT`                        | `7303`                       | พอร์ต HTTP (`/health`)                                |
-| `KAFKA_CLIENT_ID`                             | `analytics-stream`           | clientId Kafka                                        |
-| `CONSUMER_GROUP`                              | `analytic-service.v1`        | consumer group                                        |
-| `KAFKA_BROKERS`                               | `kafka:9092`                 | comma-separated brokers                               |
-| `KAFKA_TOPICS_IN`                             | `sensors.device.readings`    | comma-separated input topics                          |
-| `KAFKA_TOPIC_OUT`                             | `analytics.features`         | output topic                                          |
-| `KAFKA_TOPIC_DLQ`                             | `analytics.invalid-readings` | DLQ สำหรับ invalid payload                            |
-| `DATABASE_URL`                                | —                            | ถ้าไม่กำหนด จะประกอบจาก `DB_*`                        |
-| `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD` | —                            | รายละเอียด DB (ใช้เมื่อไม่มี `DATABASE_URL`)          |
-| `DB_SCHEMA`                                   | `analytics`                  | สคีมาที่ใช้ (migration จะ create schema ถ้าไม่มี)     |
-| `REDIS_URL`                                   | `redis://redis:6379`         | ที่อยู่ Redis                                         |
-| `FEATURE_TTL_SECONDS`                         | `86400`                      | TTL cache                                             |
-| `POLL_INTERVAL_MS`                            | `1000`                       | ช่วงเวลาทำงานของ job publish features                 |
-| `BATCH_SIZE`                                  | `5000`                       | batch size (reserved)                                 |
-| `MAX_LAG_SECONDS`                             | `60`                         | max lag (reserved/monitoring)                         |
-| `TENANT_FILTER`                               | (ว่าง)                       | ถ้าตั้งเป็น `a,b,c` จะ consume เฉพาะ tenants ที่กำหนด |
-
-> หมายเหตุ: โค้ดจะเลือกใช้ `DATABASE_URL` ก่อน ถ้าไม่มีจึง fallback เป็น `DB_*`
-
----
-
-## Docker Compose
-
-### แนะนำ (ครบชุด dev): Redis + Redpanda + Kafka UI + Timescale + analytics-stream
-
-```yaml
-name: farmiq-cloud-analytics
-networks: { farmiq-cloud-analytics: { driver: bridge } }
-volumes: { redis-data: {}, pg-data: {} }
-
-services:
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
-    volumes: [ "redis-data:/data" ]
-    networks: [farmiq-cloud-analytics]
-
-  redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v23.3.10
-    command: [ "redpanda", "start", "--overprovisioned", "--smp", "1",
-               "--memory", "512M", "--reserve-memory", "0M",
-               "--kafka-addr", "PLAINTEXT://0.0.0.0:9092",
-               "--advertise-kafka-addr", "PLAINTEXT://redpanda:9092" ]
-    ports: ["9092:9092"]
-    networks: [farmiq-cloud-analytics]
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: redpanda:9092
-    ports: ["8080:8080"]
-    depends_on: [ redpanda ]
-    networks: [farmiq-cloud-analytics]
-
-  timescaledb:
-    image: timescale/timescaledb:pg15-latest
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: sensor_cloud_db
-    ports: ["5432:5432"]
-    volumes: [ "pg-data:/var/lib/postgresql/data" ]
-    networks: [farmiq-cloud-analytics]
-
-  analytics-stream:
-    build:
-      context: ./services/analytics-stream
-      dockerfile: Dockerfile
-    env_file: [ ./services/analytics-stream/.env ]
-    environment:
-      # override ให้ตรงกับ compose นี้
-      KAFKA_BROKERS: redpanda:9092
-      DATABASE_URL: postgres://postgres:password@timescaledb:5432/sensor_cloud_db
-      DB_SCHEMA: analytics
-      REDIS_URL: redis://redis:6379
-      ANALYTIC_STREAM_PORT: 7303
-    depends_on: [ redpanda, timescaledb, redis ]
-    networks: [farmiq-cloud-analytics]
-    ports: [ "7303:7303" ]
-```
-
-> ต้องการ GUI ของ Redis? เพิ่ม `redisinsight` แล้วเปิด `http://localhost:8001`:
->
-> ```yaml
-> redisinsight:
->   image: redis/redisinsight:latest
->   ports: ["8001:5540"]   # v2 ฟังในคอนเทนเนอร์ที่ 5540
->   networks: [farmiq-cloud-analytics]
->   depends_on: [redis]
-> ```
-
----
-
-## การทำงานภายใน (สรุปโฟลว์)
-
-1. **Consumer** subscribe `KAFKA_TOPICS_IN` และประมวลผลเป็น **batch**
-
-   * Validate ด้วย Zod → normalize `time`/`ts` เป็น `Date`
-   * Filter ด้วย `TENANT_FILTER` ถ้าตั้งไว้
-   * UPSERT ไปที่ `analytics.analytics_minute_features` (key = minute bucket + tenant/device/metric)
-
-2. **Publisher Job** (ทุก ๆ `POLL_INTERVAL_MS`)
-
-   * คิวรี minute-buckets ที่ **ปิดนาทีแล้ว** (ไม่ใช่นาทีปัจจุบัน)
-   * คำนวณ `avg/stddev` แล้ว
-
-     * publish ออก `KAFKA_TOPIC_OUT`
-     * cache ลง Redis (TTL = `FEATURE_TTL_SECONDS`)
-
-3. **DLQ**
-
-   * ถ้า Zod parse ไม่ผ่าน (เช่นไม่มี `time`/`ts`) → ส่งลง `KAFKA_TOPIC_DLQ` แล้ว commit offset เพื่อไม่ลูป
-
-4. **Migrations**
-
-   * สร้าง schema/table/hypertable/view/policy ด้วย SQL idempotent (`DO $$ ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;`)
-   * ใช้ FQN `analytics.analytics_minute_features` เพื่อไม่พึ่ง `search_path`
-
----
-
-## ตรวจสุขภาพ / ตรวจผล
-
-* **Health**: `GET http://localhost:7303/health` → 200
-* **ดู raw minute table**
-
-  ```sql
-  SELECT * FROM analytics.analytics_minute_features
-  ORDER BY bucket DESC LIMIT 20;
-  ```
-* **ดู 5 นาที / 1 ชั่วโมง**
-
-  ```sql
-  SELECT * FROM analytics.analytics_5m WHERE device_id='dev-02' ORDER BY bucket DESC LIMIT 5;
-  SELECT * FROM analytics.analytics_1h WHERE device_id='dev-02' ORDER BY bucket DESC LIMIT 5;
-  ```
-* **ตรวจค่าทางสถิติจากแถวเดียว**
-
-  ```sql
-  SELECT
-    sum / NULLIF(count,0)                              AS avg,
-    GREATEST(0, sumsq/NULLIF(count,0) - (sum/NULLIF(count,0))^2) AS variance,
-    sqrt(GREATEST(0, sumsq/NULLIF(count,0) - (sum/NULLIF(count,0))^2)) AS stddev
-  FROM analytics.analytics_minute_features
-  WHERE tenant_id='tenant-b' AND device_id='dev-02' AND metric='temp'
-  ORDER BY bucket DESC LIMIT 1;
-  ```
-
----
-
-## ทดสอบอย่างรวดเร็ว
-
-ผลิตข้อความเข้า topic:
+### 5. Docker Deployment
 
 ```bash
-# ตัวอย่าง JSON (ISO)
-kcat -b localhost:9092 -t sensors.device.readings -P <<'EOF'
-{"tenant_id":"tenant-b","device_id":"dev-02","metric":"temp","value":23.9,"time":"2025-08-18T10:51:08.174Z","sensor_id":"s-temp","tags":{"unit":"C"}}
-EOF
+# Build and run with Docker Compose
+docker-compose -f ../../../docker-compose.apps.yml up analytics-stream --build
+
+# Or run standalone
+docker build -t analytics-stream .
+docker run -p 7303:7303 --env-file .env analytics-stream
 ```
 
-ดู output:
+## 🧪 Testing
+
+### Health Checks
 
 ```bash
-kcat -b localhost:9092 -t analytics.features -C -o end -q
+# Health check
+curl http://localhost:7303/health
+
+# Readiness check
+curl http://localhost:7303/ready
+
+# Metrics
+curl http://localhost:7303/metrics
 ```
 
-ดู DLQ:
+### Database Testing
+
+#### Using Prisma Client
+
+```typescript
+// Test Prisma connection
+import { prisma } from './src/lib/prisma';
+
+// Test database connection
+const result = await prisma.$queryRaw`SELECT 1`;
+console.log('Database connected:', result);
+
+// Test minute_features table
+const testData = await prisma.minuteFeatures.create({
+  data: {
+    bucket: new Date(),
+    tenantId: 'tenant1',
+    deviceId: 'device1',
+    sensorId: 'sensor1',
+    metric: 'temperature',
+    valueCount: 1,
+    valueSum: 25.5,
+    valueMin: 25.5,
+    valueMax: 25.5,
+    valueSumsq: 650.25,
+    tags: { unit: 'celsius' }
+  }
+});
+
+// Query data
+const readings = await prisma.minuteFeatures.findMany({
+  where: { tenantId: 'tenant1' },
+  orderBy: { bucket: 'desc' },
+  take: 10
+});
+```
+
+#### Using Direct SQL
+
+```sql
+-- Test data insertion
+INSERT INTO analytics.minute_features 
+(bucket, tenant_id, device_id, sensor_id, metric, value_count, value_sum, value_min, value_max, value_sumsq, tags)
+VALUES 
+(NOW(), 'tenant1', 'device1', 'sensor1', 'temperature', 1, 25.5, 25.5, 25.5, 650.25, '{"unit": "celsius"}');
+
+-- Query data
+SELECT * FROM analytics.minute_features 
+WHERE tenant_id = 'tenant1' 
+ORDER BY bucket DESC 
+LIMIT 10;
+
+-- Test continuous aggregates
+SELECT * FROM analytics.minute_features_5m 
+WHERE tenant_id = 'tenant1' 
+ORDER BY bucket DESC 
+LIMIT 5;
+```
+
+### Kafka Testing
 
 ```bash
-kcat -b localhost:9092 -t analytics.invalid-readings -C -o beginning -q
+# Send test message to Kafka
+docker exec -it farmiq-kafka kafka-console-producer \
+  --bootstrap-server localhost:9092 \
+  --topic sensors.device.readings.v1 \
+  --property "parse.key=true" \
+  --property "key.separator=:"
+
+# Example message:
+# device1:{"device_id":"device1","sensor_type":"temperature","value":25.5,"timestamp":"2024-01-01T00:00:00Z","tenant_id":"tenant1"}
 ```
 
----
+## 📊 Monitoring
 
-## แนวทางปรับจูน/ปฏิบัติการ
+### Prometheus Metrics
 
-* **KafkaJS partitioner warning**:
-  ถ้าต้องการคงพฤติกรรม partitioning แบบ v1 ให้ใช้:
+- `http_requests_total` - Total HTTP requests
+- `http_request_duration_seconds` - Request duration
+- `kafka_consumer_lag` - Kafka consumer lag
+- `redis_operations_total` - Redis operations
 
-  ```ts
-  import { Partitioners } from 'kafkajs';
-  producer = kafka.producer({ createPartitioner: Partitioners.LegacyPartitioner });
-  ```
+### Logs
 
-  หรือ set env `KAFKAJS_NO_PARTITIONER_WARNING=1`.
+```bash
+# View logs
+docker logs farmiq-analytics-stream -f
 
-* **TENANT\_FILTER**: ใส่ `TENANT_FILTER=a,b,c` เพื่อลด traffic เฉพาะ tenants ที่สนใจ
+# Filter specific log levels
+docker logs farmiq-analytics-stream | grep ERROR
+```
 
-* **Idempotency**: UPSERT ทำให้ reprocess ซ้ำ ๆ ไม่ทำให้ค่าบิด
+## 🔧 Configuration
 
-* **Continuous aggregates**: policy ถูกทำให้ idempotent แล้ว; ถ้าต้องลบ/สร้างใหม่ ใช้ migration หรือสั่ง:
+### Environment Variables
 
-  ```sql
-  SELECT remove_continuous_aggregate_policy('analytics.analytics_5m');
-  SELECT add_continuous_aggregate_policy('analytics.analytics_5m',
-    start_offset => '2 hours', end_offset => '5 minutes', schedule_interval => '1 minute');
-  ```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | - | PostgreSQL connection string |
+| `KAFKA_BROKERS` | `kafka:9092` | Kafka broker addresses |
+| `REDIS_URL` | `redis://redis:6379` | Redis connection string |
+| `ANALYTIC_STREAM_PORT` | `7303` | HTTP server port |
+| `LOG_LEVEL` | `info` | Logging level |
 
----
+### Kafka Topics
 
-## โครงสร้างโค้ด (สั้น ๆ)
+The service consumes from these topics:
+- `sensors.device.readings.v1` - Device sensor readings
+- `sensors.device.health.v1` - Device health status
+- `sensors.lab.readings.v1` - Laboratory readings
+- `sensors.sweep.readings.v1` - Sweep readings
+- `external.weather.observation.v1` - Weather data
+- `farms.operational.event.v1` - Farm operations
+- `feed.batch.created.v1` - Feed batch events
+- `feed.quality.result.v1` - Feed quality results
+- `economics.cost.txn.v1` - Economic transactions
+- `devices.device.snapshot.v1` - Device snapshots
+- `farms.farm.snapshot.v1` - Farm snapshots
+- `farms.house.snapshot.v1` - House snapshots
+- `farms.flock.snapshot.v1` - Flock snapshots
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failed**
+   ```bash
+   # Check database connectivity
+   docker exec -it farmiq-postgres psql -U postgres -d farmiq_cloud -c "SELECT 1;"
+   ```
+
+2. **Kafka Connection Failed**
+   ```bash
+   # Check Kafka status
+   docker exec -it farmiq-kafka kafka-topics.sh --bootstrap-server localhost:9092 --list
+   ```
+
+3. **Redis Connection Failed**
+   ```bash
+   # Check Redis connectivity
+   docker exec -it farmiq-redis redis-cli ping
+   ```
+
+4. **Prisma Client Not Generated**
+   ```bash
+   # Generate Prisma client
+   yarn prisma generate
+   
+   # If schema is out of sync, push changes
+   yarn prisma db push
+   ```
+
+5. **Database Schema Mismatch**
+   ```bash
+   # Check if database schema matches Prisma schema
+   yarn prisma db pull
+   
+   # Compare with current schema
+   diff prisma/schema.prisma prisma/schema.prisma.backup
+   ```
+
+6. **TimescaleDB Extension Missing**
+   ```sql
+   -- Check if TimescaleDB is installed
+   SELECT * FROM pg_extension WHERE extname = 'timescaledb';
+   
+   -- Install if missing
+   CREATE EXTENSION IF NOT EXISTS timescaledb;
+   ```
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+LOG_LEVEL=debug yarn dev
+
+# Check Prisma queries
+DEBUG=prisma:* yarn dev
+```
+
+## 📁 Project Structure
 
 ```
 src/
-  configs/        # อ่าน/validate env (zod)
-  consumers/      # Kafka consumers (batch)
-  models/         # entities/views + migrations
-  services/
-    featurePublisher.ts  # job อ่าน minute bucket แล้ว publish + cache
-  stores/
-    analyticsFeature.repo.ts  # UPSERT SQL (FQN กับ schema)
-    redis.ts
-  types/
-    events.ts     # Zod schema + time normalization (time|ts)
-  utils/
-    dataSource.ts # TypeORM DataSource
-    kafka.ts      # Kafka client/producer/consumer
-    logger.ts
-    scheduler.ts  # every(ms, fn)
-  server.ts       # bootstrap: DB → migrations → consumers → scheduler → /health
+├── configs/
+│   └── config.ts          # Configuration management
+├── consumers/
+│   ├── index.ts           # Consumer orchestration
+│   ├── router.ts          # Message routing
+│   └── sensorReadings.consumer.ts
+├── lib/
+│   └── prisma.ts          # Prisma client
+├── models/
+│   ├── analyticsMinuteFeature.entity.ts  # TypeORM entity (legacy)
+│   └── analyticsAggregates.views.ts      # View definitions
+├── pipelines/
+│   ├── dimUpserts.ts      # Dimension upserts
+│   └── map/               # Data mapping functions
+├── services/
+│   └── featurePublisher.ts # Feature publishing
+├── stores/
+│   ├── analyticsFeature.repo.ts  # Repository layer
+│   └── redis.ts           # Redis client
+├── types/
+│   ├── events.ts          # Event type definitions
+│   └── measurement.ts     # Measurement types
+├── utils/
+│   ├── dataSource.ts      # TypeORM data source (legacy)
+│   ├── kafka.ts           # Kafka utilities
+│   ├── logger.ts          # Logging utilities
+│   └── scheduler.ts       # Background job scheduler
+└── server.ts              # Fastify server
 ```
 
----
+## 🔄 Migration from TypeORM
 
-## License
+This service has been migrated from TypeORM to Prisma:
 
-(ยังไม่ระบุ — เติมภายหลังตามนโยบายของโปรเจกต์)
+- ✅ Fastify server implementation
+- ✅ Prisma client setup with complete schema mapping
+- ✅ Database schema aligned with `11_analytics_ultimate_schema.sql`
+- ✅ Type-safe database operations
+- ✅ TimescaleDB integration
+- ⏳ Repository layer migration (in progress)
+- ⏳ Remove legacy TypeORM dependencies
 
+### Prisma Schema Features
+
+- **Multi-schema support**: Uses `analytics` schema
+- **TimescaleDB compatibility**: All hypertables properly mapped
+- **Type safety**: Full TypeScript support for all tables
+- **Generated columns**: Supports `tags_hash` generated column
+- **JSONB support**: Proper mapping for `tags` and `metadata` fields
+- **Composite keys**: Correct primary key definitions
+
+## 📝 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/ready` | Readiness check |
+| GET | `/metrics` | Prometheus metrics |
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is part of the FarmIQ platform.

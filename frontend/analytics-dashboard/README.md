@@ -1,221 +1,221 @@
-# FarmIQ Analytics Dashboard
+# 🌱 FarmIQ Analytics Dashboard
 
-## 🌱 Overview
-
-A modern, clean analytics dashboard for farm management with authentication system. Built with React, TypeScript, and Material-UI with a simple, elegant design.
+A modern, professional analytics dashboard for FarmIQ agricultural management system with **comprehensive mock data** and **agriculture-themed green design**.
 
 ## ✨ Features
 
-- **Clean Authentication System**
-  - Sign In page with elegant design
-  - Sign Up page with form validation
-  - Secure JWT-based authentication
-  - Demo mode for testing
+- **🎯 Real-time Monitoring**: Live sensor data and device status
+- **🏡 Farm Management**: Comprehensive farm and animal tracking (6 farms)
+- **📊 Analytics & Reports**: Performance metrics and health analysis
+- **📱 Device Management**: IoT sensor monitoring and control (12 devices)
+- **👥 Customer Management**: Multi-tenant customer support (2 customers)
+- **📱 Responsive Design**: Works on desktop, tablet, and mobile
+- **🎨 Agriculture Theme**: Beautiful green color scheme for farming
 
-- **Modern UI Design**
-  - Simple, clean color scheme
-  - Responsive design for all devices
-  - Dark/Light theme support
-  - Smooth animations and transitions
+## 🚀 Quick Start
 
-- **Navigation**
-  - Clean sidebar with farm-themed icons
-  - Responsive navbar
-  - Context-aware breadcrumbs
+### 1. Access Dashboard
+Open your browser and go to: **http://localhost:3001**
 
-- **Professional Dashboard Pages**
-  - Dashboard overview with KPIs
-  - Farm Management for multi-farm operations
-  - Real-time Monitoring with alerts
-  - Comprehensive Reports and analytics
-  - Economics and financial tracking
-  - Weather data and environmental factors
-  - Analytics and insights
-  - Device management
-  - Alerts and notifications
-  - Settings and configuration
+### 2. Login with Demo Account
+- **Email**: `demo@farmiq.com`
+- **Password**: `demo123`
 
-## 🚀 Getting Started
+### 3. Explore Features
+- **Dashboard**: Overview with real-time metrics and beautiful charts
+- **Farms**: Manage 6 different farms (dairy, poultry, swine, cattle, vegetable, aquaculture)
+- **Monitoring**: Real-time device status and sensor data
+- **Analytics**: Performance charts and health analysis
+- **Real-time**: Live sensor data with interactive charts and filtering
+- **AI Analytics**: Predictive analytics with FCR, ADG, weight distribution, and health predictions
+- **Devices**: IoT sensor management
+- **Customers**: Customer and farm relationship management
 
-### Prerequisites
+## 🎨 Agriculture Theme
 
-- Node.js (v14 or higher)
-- Yarn package manager
+The dashboard features a beautiful **green color scheme** perfect for agriculture:
 
-### Installation
+- **Primary Green**: `#2e7d32` (Forest Green)
+- **Secondary Green**: `#8bc34a` (Light Green)
+- **Success Green**: `#4caf50` (Success Green)
+- **Background**: `#f1f8e9` (Very Light Green)
+- **Text**: Dark green for excellent readability
 
-1. Navigate to the analytics dashboard directory:
-```bash
-cd frontend/analytics-dashboard
-```
+## 📊 Mock Data Included
 
-2. Install dependencies:
-```bash
-yarn install
-```
+### Farms (6 farms)
+- **ฟาร์มโคนมสวนผัก** - เชียงใหม่ (25.5 ไร่)
+- **ฟาร์มไก่ไข่บ้านนา** - นครราชสีมา (15.2 ไร่)
+- **ฟาร์มหมูออร์แกนิก** - กาญจนบุรี (30.8 ไร่)
+- **ฟาร์มโคเนื้อภูเขา** - แม่ฮ่องสอน (45.3 ไร่)
+- **ฟาร์มผักไฮโดรโปนิกส์** - ปทุมธานี (8.7 ไร่)
+- **ฟาร์มกุ้งกุลาดำ** - สงขลา (12.4 ไร่)
 
-3. Start the development server:
-```bash
-yarn dev
-```
+### Animals (3 animals)
+- **โค 2 ตัว**: โฮลสไตน์, น้ำหนัก 450-520 กก.
+- **ไก่ 1 ตัว**: ไก่ไข่, น้ำหนัก 1.8 กก.
 
-4. Open your browser and go to `http://localhost:4120`
+### Devices (12 devices)
+- **เซ็นเซอร์อุณหภูมิ**: 6 ตัว
+- **เซ็นเซอร์ความชื้น**: 4 ตัว
+- **เซ็นเซอร์คุณภาพอากาศ**: 2 ตัว
 
-## 🌾 Professional Pages
+### Customers (2 customers)
+- **บริษัท ฟาร์มโคนม จำกัด**
+- **ฟาร์มไก่ไข่บ้านนา**
 
-### 1. **Farm Management** (`/farms`)
-- Multi-farm overview and management
-- Farm performance metrics and KPIs
-- Crop tracking and operational data
-- Farm health monitoring
-- Add/Edit farm functionality
+## 🛠 Tech Stack
 
-### 2. **Real-time Monitoring** (`/monitoring`)
-- Live sensor data visualization
-- Critical alerts and warnings
-- Device status monitoring
-- System health dashboard
-- Configurable alert settings
-
-### 3. **Reports & Analytics** (`/reports`)
-- Comprehensive report generation
-- Performance summaries
-- Custom report builder
-- Scheduled reporting
-- Data visualization options
-
-### 4. **Economics & Finance** (`/economics`)
-- Cost analysis by category
-- Budget vs actual tracking
-- Profitability metrics
-- Transaction history
-- Financial planning tools
-
-### 5. **Weather & Environment** (`/weather`)
-- Current weather conditions
-- 7-day weather forecast
-- Agricultural impact analysis
-- Weather alerts and warnings
-- Historical climate data
-
-### 6. **Analytics** (`/analytics`)
-- Advanced data analytics
-- Trend analysis
-- Predictive insights
-- Performance comparisons
-
-### 7. **Device Management** (`/devices`)
-- IoT device overview
-- Device health monitoring
-- Configuration management
-- Maintenance schedules
-
-## 🔐 Demo Authentication
-
-For demonstration purposes, the app includes a mock authentication system:
-
-**Demo Credentials:**
-- Username: `demo`
-- Password: `demo`
-
-You can also test the sign-up functionality which will simulate account creation.
-
-## 🎨 Design Features
-
-### Color Scheme
-- **Primary**: Clean indigo (#6366f1)
-- **Secondary**: Clean emerald (#10b981)
-- **Accent**: Clean cyan (#06b6d4)
-- **Background**: Light gray (#f8fafc) / Dark slate (#0f172a)
-
-### Typography
-- Clean, modern Roboto font family
-- Consistent typography scale
-- Proper contrast ratios for accessibility
-
-### Components
-- Rounded corners for modern feel
-- Subtle shadows and borders
-- Smooth hover transitions
-- Consistent spacing and padding
-
-## 📱 Responsive Design
-
-The dashboard is fully responsive and works on:
-- Desktop computers
-- Tablets
-- Mobile phones
-
-## 🌓 Theme Support
-
-- **Light Theme**: Clean, bright interface
-- **Dark Theme**: Modern dark interface
-- Toggle between themes in the user menu
-
-## 🔧 Configuration
-
-### Theme Customization
-
-Edit `src/theme.ts` to customize colors, typography, and component styles.
-
-### Authentication
-
-- Set `DEMO_MODE = false` in `src/services/auth/authService.ts` to connect to a real backend
-- Update API endpoints in `src/services/api/client.ts`
+- **Frontend**: React 18, TypeScript, Vite
+- **UI Library**: Material-UI v7 with custom green theme
+- **State Management**: Zustand
+- **Data Fetching**: TanStack React Query
+- **Forms**: React Hook Form + Zod validation
+- **Charts**: Recharts, Chart.js
+- **Routing**: React Router DOM
 
 ## 📁 Project Structure
 
 ```
 src/
-├── components/
-│   └── layout/
-│       └── Layout.tsx          # Main layout with navbar and sidebar
-├── contexts/
-│   └── AuthContext.tsx         # Authentication context
-├── pages/
-│   ├── auth/
-│   │   ├── SignInPage.tsx      # Clean sign-in page
-│   │   └── SignUpPage.tsx      # Clean sign-up page
-│   ├── dashboard/              # Dashboard overview
-│   ├── farms/
-│   │   └── FarmManagementPage.tsx # Multi-farm management
-│   ├── monitoring/
-│   │   └── MonitoringPage.tsx     # Real-time monitoring
-│   ├── reports/
-│   │   └── ReportsPage.tsx        # Comprehensive reports
-│   ├── economics/
-│   │   └── EconomicsPage.tsx      # Financial tracking
-│   ├── weather/
-│   │   └── WeatherPage.tsx        # Weather data
-│   ├── analytics/              # Advanced analytics
-│   ├── devices/                # Device management
-│   ├── alerts/                 # Alert management
-│   └── settings/               # Configuration
-├── services/
-│   ├── auth/
-│   │   └── authService.ts      # Authentication service
-│   └── api/
-│       └── client.ts           # API client
-├── types/                      # TypeScript type definitions
-├── theme.ts                    # Material-UI theme configuration
-└── App.tsx                     # Main app component
+├── components/          # Reusable UI components
+│   └── layout/         # Dashboard layout
+├── pages/              # Page components
+│   ├── auth/           # Sign in page
+│   ├── dashboard/      # Main dashboard
+│   ├── farms/          # Farm management (6 farms)
+│   ├── monitoring/     # Device monitoring (12 devices)
+│   ├── analytics/      # Data analytics with charts
+│   ├── devices/        # Device management
+│   └── customers/      # Customer management (2 customers)
+├── stores/             # Zustand state stores
+├── hooks/              # Custom React hooks
+├── services/           # API services
+│   └── api/            # Mock data and API client
+├── types/              # TypeScript definitions
+└── utils/              # Utility functions
 ```
 
-## 🎯 Usage
+## 🎯 Key Features
 
-1. **Sign In**: Use demo credentials or create a new account
-2. **Navigation**: Use the sidebar to navigate between different sections
-3. **Theme Toggle**: Click the profile menu to toggle between light/dark themes
-4. **Sign Out**: Use the profile menu to sign out
+### Dashboard Page
+- **Real-time Metrics**: 12 devices, 3 farms, 150 animals
+- **Status Indicators**: Online/offline devices with color coding
+- **Alert System**: 4 different alert types
+- **Quick Actions**: Refresh, view details, manage settings
 
-## 🤝 Contributing
+### Farms Page
+- **Farm Cards**: Beautiful cards with farm information
+- **Statistics**: Animal count, device count, online status
+- **Farm Types**: Dairy 🐄, Poultry 🐔, Swine 🐷, Cattle 🐂
+- **Management**: Add, edit, view, delete farms
 
-1. Keep the design clean and simple
-2. Follow the existing color scheme
-3. Ensure responsive design
-4. Add proper TypeScript types
-5. Test on both light and dark themes
+### Monitoring Page
+- **Device Status**: Real-time device health monitoring
+- **Sensor Data**: Temperature, humidity, air quality readings
+- **Charts**: 24-hour trend charts
+- **Alerts**: Critical alerts and warnings
 
-## 📄 License
+### Analytics Page
+- **Performance Charts**: Milk production, egg production, weight growth
+- **Health Analysis**: Pie charts for health status
+- **Trend Analysis**: 30-day performance trends
+- **Custom Reports**: Filterable by farm, time range
 
-This project is part of the FarmIQ ecosystem.
+### Devices Page
+- **Device Management**: Add, edit, view, delete devices
+- **Health Monitoring**: Battery, signal strength, temperature
+- **Sensor Readings**: Real-time sensor data
+- **Status Tracking**: Online/offline with visual indicators
+
+### Customers Page
+- **Customer Management**: Company information and contact details
+- **Farm Relationships**: Link customers to their farms
+- **Statistics**: Farm count, total size, active status
+- **Contact Information**: Email, phone, address management
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 18+
+- Yarn package manager
+
+### Installation
+1. Install dependencies:
+   ```bash
+   yarn install
+   ```
+
+2. Start development server:
+   ```bash
+   yarn dev
+   ```
+
+3. Open [http://localhost:3001](http://localhost:3001) in your browser
+
+### Available Scripts
+- `yarn dev` - Start development server
+- `yarn build` - Build for production
+- `yarn preview` - Preview production build
+- `yarn lint` - Run ESLint
+- `yarn type-check` - Run TypeScript checking
+
+## 🎨 UI/UX Features
+
+### Agriculture Theme
+- **Green Color Palette**: Perfect for agricultural applications
+- **Nature Icons**: Farm, animal, and device icons
+- **Professional Design**: Clean, modern interface
+- **Responsive Layout**: Works on all screen sizes
+
+### Interactive Elements
+- **Hover Effects**: Smooth animations and transitions
+- **Status Indicators**: Color-coded status chips
+- **Progress Bars**: Battery and signal strength indicators
+- **Tooltips**: Helpful information on hover
+
+### Data Visualization
+- **Real-time Charts**: Live data updates
+- **Interactive Graphs**: Hover for detailed information
+- **Color Coding**: Consistent color scheme throughout
+- **Responsive Charts**: Adapt to different screen sizes
+
+## 🔧 Development
+
+### Mock Data System
+- **Comprehensive Data**: All pages have realistic mock data
+- **Realistic Values**: Thai farm names, locations, and data
+- **Dynamic Updates**: Data refreshes every 30 seconds
+- **Error Simulation**: Realistic error states and loading
+
+### Code Quality
+- **TypeScript**: Full type safety
+- **ESLint**: Code quality enforcement
+- **Component Architecture**: Reusable, maintainable components
+- **Custom Hooks**: Clean data fetching logic
+
+## 🌟 Highlights
+
+- **🎨 Beautiful Green Theme**: Perfect for agriculture
+- **📊 Rich Mock Data**: 6 farms, 12 devices, 3 animals, 2 customers
+- **📱 Fully Responsive**: Works on all devices
+- **⚡ Real-time Updates**: Auto-refresh every 30 seconds
+- **🔧 Professional Code**: Clean, maintainable, well-documented
+- **🎯 Complete Features**: All major farm management features
+
+## 📞 Support
+
+The dashboard is fully functional with mock data. All features work as expected:
+- ✅ Authentication system
+- ✅ Farm management
+- ✅ Device monitoring
+- ✅ Analytics and reporting
+- ✅ Customer management
+- ✅ Real-time updates
+- ✅ Responsive design
+
+---
+
+## 🎉 Ready to Use!
+
+The FarmIQ Analytics Dashboard is now **fully functional** with beautiful mock data and a professional agriculture theme. Simply open [http://localhost:3001](http://localhost:3001) and start exploring! 🚀

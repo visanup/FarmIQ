@@ -1,369 +1,380 @@
-# analytics-api
+# Analytics API Service
 
-FastAPI service สำหรับอ่านข้อมูล **analytics** จาก TimescaleDB/PostgreSQL
-บาง เบา เร็ว และ **รีใช้โค้ดจาก analytics-worker ได้ตรง ๆ** (config/database/domain/utils)
+Analytics API service for FarmIQ - provides statistical analysis, anomaly detection, and KPI calculations for sensor data.
 
-> โฟกัสของ service นี้คือ **Read-only API**: aggregates, anomalies, KPI และ event rollups
-> งาน ingest/aggregate มาจาก `analytics-worker` (Kafka → DB)
+## 🏗️ Architecture
 
----
+- **Framework**: FastAPI + SQLAlchemy + Pydantic
+- **Database**: PostgreSQL with TimescaleDB (analytics schema)
+- **Message Queue**: Kafka (optional)
+- **Port**: 7304
 
-## TL;DR (มือใหม่อยากยิงเร็ว)
+## 📋 Prerequisites
+
+- Python 3.11+
+- PostgreSQL with TimescaleDB extension
+- Docker & Docker Compose (optional)
+
+## 🚀 Quick Start
+
+### 1. Database Setup
+
+Create the analytics schema and tables in PostgreSQL:
+
+```sql
+-- Connect to your PostgreSQL database
+\c farmiq_cloud
+
+-- Create analytics schema
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+-- Create analytics_agg table (aggregated data)
+CREATE TABLE analytics.analytics_agg (
+    bucket_start TIMESTAMPTZ NOT NULL,
+    window_s INTEGER NOT NULL,
+    tenant_id TEXT NOT NULL,
+    factory_id TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    sensor_id TEXT,
+    metric TEXT NOT NULL,
+    count_n BIGINT DEFAULT 0,
+    sum_val DOUBLE PRECISION DEFAULT 0,
+    avg_val DOUBLE PRECISION DEFAULT 0,
+    min_val DOUBLE PRECISION DEFAULT 0,
+    max_val DOUBLE PRECISION DEFAULT 0,
+    stddev_val DOUBLE PRECISION DEFAULT 0,
+    p95_val DOUBLE PRECISION DEFAULT 0,
+    PRIMARY KEY (bucket_start, window_s, tenant_id, factory_id, machine_id, sensor_id, metric)
+);
+
+-- Convert to TimescaleDB hypertable
+SELECT create_hypertable('analytics.analytics_agg', 'bucket_start');
+
+-- Create analytics_event_rollup table
+CREATE TABLE analytics.analytics_event_rollup (
+    bucket_start TIMESTAMPTZ NOT NULL,
+    window_s INTEGER NOT NULL,
+    tenant_id TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    count_n BIGINT DEFAULT 0,
+    sum_val DOUBLE PRECISION,
+    avg_val DOUBLE PRECISION,
+    min_val DOUBLE PRECISION,
+    max_val DOUBLE PRECISION,
+    PRIMARY KEY (bucket_start, window_s, tenant_id, domain, entity_type, entity_id, event_type)
+);
+
+-- Convert to TimescaleDB hypertable
+SELECT create_hypertable('analytics.analytics_event_rollup', 'bucket_start');
+
+-- Create analytics_kpi table
+CREATE TABLE analytics.analytics_kpi (
+    period TEXT NOT NULL,
+    period_start TIMESTAMPTZ NOT NULL,
+    tenant_id TEXT NOT NULL,
+    factory_id TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    sensor_id TEXT,
+    metric TEXT NOT NULL,
+    n BIGINT DEFAULT 0,
+    mean_val DOUBLE PRECISION,
+    stddev_val DOUBLE PRECISION,
+    cp DOUBLE PRECISION,
+    cpk DOUBLE PRECISION,
+    pp DOUBLE PRECISION,
+    ppk DOUBLE PRECISION,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, factory_id, machine_id, metric, period, period_start)
+);
+
+-- Create indexes for performance
+CREATE INDEX idx_analytics_agg_tenant_factory_machine_metric_bucket 
+ON analytics.analytics_agg (tenant_id, factory_id, machine_id, metric, bucket_start);
+
+CREATE INDEX idx_analytics_event_rollup_tenant_domain_entity_bucket 
+ON analytics.analytics_event_rollup (tenant_id, domain, entity_type, entity_id, event_type, bucket_start);
+
+CREATE INDEX idx_analytics_kpi_tenant_factory_machine_metric_period 
+ON analytics.analytics_kpi (tenant_id, factory_id, machine_id, metric, period, period_start);
+```
+
+### 2. Environment Setup
+
+Create `.env` file:
 
 ```bash
-# 1) ตั้ง .env ให้ชี้ DB
-cat > .env <<'ENV'
-DB_HOST=timescaledb
+# Database
+DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=sensor_cloud_db
+DB_NAME=farmiq_cloud
 DB_USER=postgres
-DB_PASSWORD=password
+DB_PASSWORD=postgres1611
 DB_SCHEMA=analytics
 
-API_HOST=0.0.0.0
-API_PORT=7305
-ENV=prod
-ENV
+# Kafka (optional)
+KAFKA_BROKERS=kafka:9092
+CONSUMER_GROUP=analytic-service.v1
+KAFKA_CLIENT_ID=analytics-api
 
-# 2) ติดตั้งและรัน (โหมด dev)
+# API
+API_HOST=0.0.0.0
+ANALYTICS_API_PORT=7304
+ENV=dev
+
+# Aggregation windows (comma-separated)
+WINDOWS=60,300,3600
+```
+
+### 3. Installation & Development
+
+```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Development mode
 python -m app.main
 
-# 3) ทดสอบ
-curl http://localhost:7305/v1/health
-# {"status":"ok"}
+# Or with uvicorn
+uvicorn app.main:app --host 0.0.0.0 --port 7304 --reload
 ```
 
-ถ้าได้ `[]` จาก `/v1/agg` ให้ดูส่วน **Troubleshooting** ด้านล่าง
-
----
-
-## คุณสมบัติเด่น
-
-* ✅ **FastAPI + Pydantic v2**: มี OpenAPI/Swagger อัตโนมัติ
-* ✅ **รีใช้โค้ดจาก analytics-worker**: `config.py`, `database.py`, `domain/*`, `utils/*`, `instrumentation/*`
-* ✅ **Prometheus metrics** ที่ `/v1/metrics`
-* ✅ บาง เบา: ไม่มี Kafka/consumer ใน service นี้
-* ✅ พร้อมขยายเป็น BFF/GraphQL ในอนาคต (หากต้องการ realtime)
-
----
-
-## โครงไฟล์ (ที่แนะนำ)
-
-```
-analytics-api/
-  app/
-    __init__.py
-    main.py
-    v1/
-      __init__.py
-      endpoint.py        # /v1/health, /v1/metrics
-      agg.py             # /v1/agg  (อ่าน analytics_agg)
-      events.py          # /v1/event-rollup (ถ้ามี events)
-    # ↓ รีใช้มาจาก analytics-worker
-    config.py
-    database.py
-    domain/
-      models.py
-      rules.py
-      windows.py
-    utils/
-      time.py
-      ids.py
-      stats.py
-      serialization.py
-    instrumentation/
-      metrics.py
-```
-
-> ไม่ต้องเอาอะไรที่เป็น Kafka/worker/scheduler มาใน API
-
----
-
-## ข้อกำหนดระบบ (Requirements)
-
-* Python 3.11+ (เทียบเท่า base image ของ Dockerfile)
-* PostgreSQL 14+/TimescaleDB 2.x (แนะนำ)
-* ตาราง/สคีมาต่อไปนี้ **ต้องมี**:
-
-  * `analytics.analytics_agg` (จาก `01_analytics_core.sql`)
-  * (เลือกใช้) `analytics.analytics_event`, `analytics.analytics_event_rollup` (จาก `02_analytics_events.sql`)
-
-> ดูหัวข้อ **Migrations/Schema** ถ้าคุณยังไม่รัน SQL
-
----
-
-## การตั้งค่า (Environment variables)
-
-| ตัวแปร        |       ค่าเริ่มต้น | คำอธิบาย                                    |
-| ------------- | ----------------: | ------------------------------------------- |
-| `DB_HOST`     |     `timescaledb` | host ของ DB                                 |
-| `DB_PORT`     |            `5432` | พอร์ต DB                                    |
-| `DB_NAME`     | `sensor_cloud_db` | ชื่อฐานข้อมูล                               |
-| `DB_USER`     |        `postgres` | ผู้ใช้ DB (แนะนำใช้ read-only user ใน prod) |
-| `DB_PASSWORD` |        `password` | รหัสผ่าน DB                                 |
-| `DB_SCHEMA`   |       `analytics` | สคีมาที่เก็บตาราง analytics                 |
-| `API_HOST`    |         `0.0.0.0` | host ที่ FastAPI จะ bind                    |
-| `API_PORT`    |            `7305` | พอร์ตของ API                                |
-| `ENV`         |             `dev` | ป้ายสภาพแวดล้อม (dev/prod)                  |
-
-> โค้ด `Config` รวม `search_path` ให้เรียบร้อย (ชี้ `analytics,public`) ถ้าใช้ `Config.FULL_DATABASE_URL()` ที่มีให้
-
----
-
-## รันด้วย Docker / Compose
-
-ตัวอย่าง service ใน `docker-compose.yml`:
-
-```yaml
-analytics-api:
-  build:
-    context: ./services/analytic/services/analytics-api
-    dockerfile: Dockerfile
-  container_name: analytics-api
-  restart: unless-stopped
-  env_file:
-    - ./services/analytic/services/analytics-api/.env
-  environment:
-    TZ: Asia/Bangkok
-    API_HOST: "0.0.0.0"
-    API_PORT: "7305"
-  depends_on:
-    timescaledb:
-      condition: service_started
-  networks: [farm_cloud]
-  ports:
-    - "7305:7305"
-  healthcheck:
-    test: ["CMD", "python", "-c", "import sys,urllib.request;u='http://localhost:7305/v1/health';sys.exit(0 if urllib.request.urlopen(u,timeout=3).getcode()==200 else 1)"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
-    start_period: 15s
-```
-
----
-
-## Endpoints
-
-### `GET /v1/health`
-
-* สถานะ service (ใช้เป็น liveness/readiness)
-* 200: `{"status":"ok"}`
-
-### `GET /v1/metrics`
-
-* Prometheus metrics ของ FastAPI/app
-* `Content-Type: text/plain; version=0.0.4`
-
-### `GET /v1/agg`
-
-อ่าน aggregated metrics จาก `analytics.analytics_agg`
-
-**Query params (จำเป็นเว้นแต่จะระบุว่า optional):**
-
-* `tenant_id`: str
-* `factory_id`: str
-* `machine_id`: str
-* `metric`: str (เช่น `temp`, `humidity`, `lab.moisture`)
-* `window_s`: int (เช่น 60/300/3600)
-* `start`: ISO8601 (เช่น `2025-08-20T00:00:00Z`)
-* `end`: ISO8601 (exclusive)
-* `sensor_id`: str (optional)
-* `limit`: int (default 1000, 1–10000)
-
-**ตัวอย่างเรียกใช้**
+### 4. Docker Deployment
 
 ```bash
-curl "http://localhost:7305/v1/agg?tenant_id=t1&factory_id=f1&machine_id=mc-01&metric=temp&window_s=60&start=2025-08-20T00:00:00Z&end=2025-08-21T00:00:00Z"
+# Build and run with Docker Compose
+docker-compose -f ../../../docker-compose.apps.yml up analytics-api --build
+
+# Or run standalone
+docker build -t analytics-api .
+docker run -p 7304:7304 --env-file .env analytics-api
 ```
 
-**ตัวอย่างผลลัพธ์**
+## 🧪 Testing
 
-```json
-[
-  {
-    "bucket_start": "2025-08-20T09:20:00+00:00",
+### Health Checks
+
+```bash
+# Health check
+curl http://localhost:7304/v1/health
+
+# Metrics
+curl http://localhost:7304/v1/metrics
+```
+
+### API Testing
+
+```bash
+# Get aggregated data
+curl "http://localhost:7304/v1/agg?tenant_id=tenant1&factory_id=factory1&machine_id=machine1&metric=temperature&window_s=60&start=2024-01-01T00:00:00Z&end=2024-01-01T23:59:59Z"
+
+# Get event rollup
+curl "http://localhost:7304/v1/event-rollup?tenant_id=tenant1&domain=farms&entity_type=house&entity_id=house1&event_type=feeding&window_s=300&start=2024-01-01T00:00:00Z&end=2024-01-01T23:59:59Z"
+
+# Detect anomalies
+curl -X POST "http://localhost:7304/v1/anomalies" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "tenant1",
+    "factory_id": "factory1", 
+    "machine_id": "machine1",
+    "metric": "temperature",
     "window_s": 60,
-    "tenant_id": "t1",
-    "factory_id": "f1",
-    "machine_id": "mc-01",
-    "sensor_id": "s-001",
-    "metric": "temp",
-    "count_n": 5,
-    "sum_val": 118.5,
-    "avg_val": 23.7,
-    "min_val": 23.4,
-    "max_val": 24.0,
-    "stddev_val": 0.2,
-    "p95_val": 24.0
-  }
-]
+    "start": "2024-01-01T00:00:00Z",
+    "end": "2024-01-01T23:59:59Z"
+  }'
+
+# Calculate KPIs
+curl -X POST "http://localhost:7304/v1/kpi" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "period": "day",
+    "metric": "temperature",
+    "use_window_s": 60
+  }'
 ```
 
-### (ถ้ามี events) `GET /v1/event-rollup`
-
-อ่านสรุปเหตุการณ์จาก `analytics.analytics_event_rollup`
-
-**Query params**
-
-* `tenant_id`, `domain`, `entity_type`, `entity_id`, `event_type`: str
-* `window_s`: int
-* `start`, `end`: ISO8601
-* `limit`: int (default 1000)
-
-**ตัวอย่าง**
-
-```bash
-curl "http://localhost:7305/v1/event-rollup?tenant_id=t1&domain=device&entity_type=machine&entity_id=mc-01&event_type=status&window_s=3600&start=2025-08-20T00:00:00Z&end=2025-08-21T00:00:00Z"
-```
-
----
-
-## Migrations / Schema ที่จำเป็น
-
-**ต้องมีอย่างน้อย:**
-
-* `01_analytics_core.sql` (ตาราง: `analytics_agg`, `analytics_anomaly`, `analytics_kpi`, `analytics_spec_limits`, `worker_checkpoints`)
-
-**ถ้าจะใช้ event/device\_health/sweep:**
-
-* `02_analytics_events.sql` (ตาราง: `analytics_event`, `analytics_event_rollup`)
-
-**อำนวยความสะดวก:**
-
-* `10_analytics_views.sql` (views: `v_agg_latest`, `v_anomaly_recent`, `v_kpi_latest`, `v_event_daily`)
-
-**ตัวอย่างรัน**
-
-```bash
-psql "$DATABASE_URL" -f 01_analytics_core.sql
-psql "$DATABASE_URL" -f 02_analytics_events.sql      # ถ้าต้องการ events
-psql "$DATABASE_URL" -f 10_analytics_views.sql
-```
-
----
-
-## ความปลอดภัย (แนะนำอย่างแรง)
-
-สร้าง **read-only user** สำหรับ API แยกจาก worker:
+### Database Testing
 
 ```sql
--- สร้าง role เฉพาะอ่าน
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='analytics_ro') THEN
-    CREATE ROLE analytics_ro LOGIN PASSWORD 'change_me';
-  END IF;
-END $$;
+-- Test data insertion
+INSERT INTO analytics.analytics_agg 
+(bucket_start, window_s, tenant_id, factory_id, machine_id, metric, count_n, sum_val, avg_val, min_val, max_val, stddev_val, p95_val)
+VALUES 
+(NOW(), 60, 'tenant1', 'factory1', 'machine1', 'temperature', 10, 250.5, 25.05, 24.0, 26.0, 0.5, 25.8);
 
-GRANT USAGE ON SCHEMA analytics TO analytics_ro;
-GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO analytics_ro;
-ALTER DEFAULT PRIVILEGES IN SCHEMA analytics GRANT SELECT ON TABLES TO analytics_ro;
-
--- (ถ้าใช้ views/seq อื่น เติม grant ตามเหมาะสม)
+-- Query aggregated data
+SELECT * FROM analytics.analytics_agg 
+WHERE tenant_id = 'tenant1' 
+  AND factory_id = 'factory1'
+  AND machine_id = 'machine1'
+  AND metric = 'temperature'
+ORDER BY bucket_start DESC 
+LIMIT 10;
 ```
 
-แล้วตั้ง `.env` ของ API ให้ใช้ user นี้:
+## 📊 API Endpoints
+
+### Health & Metrics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/health` | Health check |
+| GET | `/v1/metrics` | Prometheus metrics |
+
+### Data Retrieval
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/agg` | Get aggregated sensor data |
+| GET | `/v1/event-rollup` | Get event rollup data |
+
+### Analytics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/anomalies` | Detect anomalies using Western Electric rules |
+| POST | `/v1/kpi` | Calculate process capability indices (Cp/Cpk) |
+
+### Query Parameters
+
+#### `/v1/agg`
+- `tenant_id` (required): Tenant identifier
+- `factory_id` (required): Factory identifier  
+- `machine_id` (required): Machine identifier
+- `metric` (required): Metric name (e.g., temperature, humidity)
+- `window_s` (required): Aggregation window in seconds
+- `start` (required): Start time (ISO8601)
+- `end` (required): End time (ISO8601)
+- `sensor_id` (optional): Specific sensor identifier
+- `limit` (optional): Maximum results (default: 1000, max: 10000)
+
+#### `/v1/event-rollup`
+- `tenant_id` (required): Tenant identifier
+- `domain` (required): Domain (e.g., farms, devices)
+- `entity_type` (required): Entity type (e.g., house, device)
+- `entity_id` (required): Entity identifier
+- `event_type` (required): Event type (e.g., feeding, maintenance)
+- `window_s` (required): Aggregation window in seconds
+- `start` (required): Start time (ISO8601)
+- `end` (required): End time (ISO8601)
+- `limit` (optional): Maximum results (default: 1000, max: 10000)
+
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `timescaledb` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `sensor_cloud_db` | Database name |
+| `DB_USER` | `postgres` | Database user |
+| `DB_PASSWORD` | `password` | Database password |
+| `DB_SCHEMA` | `analytics` | Database schema |
+| `API_HOST` | `0.0.0.0` | API host |
+| `ANALYTICS_API_PORT` | `7304` | API port |
+| `WINDOWS` | `60,300,3600` | Aggregation windows (seconds) |
+
+## 📈 Statistical Analysis
+
+### Western Electric Rules
+
+The service implements Western Electric rules for anomaly detection:
+
+- **WE-1**: Points beyond 3σ limits
+- **WE-2**: 2 of 3 consecutive points beyond 2σ on same side
+- **WE-3**: 4 of 5 consecutive points beyond 1σ on same side  
+- **WE-4**: 8 consecutive points on same side of center line
+
+### Process Capability Indices
+
+- **Cp**: Process capability (USL - LSL) / (6σ)
+- **Cpk**: Process capability index (min of CPU, CPL)
+- **Pp**: Process performance (USL - LSL) / (6σ)
+- **Ppk**: Process performance index
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failed**
+   ```bash
+   # Check database connectivity
+   docker exec -it farmiq-postgres psql -U postgres -d farmiq_cloud -c "SELECT 1;"
+   ```
+
+2. **Missing Tables**
+   ```sql
+   -- Check if tables exist
+   SELECT table_name FROM information_schema.tables 
+   WHERE table_schema = 'analytics';
+   ```
+
+3. **Performance Issues**
+   ```sql
+   -- Check table sizes
+   SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
+   FROM pg_tables WHERE schemaname = 'analytics';
+   ```
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+ENV=dev python -m app.main
+
+# Check logs
+docker logs farmiq-analytics-api -f
+```
+
+## 📁 Project Structure
 
 ```
-DB_USER=analytics_ro
-DB_PASSWORD=change_me
+app/
+├── api/
+│   └── v1/
+│       ├── endpoint.py      # Health & metrics endpoints
+│       ├── agg.py          # Aggregated data API
+│       └── events.py       # Event rollup API
+├── config.py               # Configuration management
+├── database.py             # Database connection
+├── domain/
+│   ├── models.py           # Pydantic models
+│   ├── rules.py            # Western Electric rules
+│   └── windows.py          # Time window utilities
+├── instrumentation/
+│   └── metrics.py          # Prometheus metrics
+├── services/
+│   ├── aggregator.py       # Data aggregation logic
+│   ├── anomaly_detector.py # Anomaly detection
+│   ├── kpi.py             # KPI calculations
+│   └── spec_limits.py     # Specification limits
+├── utils/
+│   ├── time.py            # Time utilities
+│   ├── stats.py           # Statistical functions
+│   └── serialization.py   # Data serialization
+└── main.py                # FastAPI application
 ```
 
----
+## 🔄 Data Flow
 
-## Observability
+1. **Data Ingestion**: Raw sensor data → Kafka topics
+2. **Aggregation**: analytics-stream → analytics_agg table
+3. **API Queries**: FastAPI → PostgreSQL → JSON response
+4. **Anomaly Detection**: Statistical analysis → anomaly alerts
+5. **KPI Calculation**: Process capability analysis → KPI metrics
 
-* **Metrics**: `GET /v1/metrics` (Prometheus scrape ได้)
-* **Logs**: stdout (uvicorn) — จับด้วย Docker/Compose/Cloud logging
-* (Optional) **Tracing**: ถ้าเปิด OTEL ในโปรเจกต์อยู่แล้ว สามารถใส่ได้ไม่ยาก
+## 🤝 Contributing
 
----
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-## การพัฒนา (Dev)
+## 📄 License
 
-* Run local:
-
-  ```bash
-  uvicorn app.main:app --host 0.0.0.0 --port 7305 --reload
-  ```
-* Swagger UI:
-
-  ```
-  http://localhost:7305/docs
-  ```
-* OpenAPI JSON:
-
-  ```
-  http://localhost:7305/openapi.json
-  ```
-
----
-
-## การรีใช้โค้ดจาก analytics-worker
-
-**รีใช้ได้ทันที**:
-
-* `app/config.py`, `app/database.py`
-* `app/domain/models.py` (+ ไฟล์ domain อื่น ๆ)
-* `app/utils/*`
-* `app/instrumentation/metrics.py`
-
-> อย่าเอาพวก `adapters/kafka_*`, `workers/*`, `pipelines/*` มาใน API
-
----
-
-## ตัวอย่าง SQL เช็คข้อมูล
-
-```sql
--- ดู aggregate ล่าสุด
-SELECT bucket_start, window_s, tenant_id, factory_id, machine_id, sensor_id, metric, avg_val, count_n
-FROM analytics.analytics_agg
-ORDER BY bucket_start DESC
-LIMIT 20;
-
--- (ถ้าใช้ event) ดู event rollup
-SELECT bucket_start, window_s, domain, entity_type, entity_id, event_type, count_n, avg_val
-FROM analytics.analytics_event_rollup
-ORDER BY bucket_start DESC
-LIMIT 20;
-```
-
----
-
-## Troubleshooting
-
-* `GET /v1/agg` คืน `[]`
-  → มักเป็นเพราะยังไม่มีแถวใน `analytics_agg` ช่วงเวลาที่ query
-  เช็ค:
-
-  1. `analytics-worker` รันอยู่และเขียน DB ได้จริง
-  2. `tenant_id/factory_id/machine_id/metric` ตรงกับที่ ingest
-  3. `start/end` ครอบคลุมเวลา (ใช้ UTC + “Z”)
-
-* 422 Unprocessable Entity
-  → ขาดพารามิเตอร์ หรือรูปแบบ time ไม่ใช่ ISO8601
-
-* 500 DB error
-  → ตรวจ `DB_*` ใน `.env`, สิทธิ์ user, หรือ `DB_SCHEMA` ให้ถูกต้อง
-
-* CORS ปฏิเสธ (เวลาเรียกจาก frontend browser)
-  → เปิด CORS ใน `app.main` (ใส่ `from fastapi.middleware.cors import CORSMiddleware` แล้วเพิ่ม middleware)
-
-* Compose เตือน `"The "p" variable is not set."`
-  → ในไฟล์ compose มี `${p}` ที่ไม่มีการกำหนดค่าไว้ — ลบ/กำหนดค่าให้มัน
-
----
-
-## Roadmap (สั้น ๆ)
-
-* `/v1/anomalies` และ `/v1/kpi`
-* ค่าตั้ง (spec/limits) แบบแก้ไขได้ด้วย RBAC (admin only)
-* Caching (Redis) สำหรับ query หนัก ๆ
-* BFF/GraphQL service แยก (Node/TS) ถ้าต้อง realtime/subscriptions
-
----
-
-## ใบอนุญาต (License)
-
-ภายในองค์กร / ตามที่ทีมคุณกำหนด
+This project is part of the FarmIQ platform.

@@ -1,102 +1,92 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
-import { lightTheme, darkTheme } from './theme';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { DashboardProvider } from './contexts/DashboardContext';
-import Layout from './components/layout/Layout';
+import { modernTheme } from './theme/modernTheme';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { useAuthStore } from './stores/authStore';
 
 // Import pages
 import DashboardPage from './pages/dashboard/DashboardPage';
+import SignInPage from './pages/auth/SignInPage';
+import FarmsPage from './pages/farms/FarmsPage';
+import MonitoringPage from './pages/monitoring/MonitoringPage';
 import AnalyticsPage from './pages/analytics/AnalyticsPage';
 import DevicesPage from './pages/devices/DevicesPage';
-import AlertsPage from './pages/alerts/AlertsPage';
-import SettingsPage from './pages/settings/SettingsPage';
+import CustomersPage from './pages/customers/CustomersPage';
+import RealtimePage from './pages/realtime/RealtimePage';
+import AIAnalyticsPage from './pages/ai/AIAnalyticsPage';
 
-// Import new professional pages
-import FarmManagementPage from './pages/farms/FarmManagementPage';
-import ReportsPage from './pages/reports/ReportsPage';
-import MonitoringPage from './pages/monitoring/MonitoringPage';
-import EconomicsPage from './pages/economics/EconomicsPage';
-import WeatherPage from './pages/weather/WeatherPage';
-import FeedManagementPage from './pages/feed/FeedManagementPage';
-import FormulaManagementPage from './pages/formula/FormulaManagementPage';
-import CustomerManagementPage from './pages/customer/CustomerManagementPage';
-import BillingManagementPage from './pages/billing/BillingManagementPage';
+// Use modern theme
+const theme = modernTheme;
 
-// Import auth pages
-import SignInPage from './pages/auth/SignInPage.tsx';
-import SignUpPage from './pages/auth/SignUpPage.tsx';
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      cacheTime: 10 * 60 * 1000, // 10 minutes
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-const AppContent: React.FC = () => {
-  const { isAuthenticated, signOut } = useAuth();
-  const [isDarkMode, setIsDarkMode] = React.useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
-  });
+// Main App Routes Component
+const AppRoutes: React.FC = () => {
+  const { isAuthenticated, user } = useAuthStore();
 
-  React.useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-  }, [isDarkMode]);
-
-  const handleThemeToggle = () => {
-    setIsDarkMode(!isDarkMode);
-  };
-
-  const theme = isDarkMode ? darkTheme : lightTheme;
+  // Auto-login for demo purposes
+  useEffect(() => {
+    if (!isAuthenticated) {
+      // Auto-login with demo credentials
+      const demoUser = {
+        id: '1',
+        name: 'Demo User',
+        email: 'demo@farmiq.com',
+        role: 'ADMIN',
+      };
+      localStorage.setItem('auth', JSON.stringify({ user: demoUser, token: 'demo-token' }));
+      window.location.reload();
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Routes>
-          <Route path="/signin" element={<SignInPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          <Route path="*" element={<Navigate to="/signin" replace />} />
-        </Routes>
-      </ThemeProvider>
+      <Routes>
+        <Route path="/signin" element={<SignInPage />} />
+        <Route path="*" element={<Navigate to="/signin" replace />} />
+      </Routes>
     );
   }
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <DashboardProvider>
-        <Layout
-          isDarkMode={isDarkMode}
-          onThemeToggle={handleThemeToggle}
-          onLogout={signOut}
-        >
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/farms" element={<FarmManagementPage />} />
-            <Route path="/monitoring" element={<MonitoringPage />} />
-            <Route path="/feed" element={<FeedManagementPage />} />
-            <Route path="/formula" element={<FormulaManagementPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/economics" element={<EconomicsPage />} />
-            <Route path="/weather" element={<WeatherPage />} />
-            <Route path="/customers" element={<CustomerManagementPage />} />
-            <Route path="/billing" element={<BillingManagementPage />} />
-            <Route path="/devices" element={<DevicesPage />} />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Layout>
-      </DashboardProvider>
-    </ThemeProvider>
+    <Routes>
+      <Route path="/" element={<DashboardPage />} />
+      <Route path="/farms" element={<FarmsPage />} />
+      <Route path="/monitoring" element={<MonitoringPage />} />
+      <Route path="/analytics" element={<AnalyticsPage />} />
+      <Route path="/realtime" element={<RealtimePage />} />
+      <Route path="/ai-analytics" element={<AIAnalyticsPage />} />
+      <Route path="/devices" element={<DevicesPage />} />
+      <Route path="/customers" element={<CustomersPage />} />
+      <Route path="/settings" element={<div>Settings Page - Coming Soon</div>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 };
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Router>
+          <AppRoutes />
+        </Router>
+        <ReactQueryDevtools initialIsOpen={false} />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 };
 

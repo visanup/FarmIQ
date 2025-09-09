@@ -1,5 +1,4 @@
-// services/data-service/src/server.ts
-
+// services/analytics-alerts/src/server.ts
 import 'reflect-metadata';
 import express, { Application, Request, Response, RequestHandler } from 'express';
 import cors from 'cors';
@@ -17,10 +16,11 @@ const swaggerJSDoc = require('swagger-jsdoc');
 
 import { AppDataSource } from './utils/dataSource';
 import routes from './routes';
-import { authenticateToken } from './middlewares/auth';
+// Auth middleware removed
 import { errorHandler } from './middlewares/errorHandler';
 import { PORT } from './configs/config';
 import { swaggerOptions } from './utils/swagger';
+import { openApiDoc } from './utils/openapi';
 
 async function startServer() {
   try {
@@ -42,27 +42,15 @@ async function startServer() {
     });
 
     // --- Dynamic Swagger setup ---
-    const opts = {
-      ...swaggerOptions,
-      definition: {
-        ...swaggerOptions.definition,
-        servers: [
-          {
-            url: `http://localhost:${PORT}`,
-            description: 'Local dev server',
-          },
-        ],
-      },
-    };
-    const swaggerSpec = swaggerJSDoc(opts);
+    const swaggerSpec = swaggerJSDoc(swaggerOptions);
 
     // Serve Swagger UI at /api-docs
     const serveHandlers: RequestHandler[] = swaggerUiModule.serve;
-    const setupHandler: RequestHandler = swaggerUiModule.setup(swaggerSpec, { explorer: true });
+    const setupHandler: RequestHandler = swaggerUiModule.setup(openApiDoc, { explorer: true });
     app.use('/api-docs', ...serveHandlers, setupHandler);
 
     // 5) Protected routes
-    app.use('/api', authenticateToken, routes);
+    app.use('/api', routes);
 
     // 6) Global error handler
     app.use(errorHandler);

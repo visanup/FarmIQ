@@ -1,10 +1,10 @@
 // src/utils/syncJob.ts
-import { edgeDataSource, cloudDataSource } from "./dataSource";
+import { edgeDataSource } from "./dataSource";
+import apiClient from "./apiClient";
 import { SweepReading } from "../models/SweepReading";
 import { LabReading } from "../models/LabReading";
 import { DeviceReading } from "../models/DeviceReading";
 import { DeviceHealth } from "../models/DeviceHealth";
-import { SyncState } from "../models/SyncState";
 
 let isSyncing = false;
 
@@ -16,6 +16,7 @@ type Plan = {
     | "sensors.device_health";
   entity: any;
   timeCol: string;
+  endpoint: string;
   filter?: string;
   batch?: number;
   order: number;
@@ -32,6 +33,7 @@ const plans: Plan[] = [
     name: "sensors.sweep_readings",
     entity: SweepReading,
     timeCol: "time",
+    endpoint: "/sweep-readings",
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
     batch: BATCH_SWEEP,
     order: 2,
@@ -40,6 +42,7 @@ const plans: Plan[] = [
     name: "sensors.lab_readings",
     entity: LabReading,
     timeCol: "time",
+    endpoint: "/lab-readings",
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
     batch: BATCH_LAB,
     order: 2,
@@ -48,6 +51,7 @@ const plans: Plan[] = [
     name: "sensors.device_readings",
     entity: DeviceReading,
     timeCol: "time",
+    endpoint: "/sensor-readings",
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
     batch: BATCH_DEVICE,
     order: 2,
@@ -56,44 +60,31 @@ const plans: Plan[] = [
     name: "sensors.device_health",
     entity: DeviceHealth,
     timeCol: "time",
+    endpoint: "/device-health",
     filter: TENANT ? "t.tenant_id = :tenant" : undefined,
     batch: BATCH_HEALTH,
     order: 3,
   },
 ];
 
-/** ensure sync_state exists on cloud */
-async function ensureSyncState() {
-  await cloudDataSource.query(`
-    CREATE TABLE IF NOT EXISTS sync_state(
-      table_name text primary key,
-      last_ts timestamptz not null default to_timestamp(0)
-    );
-  `);
-}
-
-async function getCursor(table: string): Promise<Date> {
-  const repo = cloudDataSource.getRepository(SyncState);
-  let st = await repo.findOne({ where: { table_name: table } });
-  if (!st) {
-    st = repo.create({ table_name: table, last_ts: new Date(0) });
-    await repo.save(st);
+async function getCursor(endpoint: string): Promise<Date> {
+  try {
+    const response = await apiClient.get<{ last_ts: string }>(`${endpoint}/latest-timestamp`);
+    const lastTs = new Date(response.data.last_ts);
+    // backoff 1ms กันตกหล่น
+    return new Date(lastTs.getTime() - 1);
+  } catch (error) {
+    console.error(`Error fetching cursor for ${endpoint}:`, error);
+    // Return a very old date on error to be safe
+    return new Date(0);
   }
-  // backoff 1ms กันตกหล่น
-  return new Date(st.last_ts.getTime() - 1);
-}
-
-async function setCursor(table: string, ts: Date) {
-  const repo = cloudDataSource.getRepository(SyncState);
-  await repo.save({ table_name: table, last_ts: ts });
 }
 
 /** ดึงทีละชุดจนหมดช่วง (loop แบบค่อยๆ ขยับ cursor) */
 async function syncOne(p: Plan) {
   const edgeRepo = edgeDataSource.getRepository(p.entity);
-  const cloudRepo = cloudDataSource.getRepository(p.entity);
 
-  let cursor = await getCursor(p.name);
+  let cursor = await getCursor(p.endpoint);
   const batch = p.batch ?? 10000;
   let total = 0;
 
@@ -116,14 +107,75 @@ async function syncOne(p: Plan) {
       break;
     }
 
-    // ใช้ INSERT ... ON CONFLICT DO NOTHING (TypeORM: orIgnore()) เพื่อรองรับ composite PK + generated columns
-    await cloudRepo.createQueryBuilder().insert().values(rows as any).orIgnore().execute();
+    try {
+      // Map edge rows to cloud DTOs per endpoint
+      let payload: any[] = [];
+      if (p.endpoint === '/sensor-readings') {
+        payload = (rows as any[]).map((r) => ({
+          deviceId: r.device_id,
+          farmId: undefined,
+          houseId: undefined,
+          sensorType: r.metric,
+          value: Number(r.value),
+          unit: (r.payload && (r.payload.unit || r.payload.UOM)) || r.metric,
+          location: r.payload && r.payload.location ? r.payload.location : undefined,
+          metadata: r.payload || undefined,
+          timestamp: new Date(r.time).toISOString(),
+        }));
+      } else if (p.endpoint === '/sweep-readings') {
+        payload = (rows as any[]).map((r) => ({
+          deviceId: r.robot_id,
+          farmId: undefined,
+          sweepId: String(r.run_id),
+          data: {
+            sensorId: r.sensor_id,
+            metric: r.metric,
+            value: r.value,
+            x: r.x,
+            y: r.y,
+            zoneId: r.zone_id,
+            quality: r.quality,
+          },
+          metadata: r.payload || undefined,
+          timestamp: new Date(r.time).toISOString(),
+        }));
+      } else if (p.endpoint === '/lab-readings') {
+        payload = (rows as any[]).map((r) => ({
+          sampleId: r.station_id,
+          farmId: undefined,
+          testType: r.metric,
+          value: Number(r.value),
+          unit: (r.payload && (r.payload.unit || r.payload.UOM)) || r.metric,
+          result: r.payload?.result,
+          metadata: r.payload || undefined,
+          timestamp: new Date(r.time).toISOString(),
+        }));
+      } else if (p.endpoint === '/device-health') {
+        payload = (rows as any[]).map((r) => ({
+          deviceId: r.device_id,
+          status: r.online === true ? 'ONLINE' : r.online === false ? 'OFFLINE' : 'MAINTENANCE',
+          lastSeen: new Date(r.time).toISOString(),
+          batteryLevel: r.meta?.batteryLevel,
+          signalStrength: r.rssi,
+          temperature: r.meta?.temperature,
+          errors: Array.isArray(r.meta?.errors) ? r.meta.errors : [],
+          warnings: Array.isArray(r.meta?.warnings) ? r.meta.warnings : [],
+        }));
+      }
 
-    total += rows.length;
-    // อัปเดตคอร์สเซอร์เป็นเวลาแถวสุดท้ายของชุดนี้
+      // Send batch to the cloud service
+      const url = `${p.endpoint}/batch`;
+      const res = await apiClient.post(url, payload);
+      const inserted = res.data?.inserted ?? res.data?.upserted ?? payload.length;
+      total += inserted;
+    } catch (error) {
+      console.error(`❌ [${p.name}] failed to post data:`, error);
+      break;
+    }
+
+    // Update cursor based on last row
     const last = (rows as any[])[rows.length - 1][p.timeCol] as Date;
     cursor = last;
-    await setCursor(p.name, last);
   }
 }
 
@@ -132,9 +184,7 @@ export async function runSync() {
   isSyncing = true;
   try {
     if (!edgeDataSource.isInitialized) await edgeDataSource.initialize();
-    if (!cloudDataSource.isInitialized) await cloudDataSource.initialize();
-    await ensureSyncState();
-
+    
     for (const plan of plans.sort((a, b) => a.order - b.order)) {
       await syncOne(plan);
     }

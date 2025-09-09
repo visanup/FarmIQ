@@ -1,11 +1,11 @@
 // src/middleware/apiKey.ts
-
-import { Request, Response, NextFunction } from 'express';
+import { FastifyRequest, FastifyReply } from 'fastify';
 import { ADMIN_API_KEY } from '../configs/config';
 
-export function apiKey(req: Request, res: Response, next: NextFunction) {
-  if (!ADMIN_API_KEY) return res.status(500).json({ error: 'Server missing ADMIN_API_KEY' });
-  const key = req.header('x-api-key') || req.query.api_key;
-  if (key !== ADMIN_API_KEY) return res.status(401).json({ error: 'invalid api key' });
-  return next();
-}
+export const apiKey = async (request: FastifyRequest, reply: FastifyReply) => {
+  const key = request.headers['x-api-key'] as string;
+  
+  if (!key || key !== ADMIN_API_KEY) {
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+};

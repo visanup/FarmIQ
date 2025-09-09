@@ -1,606 +1,525 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Grid,
   Card,
   CardContent,
   Typography,
-  Button,
+  Grid,
   Chip,
-  Avatar,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemSecondaryAction,
+  Button,
   IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Avatar,
+  Tooltip,
   LinearProgress,
   Switch,
   FormControlLabel,
-  Tab,
   Tabs,
-  Badge,
-  useTheme,
+  Tab,
   Alert,
   AlertTitle,
-  Divider,
 } from '@mui/material';
 import {
-  Visibility as VisibilityIcon,
-  Warning as WarningIcon,
-  Error as ErrorIcon,
-  CheckCircle as CheckCircleIcon,
-  Sensors as SensorsIcon,
-  Thermostat as ThermostatIcon,
-  Water as WaterIcon,
-  Air as AirIcon,
-  Agriculture as AgricultureIcon,
-  Notifications as NotificationsIcon,
-  NotificationsOff as NotificationsOffIcon,
-  MoreVert as MoreVertIcon,
   Refresh as RefreshIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Info as InfoIcon,
+  Sensors as SensorsIcon,
+  DeviceHub as DeviceHubIcon,
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  WifiOff as WifiOffIcon,
+  BatteryAlert as BatteryAlertIcon,
+  Thermostat as TemperatureIcon,
+  WaterDrop as WaterDropIcon,
+  Air as AirIcon,
 } from '@mui/icons-material';
+import { DashboardLayout } from '../../components/layout/DashboardLayout';
+import { useDevices, useDeviceHealth, useSensorReadings } from '../../hooks/useApi';
+import { Device, DeviceHealth, SensorReading } from '../../types/api';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
-interface MonitoringAlert {
-  id: string;
-  type: 'critical' | 'warning' | 'info';
-  title: string;
-  message: string;
-  farm: string;
-  timestamp: string;
-  resolved: boolean;
-}
-
-interface SensorData {
-  id: string;
-  name: string;
-  type: string;
-  farm: string;
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
   value: number;
-  unit: string;
-  status: 'online' | 'offline' | 'warning';
-  lastUpdate: string;
-  threshold: { min: number; max: number };
 }
 
-const mockAlerts: MonitoringAlert[] = [
-  {
-    id: '1',
-    type: 'critical',
-    title: 'Soil Moisture Critical',
-    message: 'Soil moisture in North Field Farm has dropped below critical level (15%)',
-    farm: 'North Field Farm',
-    timestamp: '5 minutes ago',
-    resolved: false,
-  },
-  {
-    id: '2',
-    type: 'warning',
-    title: 'High Temperature Alert',
-    message: 'Greenhouse temperature exceeding optimal range (32°C)',
-    farm: 'Greenhouse Complex',
-    timestamp: '12 minutes ago',
-    resolved: false,
-  },
-  {
-    id: '3',
-    type: 'warning',
-    title: 'Device Offline',
-    message: 'Sensor device #007 in Organic Valley is not responding',
-    farm: 'Organic Valley',
-    timestamp: '25 minutes ago',
-    resolved: false,
-  },
-  {
-    id: '4',
-    type: 'info',
-    title: 'Irrigation Cycle Complete',
-    message: 'Automated irrigation cycle completed successfully',
-    farm: 'North Field Farm',
-    timestamp: '1 hour ago',
-    resolved: true,
-  },
-];
-
-const mockSensors: SensorData[] = [
-  {
-    id: '1',
-    name: 'Soil Moisture Sensor #001',
-    type: 'moisture',
-    farm: 'North Field Farm',
-    value: 65,
-    unit: '%',
-    status: 'online',
-    lastUpdate: '2 minutes ago',
-    threshold: { min: 40, max: 80 },
-  },
-  {
-    id: '2',
-    name: 'Temperature Sensor #002',
-    type: 'temperature',
-    farm: 'Greenhouse Complex',
-    value: 28.5,
-    unit: '°C',
-    status: 'online',
-    lastUpdate: '1 minute ago',
-    threshold: { min: 20, max: 30 },
-  },
-  {
-    id: '3',
-    name: 'pH Sensor #003',
-    type: 'ph',
-    farm: 'Organic Valley',
-    value: 6.8,
-    unit: 'pH',
-    status: 'warning',
-    lastUpdate: '3 minutes ago',
-    threshold: { min: 6.0, max: 7.5 },
-  },
-  {
-    id: '4',
-    name: 'Humidity Sensor #004',
-    type: 'humidity',
-    farm: 'Greenhouse Complex',
-    value: 75,
-    unit: '%',
-    status: 'online',
-    lastUpdate: '1 minute ago',
-    threshold: { min: 60, max: 85 },
-  },
-];
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`monitoring-tabpanel-${index}`}
+      aria-labelledby={`monitoring-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 const MonitoringPage: React.FC = () => {
-  const theme = useTheme();
-  const [currentTab, setCurrentTab] = useState(0);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [tabValue, setTabValue] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const getAlertIcon = (type: string) => {
-    switch (type) {
-      case 'critical':
-        return <ErrorIcon sx={{ color: theme.palette.error.main }} />;
-      case 'warning':
-        return <WarningIcon sx={{ color: theme.palette.warning.main }} />;
+  const { data: devices = [], isLoading: devicesLoading } = useDevices();
+  const { data: deviceHealth = [], isLoading: healthLoading } = useDeviceHealth();
+  const { data: sensorReadings = [], isLoading: readingsLoading } = useSensorReadings();
+
+  // Auto refresh effect
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      setRefreshKey(prev => prev + 1);
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  const getDeviceStatus = (deviceId: string) => {
+    const health = deviceHealth.find(h => h.deviceId === deviceId);
+    if (!health) return { status: 'unknown', color: 'default', icon: <ErrorIcon /> };
+    
+    switch (health.status) {
+      case 'ONLINE':
+        return { status: 'ออนไลน์', color: 'success', icon: <CheckCircleIcon /> };
+      case 'OFFLINE':
+        return { status: 'ออฟไลน์', color: 'error', icon: <WifiOffIcon /> };
+      case 'WARNING':
+        return { status: 'เตือน', color: 'warning', icon: <WarningIcon /> };
       default:
-        return <CheckCircleIcon sx={{ color: theme.palette.info.main }} />;
+        return { status: 'ไม่ทราบ', color: 'default', icon: <ErrorIcon /> };
     }
   };
 
-  const getAlertColor = (type: string) => {
-    switch (type) {
-      case 'critical':
-        return 'error';
-      case 'warning':
-        return 'warning';
-      default:
-        return 'info';
-    }
-  };
-
-  const getSensorIcon = (type: string) => {
-    switch (type) {
-      case 'moisture':
-        return <WaterIcon />;
+  const getSensorIcon = (sensorType: string) => {
+    switch (sensorType) {
       case 'temperature':
-        return <ThermostatIcon />;
+        return <TemperatureIcon />;
       case 'humidity':
+        return <WaterDropIcon />;
+      case 'air_quality':
         return <AirIcon />;
       default:
         return <SensorsIcon />;
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online':
-        return theme.palette.success.main;
-      case 'warning':
-        return theme.palette.warning.main;
+  const getSensorTypeLabel = (sensorType: string) => {
+    switch (sensorType) {
+      case 'temperature':
+        return 'อุณหภูมิ';
+      case 'humidity':
+        return 'ความชื้น';
+      case 'air_quality':
+        return 'คุณภาพอากาศ';
       default:
-        return theme.palette.error.main;
+        return sensorType;
     }
   };
 
-  const activeAlerts = mockAlerts.filter(alert => !alert.resolved);
-  const criticalAlerts = activeAlerts.filter(alert => alert.type === 'critical');
-  const warningAlerts = activeAlerts.filter(alert => alert.type === 'warning');
+  const getSensorUnit = (sensorType: string) => {
+    switch (sensorType) {
+      case 'temperature':
+        return '°C';
+      case 'humidity':
+        return '%';
+      case 'air_quality':
+        return 'AQI';
+      default:
+        return '';
+    }
+  };
+
+  // Generate mock time series data
+  const generateTimeSeriesData = () => {
+    const data = [];
+    const now = new Date();
+    
+    for (let i = 23; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
+      data.push({
+        time: time.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        temperature: 20 + Math.random() * 10 + Math.sin(i * 0.5) * 3,
+        humidity: 60 + Math.random() * 20 + Math.cos(i * 0.3) * 10,
+        airQuality: 50 + Math.random() * 30 + Math.sin(i * 0.2) * 15,
+      });
+    }
+    
+    return data;
+  };
+
+  const timeSeriesData = generateTimeSeriesData();
+
+  // Calculate statistics
+  const onlineDevices = deviceHealth.filter(h => h.status === 'ONLINE').length;
+  const offlineDevices = deviceHealth.filter(h => h.status === 'OFFLINE').length;
+  const warningDevices = deviceHealth.filter(h => h.status === 'WARNING').length;
+  const totalDevices = devices.length;
+
+  const criticalAlerts = deviceHealth.filter(h => 
+    h.errors.length > 0 || h.warnings.some(w => w.includes('Critical'))
+  ).length;
+
+  if (devicesLoading || healthLoading) {
+    return (
+      <DashboardLayout>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <Typography>กำลังโหลดข้อมูลการตรวจสอบ...</Typography>
+        </Box>
+      </DashboardLayout>
+    );
+  }
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-            Real-time Monitoring
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Monitor your farms in real-time and manage alerts
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-            }
-            label="Auto Refresh"
-          />
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            sx={{ borderRadius: 2 }}
-          >
-            Refresh
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar
-                sx={{
-                  bgcolor: theme.palette.error.main,
-                  mr: 2,
-                }}
-              >
-                <ErrorIcon />
-              </Avatar>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  {criticalAlerts.length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Critical Alerts
-                </Typography>
-              </Box>
-            </Box>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar
-                sx={{
-                  bgcolor: theme.palette.warning.main,
-                  mr: 2,
-                }}
-              >
-                <WarningIcon />
-              </Avatar>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  {warningAlerts.length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Warning Alerts
-                </Typography>
-              </Box>
-            </Box>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar
-                sx={{
-                  bgcolor: theme.palette.success.main,
-                  mr: 2,
-                }}
-              >
-                <SensorsIcon />
-              </Avatar>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  {mockSensors.filter(s => s.status === 'online').length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Active Sensors
-                </Typography>
-              </Box>
-            </Box>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar
-                sx={{
-                  bgcolor: theme.palette.primary.main,
-                  mr: 2,
-                }}
-              >
-                <AgricultureIcon />
-              </Avatar>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  3
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Monitored Farms
-                </Typography>
-              </Box>
-            </Box>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Tabs */}
-      <Card sx={{ mb: 3 }}>
-        <Tabs
-          value={currentTab}
-          onChange={(e, newValue) => setCurrentTab(newValue)}
-          sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}
-        >
-          <Tab
-            label={
-              <Badge badgeContent={activeAlerts.length} color="error">
-                Alerts
-              </Badge>
-            }
-          />
-          <Tab label="Sensors" />
-          <Tab label="Status" />
-        </Tabs>
-      </Card>
-
-      {/* Tab Content */}
-      {currentTab === 0 && (
-        <Grid container spacing={3}>
-          {/* Active Alerts */}
-          <Grid item xs={12} lg={8}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Active Alerts
-                  </Typography>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={notificationsEnabled}
-                        onChange={(e) => setNotificationsEnabled(e.target.checked)}
-                        icon={<NotificationsOffIcon />}
-                        checkedIcon={<NotificationsIcon />}
-                      />
-                    }
-                    label="Notifications"
-                  />
-                </Box>
-                
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {activeAlerts.map((alert) => (
-                    <Alert
-                      key={alert.id}
-                      severity={getAlertColor(alert.type) as any}
-                      sx={{ borderRadius: 2 }}
-                      action={
-                        <IconButton size="small">
-                          <MoreVertIcon />
-                        </IconButton>
-                      }
-                    >
-                      <AlertTitle sx={{ fontWeight: 600 }}>
-                        {alert.title}
-                      </AlertTitle>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        {alert.message}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Chip
-                          label={alert.farm}
-                          size="small"
-                          sx={{ fontSize: '0.75rem' }}
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {alert.timestamp}
-                        </Typography>
-                      </Box>
-                    </Alert>
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Alert Summary */}
-          <Grid item xs={12} lg={4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                  Alert Summary
-                </Typography>
-                <List disablePadding>
-                  <ListItem>
-                    <ListItemIcon>
-                      <ErrorIcon sx={{ color: theme.palette.error.main }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Critical"
-                      secondary={`${criticalAlerts.length} active alerts`}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <WarningIcon sx={{ color: theme.palette.warning.main }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Warning"
-                      secondary={`${warningAlerts.length} active alerts`}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Resolved Today"
-                      secondary={`${mockAlerts.filter(a => a.resolved).length} alerts`}
-                    />
-                  </ListItem>
-                </List>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      )}
-
-      {currentTab === 1 && (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-              Sensor Status
+    <DashboardLayout>
+      <Box sx={{ p: 3 }}>
+        {/* Header */}
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Box>
+            <Typography variant="h4" component="h1" gutterBottom>
+              ตรวจสอบระบบ
             </Typography>
-            <Grid container spacing={2}>
-              {mockSensors.map((sensor) => (
-                <Grid item xs={12} sm={6} lg={4} key={sensor.id}>
-                  <Card
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      borderColor: getStatusColor(sensor.status),
-                      borderWidth: 2,
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Avatar
-                        sx={{
-                          bgcolor: `${getStatusColor(sensor.status)}20`,
-                          color: getStatusColor(sensor.status),
-                          mr: 2,
-                          width: 40,
-                          height: 40,
-                        }}
-                      >
-                        {getSensorIcon(sensor.type)}
-                      </Avatar>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          {sensor.name}
-                        </Typography>
-                        <Chip
-                          label={sensor.status.toUpperCase()}
-                          size="small"
-                          sx={{
-                            backgroundColor: `${getStatusColor(sensor.status)}20`,
-                            color: getStatusColor(sensor.status),
-                            fontWeight: 500,
-                            fontSize: '0.7rem',
-                          }}
-                        />
-                      </Box>
-                    </Box>
+            <Typography variant="body1" color="text.secondary">
+              ตรวจสอบสถานะอุปกรณ์และข้อมูลเซ็นเซอร์แบบเรียลไทม์
+            </Typography>
+          </Box>
+          <Box display="flex" gap={2} alignItems="center">
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="รีเฟรชอัตโนมัติ"
+            />
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={handleRefresh}
+              disabled={!autoRefresh}
+            >
+              รีเฟรช
+            </Button>
+          </Box>
+        </Box>
 
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-                      {sensor.value}{sensor.unit}
+        {/* Stats Cards */}
+        <Grid container spacing={3} mb={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'success.main', mr: 2 }}>
+                    <CheckCircleIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{onlineDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      อุปกรณ์ออนไลน์
                     </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'error.main', mr: 2 }}>
+                    <WifiOffIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{offlineDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      อุปกรณ์ออฟไลน์
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'warning.main', mr: 2 }}>
+                    <WarningIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{warningDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      อุปกรณ์เตือน
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <Avatar sx={{ bgcolor: 'info.main', mr: 2 }}>
+                    <DeviceHubIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">{totalDevices}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      อุปกรณ์ทั้งหมด
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
 
-                    <Box sx={{ mb: 2 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={(sensor.value / (sensor.threshold.max - sensor.threshold.min)) * 100}
-                        sx={{
-                          height: 6,
-                          borderRadius: 3,
-                          backgroundColor: `${getStatusColor(sensor.status)}20`,
-                          '& .MuiLinearProgress-bar': {
-                            backgroundColor: getStatusColor(sensor.status),
-                          },
-                        }}
-                      />
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Min: {sensor.threshold.min}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Max: {sensor.threshold.max}
-                        </Typography>
+        {/* Critical Alerts */}
+        {criticalAlerts > 0 && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            <AlertTitle>การแจ้งเตือนสำคัญ</AlertTitle>
+            มีอุปกรณ์ {criticalAlerts} ตัวที่มีปัญหาที่ต้องแก้ไขด่วน
+          </Alert>
+        )}
+
+        {/* Tabs */}
+        <Card>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
+              <Tab label="สถานะอุปกรณ์" />
+              <Tab label="ข้อมูลเซ็นเซอร์" />
+              <Tab label="กราฟข้อมูล" />
+            </Tabs>
+          </Box>
+
+          {/* Device Status Tab */}
+          <TabPanel value={tabValue} index={0}>
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>อุปกรณ์</TableCell>
+                    <TableCell>สถานะ</TableCell>
+                    <TableCell>แบตเตอรี่</TableCell>
+                    <TableCell>สัญญาณ</TableCell>
+                    <TableCell>อุณหภูมิ</TableCell>
+                    <TableCell>การแจ้งเตือน</TableCell>
+                    <TableCell>อัปเดตล่าสุด</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {devices.map((device) => {
+                    const health = deviceHealth.find(h => h.deviceId === device.id);
+                    const status = getDeviceStatus(device.id);
+                    
+                    return (
+                      <TableRow key={device.id}>
+                        <TableCell>
+                          <Box display="flex" alignItems="center">
+                            <Avatar sx={{ bgcolor: 'primary.main', mr: 2, width: 32, height: 32 }}>
+                              <SensorsIcon />
+                            </Avatar>
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium">
+                                {device.name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {device.serialNumber}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={status.icon}
+                            label={status.status}
+                            color={status.color as any}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center">
+                            <LinearProgress
+                              variant="determinate"
+                              value={health?.batteryLevel || 0}
+                              sx={{ width: 60, mr: 1 }}
+                            />
+                            <Typography variant="body2">
+                              {health?.batteryLevel || 0}%
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center">
+                            <LinearProgress
+                              variant="determinate"
+                              value={health?.signalStrength || 0}
+                              sx={{ width: 60, mr: 1 }}
+                            />
+                            <Typography variant="body2">
+                              {health?.signalStrength || 0}%
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {health?.temperature ? `${health.temperature}°C` : '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" gap={0.5}>
+                            {health?.errors.length > 0 && (
+                              <Tooltip title={`ข้อผิดพลาด: ${health.errors.join(', ')}`}>
+                                <ErrorIcon color="error" fontSize="small" />
+                              </Tooltip>
+                            )}
+                            {health?.warnings.length > 0 && (
+                              <Tooltip title={`คำเตือน: ${health.warnings.join(', ')}`}>
+                                <WarningIcon color="warning" fontSize="small" />
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {health?.lastSeen ? new Date(health.lastSeen).toLocaleString('th-TH') : '-'}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </TabPanel>
+
+          {/* Sensor Data Tab */}
+          <TabPanel value={tabValue} index={1}>
+            <Grid container spacing={3}>
+              {sensorReadings.map((reading) => (
+                <Grid item xs={12} sm={6} md={4} key={reading.id}>
+                  <Card>
+                    <CardContent>
+                      <Box display="flex" alignItems="center" mb={2}>
+                        <Avatar sx={{ bgcolor: 'secondary.main', mr: 2 }}>
+                          {getSensorIcon(reading.sensorType)}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="h6">
+                            {reading.value} {getSensorUnit(reading.sensorType)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {getSensorTypeLabel(reading.sensorType)}
+                          </Typography>
+                        </Box>
                       </Box>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="caption" color="text.secondary">
-                        {sensor.farm}
+                        อัปเดต: {new Date(reading.timestamp).toLocaleString('th-TH')}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {sensor.lastUpdate}
-                      </Typography>
-                    </Box>
+                    </CardContent>
                   </Card>
                 </Grid>
               ))}
             </Grid>
-          </CardContent>
-        </Card>
-      )}
+          </TabPanel>
 
-      {currentTab === 2 && (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-              System Status
-            </Typography>
+          {/* Charts Tab */}
+          <TabPanel value={tabValue} index={2}>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
-                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                  Service Health
-                </Typography>
-                <List>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
-                    </ListItemIcon>
-                    <ListItemText primary="Data Collection Service" secondary="Operational" />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
-                    </ListItemIcon>
-                    <ListItemText primary="Alert Processing" secondary="Operational" />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <WarningIcon sx={{ color: theme.palette.warning.main }} />
-                    </ListItemIcon>
-                    <ListItemText primary="Weather API" secondary="Degraded Performance" />
-                  </ListItem>
-                </List>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      อุณหภูมิ 24 ชั่วโมง
+                    </Typography>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={timeSeriesData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="time" />
+                        <YAxis />
+                        <RechartsTooltip />
+                        <Line 
+                          type="monotone" 
+                          dataKey="temperature" 
+                          stroke="#2e7d32" 
+                          strokeWidth={2}
+                          dot={{ fill: '#2e7d32' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                  Network Status
-                </Typography>
-                <List>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
-                    </ListItemIcon>
-                    <ListItemText primary="MQTT Broker" secondary="Connected" />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
-                    </ListItemIcon>
-                    <ListItemText primary="Database Connection" secondary="Stable" />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
-                    </ListItemIcon>
-                    <ListItemText primary="Edge Devices" secondary="12/14 Online" />
-                  </ListItem>
-                </List>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      ความชื้น 24 ชั่วโมง
+                    </Typography>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={timeSeriesData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="time" />
+                        <YAxis />
+                        <RechartsTooltip />
+                        <Line 
+                          type="monotone" 
+                          dataKey="humidity" 
+                          stroke="#4caf50" 
+                          strokeWidth={2}
+                          dot={{ fill: '#4caf50' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      สถานะอุปกรณ์
+                    </Typography>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={[
+                        { name: 'ออนไลน์', value: onlineDevices, color: '#4caf50' },
+                        { name: 'ออฟไลน์', value: offlineDevices, color: '#f44336' },
+                        { name: 'เตือน', value: warningDevices, color: '#ff9800' },
+                      ]}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <RechartsTooltip />
+                        <Bar dataKey="value" fill="#2e7d32" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </Grid>
             </Grid>
-          </CardContent>
+          </TabPanel>
         </Card>
-      )}
-    </Box>
+      </Box>
+    </DashboardLayout>
   );
 };
 

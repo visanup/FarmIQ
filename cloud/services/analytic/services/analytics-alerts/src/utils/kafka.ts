@@ -1,23 +1,50 @@
 // src/utils/kafka.ts
 import { Kafka } from 'kafkajs';
+import { KAFKA_BROKERS } from '../configs/config';
 
-let producer: import('kafkajs').Producer | null = null;
+// Create Kafka client
+const kafka = new Kafka({
+  clientId: 'analytics-alerts',
+  brokers: KAFKA_BROKERS.split(',')
+});
 
-function getProducer() {
-  if (producer) return producer;
-  const brokers = process.env.KAFKA_BROKERS;
-  if (!brokers) return null;
-  const kafka = new Kafka({ clientId: 'customer-service', brokers: brokers.split(',') });
-  producer = kafka.producer();
-  return producer;
-}
+// Create Kafka consumer
+export const consumer = kafka.consumer({
+  groupId: 'analytics-alerts-group'
+});
 
-export async function publishCustomerEvent(type: 'created'|'updated'|'deleted', payload: any) {
-  const p = getProducer(); if (!p) return;
-  await p.connect().catch(() => {});
-  await p.send({
-    topic: `customer.${type}.v1`,
-    messages: [{ key: String(payload.customer_id ?? ''), value: JSON.stringify({ type, at: new Date().toISOString(), payload }) }],
-  });
-}
+// Create Kafka producer
+export const producer = kafka.producer();
 
+/**
+ * Connect to Kafka and subscribe to topics
+ * @param topics Topics to subscribe to
+ */
+export const connectKafka = async (topics: string[]) => {
+  try {
+    await consumer.connect();
+    await producer.connect();
+    
+    for (const topic of topics) {
+      await consumer.subscribe({ topic });
+    }
+    
+    console.log('✅ Connected to Kafka');
+  } catch (error) {
+    console.error('❌ Failed to connect to Kafka:', error);
+    throw error;
+  }
+};
+
+/**
+ * Disconnect from Kafka
+ */
+export const disconnectKafka = async () => {
+  try {
+    await consumer.disconnect();
+    await producer.disconnect();
+    console.log('🔌 Disconnected from Kafka');
+  } catch (error) {
+    console.error('❌ Failed to disconnect from Kafka:', error);
+  }
+};

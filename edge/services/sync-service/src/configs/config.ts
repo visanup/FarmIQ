@@ -73,5 +73,10 @@ export const SERVICE_API_KEY = process.env.API_KEY ?? "";
 
 export const SYNC_INTERVAL_MINUTES = Number(process.env.SYNC_INTERVAL_MINUTES) || 5;
 
+export const CLOUD_API_URL = process.env.CLOUD_API_URL || 'http://localhost:3000/api';
+export const CLOUD_API_KEY = process.env.CLOUD_API_KEY || 'your-api-key';
+
+export const NODE_ENV = process.env.NODE_ENV || 'development';
+
 
 

@@ -1,94 +1,170 @@
-// services/auth-service/src/server.ts
-import 'reflect-metadata';
-import express, { Request, Response, RequestHandler } from 'express';
-import cors from 'cors';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { prisma } from './lib/prisma';
+import { PORT, HOST, NODE_ENV, CORS_ALLOWED_ORIGINS } from './configs/config';
+import { authRoutes } from './routes/auth.routes';
+import { userRoutes } from './routes/user.routes';
+import { customerRoutes } from './routes/customer.routes';
 
-// ใช้ require ลด friction เรื่อง types ของ lib UI
-const swaggerUiModule = require('swagger-ui-express') as {
-  serve: RequestHandler[];
-  setup: (swaggerDoc: any, opts?: any) => RequestHandler;
-};
-
-import { DataSource } from 'typeorm';
-import { createAuthRouter } from './routes/auth.route';
-import { User } from './models/user.model';
-import { RefreshToken } from './models/refreshToken.model';
-import {
-  DATABASE_URL,
-  PORT,
-  CORS_ALLOW_CREDENTIALS,
-  CORS_ALLOWED_ORIGINS,
-  CORS_ALLOW_HEADERS,
-  CORS_ALLOW_METHODS,
-} from './configs/config';
-import { buildOpenApiDoc } from './utils/openapi';
-
-export const AppDataSource = new DataSource({
-  type: 'postgres',
-  url: DATABASE_URL,
-  schema: 'auth',
-  entities: [User, RefreshToken],
-  synchronize: false, // ใช้ตาม schema ที่คุณเซ็ตผ่าน SQL
-  // logging: true, // เปิดถ้าต้องการ debug SQL
+const fastify = Fastify({
+  logger: {
+    level: NODE_ENV === 'development' ? 'info' : 'warn',
+  },
 });
 
-AppDataSource.initialize()
-  .then(() => {
-    const app = express();
-
-    // --- CORS จาก ENV ---
-    app.use(
-      cors({
-        credentials: CORS_ALLOW_CREDENTIALS,
-        origin: (origin, cb) => {
-          if (!origin) return cb(null, true); // อนุญาต non-browser client
-          if (
-            CORS_ALLOWED_ORIGINS.includes('*') ||
-            CORS_ALLOWED_ORIGINS.includes(origin)
-          ) {
-            return cb(null, true);
-          }
-          return cb(new Error('Not allowed by CORS'));
-        },
-        methods: CORS_ALLOW_METHODS === '*' ? undefined : CORS_ALLOW_METHODS,
-        allowedHeaders: CORS_ALLOW_HEADERS === '*' ? undefined : CORS_ALLOW_HEADERS,
-      })
-    );
-
-    app.use(express.json());
-
-    // --- Swagger UI (สเปกมาจาก Zod) ---
-    const baseUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
-    const openapiDoc = buildOpenApiDoc(baseUrl);
-
-    const serveHandlers = swaggerUiModule.serve;
-    const setupHandler = swaggerUiModule.setup(openapiDoc, { explorer: true });
-
-    app.get('/', (_req: Request, res: Response) => res.redirect('/api-docs'));
-    app.use('/api-docs', ...serveHandlers, setupHandler);
-
-    // --- Healthcheck ---
-    app.get('/health', (_req: Request, res: Response) => {
-      res.json({ ok: true, service: 'auth-service', time: new Date().toISOString() });
-    });
-
-    // --- Routes ---
-    app.use('/api/auth', createAuthRouter(AppDataSource));
-
-    app.listen(PORT, () => {
-      console.log(`🛡️  Auth service running on port ${PORT}`);
-      console.log(`📖  Swagger UI (Zod): ${baseUrl}/api-docs`);
-    });
-  })
-  .catch((error) => {
-    console.error('❌ Error initializing data source', error);
-    process.exit(1);
+// Register plugins
+async function registerPlugins() {
+  // CORS
+  await fastify.register(cors, {
+    origin: CORS_ALLOWED_ORIGINS === '*' ? true : CORS_ALLOWED_ORIGINS.split(','),
+    credentials: true,
   });
 
-// กันเหตุไม่คาดคิด
+  // Helmet for security
+  await fastify.register(helmet);
+
+  // Swagger documentation
+  await fastify.register(swagger, {
+    openapi: {
+      openapi: '3.0.0',
+      info: {
+        title: 'FarmIQ Auth Service API',
+        description: 'Authentication and user management service for FarmIQ',
+        version: '1.0.0',
+      },
+      servers: [
+        {
+          url: `http://${HOST}:${PORT}`,
+          description: 'Development server',
+        },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
+      },
+    },
+  });
+
+  await fastify.register(swaggerUi, {
+    routePrefix: '/api-docs',
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: false,
+    },
+    uiHooks: {
+      onRequest: function (request, reply, next) {
+        next();
+      },
+      preHandler: function (request, reply, next) {
+        next();
+      },
+    },
+    staticCSP: true,
+    transformStaticCSP: (header) => header,
+    transformSpecification: (swaggerObject, request, reply) => {
+      return swaggerObject;
+    },
+    transformSpecificationClone: true,
+  });
+}
+
+// Register routes
+async function registerRoutes() {
+  // Health check
+  fastify.get('/health', async (request, reply) => {
+    return {
+      ok: true,
+      service: 'auth-service',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    };
+  });
+
+  // API routes
+  await fastify.register(authRoutes, { prefix: '/api/auth' });
+  await fastify.register(userRoutes, { prefix: '/api/users' });
+  await fastify.register(customerRoutes, { prefix: '/api/customers' });
+
+  // Root redirect to docs
+  fastify.get('/', async (request, reply) => {
+    return reply.redirect('/api-docs');
+  });
+}
+
+// Add Prisma to Fastify instance
+fastify.decorate('prisma', prisma);
+
+// Error handler
+fastify.setErrorHandler((error, request, reply) => {
+  fastify.log.error(error);
+  
+  if (error.validation) {
+    return reply.status(400).send({
+      error: 'Validation error',
+      details: error.validation,
+    });
+  }
+
+  return reply.status(500).send({
+    error: 'Internal server error',
+    message: NODE_ENV === 'development' ? error.message : 'Something went wrong',
+  });
+});
+
+// Graceful shutdown
+const gracefulShutdown = async (signal: string) => {
+  fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+  
+  try {
+    await fastify.close();
+    await prisma.$disconnect();
+    fastify.log.info('Server closed successfully');
+    process.exit(0);
+  } catch (error) {
+    fastify.log.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Start server
+async function start() {
+  try {
+    // Register plugins and routes
+    await registerPlugins();
+    await registerRoutes();
+
+    // Start server
+    await fastify.listen({ port: PORT, host: HOST });
+    
+    console.log(`🛡️  Auth service running on http://${HOST}:${PORT}`);
+    console.log(`📖  Swagger UI: http://${HOST}:${PORT}/api-docs`);
+  } catch (error) {
+    fastify.log.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Handle shutdown signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle unhandled rejections
 process.on('unhandledRejection', (reason) => {
-  console.error('UNHANDLED REJECTION:', reason);
+  fastify.log.error('Unhandled rejection:', reason);
 });
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
+
+process.on('uncaughtException', (error) => {
+  fastify.log.error('Uncaught exception:', error);
+  process.exit(1);
 });
+
+// Start the server
+start();

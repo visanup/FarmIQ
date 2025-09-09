@@ -1,34 +1,42 @@
-# services/sensor-service/Dockerfile
-
-# ——— Stage 1: build ———
-FROM node:18-alpine AS builder
-
-WORKDIR /app
-
-# install dev & prod deps
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
-
-# compile TS to JS
-COPY tsconfig.json ./
-COPY src ./src
-RUN yarn build
-
-# ——— Stage 2: runtime ———
 FROM node:18-alpine
 
+# Install dependencies for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
-# only prod deps
+# Copy package files
 COPY package.json yarn.lock ./
-RUN yarn install --production --frozen-lockfile
 
-# copy compiled output
-COPY --from=builder /app/dist ./dist
+# Install dependencies
+RUN yarn install --frozen-lockfile
 
-# expose the sensor-service port
-ENV NODE_ENV=production
-EXPOSE 4107
+# Copy source code
+COPY . .
 
-# start the service
+# Generate Prisma client
+RUN yarn db:generate
+
+# Build the application
+RUN yarn build
+
+# Remove dev dependencies
+RUN yarn install --production --frozen-lockfile && yarn cache clean
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
+
+# Change ownership
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Expose port
+EXPOSE 7303
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "http=require('http');http.get('http://localhost:7303/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
+# Start the application
 CMD ["node", "dist/server.js"]

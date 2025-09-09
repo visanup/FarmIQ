@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-// SignIn page for FarmIQ Analytics
 import {
   Box,
   Card,
@@ -7,48 +6,71 @@ import {
   TextField,
   Button,
   Typography,
-  Link,
   Alert,
   CircularProgress,
+  InputAdornment,
+  IconButton,
+  Divider,
+  Link,
   Container,
   Paper,
-  useTheme,
 } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import {
+  Visibility,
+  VisibilityOff,
+  Email,
+  Lock,
+  Agriculture,
+} from '@mui/icons-material';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useAuthStore } from '../../stores/authStore';
 
-const SignInPage: React.FC = () => {
-  const theme = useTheme();
-  const { signIn, isLoading, error, clearError } = useAuth();
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
+const loginSchema = z.object({
+  email: z.string().email('กรุณากรอกอีเมลที่ถูกต้อง'),
+  password: z.string().min(1, 'กรุณากรอกรหัสผ่าน'),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
+
+export const SignInPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { login, isLoading, error, clearError } = useAuthStore();
+  const [showPassword, setShowPassword] = useState(false);
+
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-    // Clear error when user starts typing
-    if (error) {
+  const onSubmit = async (data: LoginFormData) => {
+    try {
       clearError();
+      await login(data);
+      navigate('/');
+    } catch (error) {
+      // Error is handled by the store
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await signIn(formData.username, formData.password);
+  const handleTogglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
     <Box
       sx={{
         minHeight: '100vh',
-        background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
-          : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -57,123 +79,141 @@ const SignInPage: React.FC = () => {
     >
       <Container maxWidth="sm">
         <Paper
-          elevation={theme.palette.mode === 'dark' ? 8 : 2}
+          elevation={24}
           sx={{
-            p: 4,
             borderRadius: 3,
-            background: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
+            overflow: 'hidden',
           }}
         >
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
-            <Typography
-              variant="h1"
+          {/* Header */}
+          <Box
+            sx={{
+              background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+              color: 'white',
+              p: 4,
+              textAlign: 'center',
+            }}
+          >
+            <Box
               sx={{
-                fontSize: '2.5rem',
-                fontWeight: 700,
-                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 mb: 2,
               }}
             >
-              🌱
+              <Agriculture sx={{ fontSize: 40, mr: 1 }} />
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
+                FarmIQ
+              </Typography>
+            </Box>
+            <Typography variant="h6" sx={{ opacity: 0.9 }}>
+              Analytics Dashboard
             </Typography>
-            <Typography
-              variant="h4"
-              component="h1"
-              sx={{
-                fontWeight: 600,
-                color: theme.palette.text.primary,
-                mb: 1,
-              }}
-            >
-              ยินดีต้อนรับกลับ
-            </Typography>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ fontSize: '1.1rem' }}
-            >
-              เข้าสู่ระบบ FarmIQ Analytics
+            <Typography variant="body2" sx={{ opacity: 0.8, mt: 1 }}>
+              เข้าสู่ระบบเพื่อจัดการฟาร์มของคุณ
             </Typography>
           </Box>
 
-          {error && (
-            <Alert
-              severity="error"
-              sx={{
-                mb: 3,
-                borderRadius: 2,
-              }}
-              onClose={clearError}
-            >
-              {error}
-            </Alert>
-          )}
+          {/* Form */}
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h5" gutterBottom sx={{ textAlign: 'center', mb: 3, fontWeight: 600 }}>
+              เข้าสู่ระบบ
+            </Typography>
 
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
-            <TextField
-              fullWidth
-              name="username"
-              label="ชื่อผู้ใช้"
-              value={formData.username}
-              onChange={handleInputChange}
-              margin="normal"
-              required
-              autoFocus
-              disabled={isLoading}
-              sx={{
-                mb: 2,
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                },
-              }}
-            />
-            <TextField
-              fullWidth
-              name="password"
-              label="รหัสผ่าน"
-              type="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              margin="normal"
-              required
-              disabled={isLoading}
-              sx={{
-                mb: 3,
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                },
-              }}
-            />
+            {error && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+            )}
 
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              size="large"
-              disabled={isLoading || !formData.username || !formData.password}
-              sx={{
-                py: 1.5,
-                borderRadius: 2,
-                fontSize: '1.1rem',
-                fontWeight: 600,
-                textTransform: 'none',
-                mb: 3,
-                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                '&:hover': {
-                  background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-                },
-              }}
-            >
-              {isLoading ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                'เข้าสู่ระบบ'
-              )}
-            </Button>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <Box sx={{ mb: 3 }}>
+                <Controller
+                  name="email"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      fullWidth
+                      label="อีเมล"
+                      type="email"
+                      error={!!errors.email}
+                      helperText={errors.email?.message}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Email color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
+                      sx={{ mb: 2 }}
+                    />
+                  )}
+                />
+
+                <Controller
+                  name="password"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      fullWidth
+                      label="รหัสผ่าน"
+                      type={showPassword ? 'text' : 'password'}
+                      error={!!errors.password}
+                      helperText={errors.password?.message}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Lock color="action" />
+                          </InputAdornment>
+                        ),
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              aria-label="toggle password visibility"
+                              onClick={handleTogglePasswordVisibility}
+                              edge="end"
+                            >
+                              {showPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  )}
+                />
+              </Box>
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={isLoading}
+                sx={{
+                  py: 1.5,
+                  mb: 2,
+                  background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #45a049 0%, #4CAF50 100%)',
+                  },
+                }}
+              >
+                {isLoading ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  'เข้าสู่ระบบ'
+                )}
+              </Button>
+            </form>
+
+            <Divider sx={{ my: 3 }}>
+              <Typography variant="body2" color="text.secondary">
+                หรือ
+              </Typography>
+            </Divider>
 
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">
@@ -182,7 +222,7 @@ const SignInPage: React.FC = () => {
                   component={RouterLink}
                   to="/signup"
                   sx={{
-                    color: theme.palette.primary.main,
+                    color: 'primary.main',
                     textDecoration: 'none',
                     fontWeight: 500,
                     '&:hover': {
@@ -194,7 +234,29 @@ const SignInPage: React.FC = () => {
                 </Link>
               </Typography>
             </Box>
-          </Box>
+
+            {/* Demo Credentials */}
+            <Box
+              sx={{
+                mt: 3,
+                p: 2,
+                bgcolor: 'grey.50',
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'grey.200',
+              }}
+            >
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                <strong>Demo Credentials:</strong>
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Email: demo@farmiq.com
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Password: demo123
+              </Typography>
+            </Box>
+          </CardContent>
         </Paper>
       </Container>
     </Box>

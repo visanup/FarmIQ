@@ -17,6 +17,9 @@ from app.database import SessionLocal
 from app.services.aggregator import aggregate
 from app.utils.time import floor_to_bucket
 from app.config import Config
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- graceful shutdown flag ---
 _stop = threading.Event()
@@ -39,6 +42,9 @@ def session_scope():
 
 
 def run_worker():
+    """Main worker function that processes Kafka messages"""
+    logger.info("Starting analytics stream worker")
+    
     # ติดตั้ง signal handler
     try:
         signal.signal(signal.SIGINT, _handle_sig)
@@ -52,11 +58,19 @@ def run_worker():
     # ถ้าไม่ได้กำหนด KAFKA_TOPICS ใน .env ให้ subscribe ตาม registry
     if not os.getenv("KAFKA_TOPICS"):
         c.subscribe(reg_topics())
+        logger.info(f"Subscribed to topics from registry: {reg_topics()}")
+    else:
+        logger.info(f"Subscribed to configured topics: {Config.KAFKA_TOPICS}")
+
+    processed_count = 0
+    error_count = 0
 
     while not _stop.is_set():
         try:
             msgs = c.consume(num_messages=500, timeout=1.0)
-        except KafkaException:
+        except KafkaException as e:
+            logger.error(f"Kafka consumer error: {e}")
+            error_count += 1
             continue
 
         if not msgs:
@@ -151,9 +165,15 @@ def run_worker():
 
         # commit offset หลังเขียนสำเร็จ
         c.commit(asynchronous=False)
+        processed_count += len(msgs)
+        
+        # Log progress every 1000 messages
+        if processed_count % 1000 == 0:
+            logger.info(f"Processed {processed_count} messages, errors: {error_count}")
 
     # ปิด consumer เมื่อได้รับสัญญาณหยุด
+    logger.info(f"Shutting down worker. Total processed: {processed_count}, errors: {error_count}")
     try:
         c.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Error closing consumer: {e}")

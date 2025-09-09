@@ -1,6 +1,6 @@
 // src/stores/analyticsFeature.repo.ts
 
-import { AppDataSource } from '../utils/dataSource';
+import { prisma } from '../lib/prisma';
 import { BaseReading } from '../types/events';
 
 const UPSERT_SQL = `
@@ -19,7 +19,7 @@ DO UPDATE SET
 export async function upsertMinuteFeature(ev: BaseReading) {
   const t = new Date(Math.floor(ev.time.getTime() / 60000) * 60000); // ปัดลงเป็นนาที
   const v = ev.value;
-  await AppDataSource.query(UPSERT_SQL, [t, ev.tenant_id, ev.device_id, ev.metric, v, v * v]);
+  await prisma.$executeRaw`${UPSERT_SQL}`;
 }
 
 

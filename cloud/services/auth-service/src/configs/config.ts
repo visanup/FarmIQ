@@ -1,90 +1,57 @@
-// src/configs/config.ts
-
+import { z } from 'zod';
 import * as dotenv from 'dotenv';
-import { join, dirname } from 'path';
-import { existsSync } from 'fs';
-import type { Algorithm } from 'jsonwebtoken';
 
-/** หาไฟล์ .env แบบยืดหยุ่น */
-function locateEnvFile(filename = '.env'): string | undefined {
-  const fromEnv = process.env.ENV_PATH;
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+// Load environment variables
+dotenv.config();
 
-  const roots = [
-    process.cwd(),
-    __dirname,
-    join(__dirname, '..'),
-    join(__dirname, '../..'),
-    join(__dirname, '../../..'),
-  ];
+const configSchema = z.object({
+  // Server
+  PORT: z.string().transform(Number).default('7300'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  HOST: z.string().default('0.0.0.0'),
 
-  for (const root of roots) {
-    let currentDir = root;
-    for (let i = 0; i < 6; i++) {
-      const candidate = join(currentDir, filename);
-      if (existsSync(candidate)) return candidate;
-      currentDir = dirname(currentDir);
-    }
-  }
-  return undefined;
-}
+  // Database
+  DATABASE_URL: z.string().min(1),
 
-const envPath = locateEnvFile();
-if (envPath) {
-  dotenv.config({ path: envPath });
-  console.log(`[config] loaded .env from: ${envPath}`);
-} else {
-  dotenv.config();
-  console.warn('[config] .env not found; using process.env only');
-}
+  // JWT
+  JWT_SECRET: z.string().min(1),
+  JWT_ALGORITHM: z.enum(['HS256', 'HS384', 'HS512']).default('HS256'),
+  ACCESS_TOKEN_EXPIRE_MINUTES: z.string().transform(Number).default('1440'),
+  REFRESH_TOKEN_EXPIRE_DAYS: z.string().transform(Number).default('7'),
 
-/** สร้าง DATABASE_URL อัตโนมัติถ้ายังไม่มี โดยอาศัย CLOUD_DB_* หรือ DB_* */
-(function synthesizeDbUrl() {
-  if (process.env.DATABASE_URL) return;
+  // CORS
+  CORS_ALLOW_CREDENTIALS: z.string().transform(val => val === 'true').default('true'),
+  CORS_ALLOWED_ORIGINS: z.string().default('*'),
+  CORS_ALLOW_METHODS: z.string().default('*'),
+  CORS_ALLOW_HEADERS: z.string().default('*'),
 
-  const host = process.env.DB_HOST;
-  const port = process.env.DB_PORT|| '5432';
-  const name = process.env.DB_NAME;
-  const user = process.env.DB_USER;
-  const pass = process.env.DB_PASSWORD ;
+  // Kafka
+  KAFKA_BROKERS: z.string().default('localhost:9092'),
+  KAFKA_SSL: z.string().transform(val => val === 'true').default('false'),
 
-  if (host && name && user != null && pass != null) {
-    process.env.DATABASE_URL =
-      `postgres://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${name}`;
-    console.log('[config] synthesized DATABASE_URL from *_DB_* variables');
-  }
-})();
+  // Logging
+  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+});
 
-/** พอร์ตของเซอร์วิส (รองรับทั้ง AUTH_PORT และ AUTH_SERVICE_PORT) */
-export const PORT = Number(process.env.AUTH_PORT || process.env.AUTH_SERVICE_PORT || 7300);
+const config = configSchema.parse(process.env);
 
-/** DB URL */
-export const DATABASE_URL = process.env.DATABASE_URL!;
+export const {
+  PORT,
+  NODE_ENV,
+  HOST,
+  DATABASE_URL,
+  JWT_SECRET,
+  JWT_ALGORITHM,
+  ACCESS_TOKEN_EXPIRE_MINUTES,
+  REFRESH_TOKEN_EXPIRE_DAYS,
+  CORS_ALLOW_CREDENTIALS,
+  CORS_ALLOWED_ORIGINS,
+  CORS_ALLOW_METHODS,
+  CORS_ALLOW_HEADERS,
+  KAFKA_BROKERS,
+  KAFKA_SSL,
+  LOG_LEVEL,
+} = config;
 
-/** Customer Service URL
- *  ลำดับความสำคัญ:
- *   1) CUSTOMER_SERVICE_URL
- *   2) CUSTOMER_SERVICE_HOST + CUSTOMER_SERVICE_PORT + /api/customers
- *   3) fallback localhost:4107
- */
-const CUSTOMER_HOST = process.env.CUSTOMER_SERVICE_HOST || 'http://localhost';
-const CUSTOMER_PORT = process.env.CUSTOMER_SERVICE_PORT || '4107';
-export const CUSTOMER_SERVICE_URL =
-  process.env.CUSTOMER_SERVICE_URL || `${CUSTOMER_HOST}:${CUSTOMER_PORT}/api/customers`;
-
-/** JWT */
-export const JWT_SECRET = process.env.JWT_SECRET_KEY!;
-export const ALGORITHM: Algorithm = (process.env.ALGORITHM as Algorithm) || 'HS256';
-export const ACCESS_TOKEN_EXPIRE_MINUTES =
-  Number(process.env.TOKEN_EXPIRATION_MINUTES) || 1440;
-export const REFRESH_TOKEN_EXPIRE_DAYS =
-  Number(process.env.REFRESH_TOKEN_EXPIRE_DAYS) || 7;
-
-/** CORS (อ่านจาก ENV) */
-export const CORS_ALLOW_CREDENTIALS = String(process.env.CORS_ALLOW_CREDENTIALS || 'true') === 'true';
-export const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || '*')
-  .split(',')
-  .map(s => s.trim());
-export const CORS_ALLOW_METHODS = (process.env.CORS_ALLOW_METHODS || '*');
-export const CORS_ALLOW_HEADERS = (process.env.CORS_ALLOW_HEADERS || '*');
+export type Config = typeof config;
 

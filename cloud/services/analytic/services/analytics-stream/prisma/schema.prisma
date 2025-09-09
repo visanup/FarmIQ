@@ -1,0 +1,229 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["analytics"]
+}
+
+model MinuteFeatures {
+  bucket      DateTime @db.Timestamptz
+  tenantId    String   @map("tenant_id")
+  deviceId    String   @map("device_id")
+  sensorId    String   @map("sensor_id") @default("")
+  metric      String
+  tags        Json     @default("{}")
+  tagsHash    String   @map("tags_hash")
+  valueCount  BigInt   @map("value_count") @default(0)
+  valueSum    Float    @map("value_sum") @default(0)
+  valueMin    Float    @map("value_min")
+  valueMax    Float    @map("value_max")
+  valueSumsq  Float    @map("value_sumsq") @default(0)
+
+  @@id([bucket, tenantId, deviceId, metric, sensorId, tagsHash])
+  @@map("minute_features")
+  @@schema("analytics")
+}
+
+model DimDevice {
+  tenantId  String   @map("tenant_id")
+  deviceId  String   @map("device_id")
+  farmId    String?  @map("farm_id")
+  houseId   String?  @map("house_id")
+  type      String?
+  status    String?
+  name      String?
+  model     String?
+  vendor    String?
+  serialNo  String?  @map("serial_no")
+  meta      Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, deviceId])
+  @@map("dim_device")
+  @@schema("analytics")
+}
+
+model DimFarm {
+  tenantId  String   @map("tenant_id")
+  farmId    String   @map("farm_id")
+  name      String?
+  lat       Float?
+  lon       Float?
+  region    String?
+  meta      Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, farmId])
+  @@map("dim_farm")
+  @@schema("analytics")
+}
+
+model DimHouse {
+  tenantId  String   @map("tenant_id")
+  houseId   String   @map("house_id")
+  farmId    String   @map("farm_id")
+  name      String?
+  capacity  Int?
+  type      String?
+  meta      Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, houseId])
+  @@map("dim_house")
+  @@schema("analytics")
+}
+
+model DimFlock {
+  tenantId   String   @map("tenant_id")
+  flockId    String   @map("flock_id")
+  houseId    String   @map("house_id")
+  farmId     String?  @map("farm_id")
+  breed      String?
+  sex        String?
+  population Int?
+  startDate  DateTime? @map("start_date") @db.Date
+  endDate    DateTime? @map("end_date") @db.Date
+  meta       Json     @default("{}")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, flockId])
+  @@map("dim_flock")
+  @@schema("analytics")
+}
+
+model AnalyticsAgg {
+  bucketStart DateTime @map("bucket_start") @db.Timestamptz
+  windowS     Int      @map("window_s")
+  tenantId    String   @map("tenant_id")
+  factoryId   String   @map("factory_id")
+  machineId   String   @map("machine_id")
+  sensorId    String?  @map("sensor_id")
+  metric      String
+  countN      BigInt   @map("count_n") @default(0)
+  sumVal      Float?   @map("sum_val")
+  avgVal      Float?   @map("avg_val")
+  minVal      Float?   @map("min_val")
+  maxVal      Float?   @map("max_val")
+  stddevVal   Float?   @map("stddev_val")
+  p95Val      Float?   @map("p95_val")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, factoryId, machineId, metric, windowS, bucketStart])
+  @@map("analytics_agg")
+  @@schema("analytics")
+}
+
+model AnalyticsEvent {
+  time        DateTime @db.Timestamptz
+  tenantId    String   @map("tenant_id")
+  domain      String
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  eventType   String   @map("event_type")
+  value       Float?
+  unit        String?
+  severity    Int?
+  payload     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@id([tenantId, domain, entityType, entityId, eventType, time])
+  @@map("analytics_event")
+  @@schema("analytics")
+}
+
+model AnalyticsEventRollup {
+  bucketStart DateTime @map("bucket_start") @db.Timestamptz
+  windowS     Int      @map("window_s")
+  tenantId    String   @map("tenant_id")
+  domain      String
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  eventType   String   @map("event_type")
+  countN      BigInt   @map("count_n") @default(0)
+  sumVal      Float?   @map("sum_val")
+  avgVal      Float?   @map("avg_val")
+  minVal      Float?   @map("min_val")
+  maxVal      Float?   @map("max_val")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, domain, entityType, entityId, eventType, windowS, bucketStart])
+  @@map("analytics_event_rollup")
+  @@schema("analytics")
+}
+
+model AnalyticsKpi {
+  period       String   @db.VarChar(10) // day, week, month
+  periodStart  DateTime @map("period_start") @db.Timestamptz
+  tenantId     String   @map("tenant_id")
+  factoryId    String   @map("factory_id")
+  machineId    String   @map("machine_id")
+  sensorId     String?  @map("sensor_id")
+  metric       String
+  n            BigInt   @default(0)
+  meanVal      Float?   @map("mean_val")
+  stddevVal    Float?   @map("stddev_val")
+  cp           Float?
+  cpk          Float?
+  pp           Float?
+  ppk          Float?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, factoryId, machineId, metric, period, periodStart])
+  @@map("analytics_kpi")
+  @@schema("analytics")
+}
+
+model AnalyticsAnomaly {
+  time       DateTime @db.Timestamptz
+  tenantId   String   @map("tenant_id")
+  factoryId  String   @map("factory_id")
+  machineId  String   @map("machine_id")
+  sensorId   String?  @map("sensor_id")
+  metric     String
+  ruleCode   String   @map("rule_code")
+  severity   Int      @default(1)
+  value      Float
+  cl         Float?
+  ucl        Float?
+  lcl        Float?
+  zscore     Float?
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([tenantId, factoryId, machineId, metric, time, ruleCode])
+  @@map("analytics_anomaly")
+  @@schema("analytics")
+}
+
+model AnalyticsAlerts {
+  id            Int      @id @default(autoincrement())
+  type          String
+  message       String
+  metadata      Json?
+  isResolved    Boolean  @default(false) @map("is_resolved")
+  createdAt     DateTime @default(now()) @map("created_at")
+  resolvedAt    DateTime? @map("resolved_at")
+  tenantId      String   @map("tenant_id")
+  factoryId     String   @map("factory_id")
+  deviceId      String   @map("device_id")
+  metric        String
+  value         Float
+  alertTime     DateTime @map("alert_time") @db.Timestamptz
+  severity      String
+  alertType     String   @map("alert_type")
+  additionalInfo Json?   @map("additional_info")
+
+  @@map("analytics_alerts")
+  @@schema("analytics")
+}

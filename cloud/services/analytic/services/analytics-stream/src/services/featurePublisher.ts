@@ -1,22 +1,21 @@
 // src/services/featurePublisher.ts
 
-import { AppDataSource } from '../utils/dataSource';
+import { prisma } from '../lib/prisma';
 import { redis } from '../stores/redis';
 import { producer } from '../utils/kafka';
 import { env, topicOut } from '../configs/config';
 import { logger } from '../utils/logger';
-
-const SELECT_FINALIZED = `
-SELECT bucket, tenant_id, device_id, metric, count, sum, min, max, sumsq
-FROM analytics.analytics_minute_features
-WHERE bucket < date_trunc('minute', now())
-  AND bucket >= now() - interval '2 hour'
-ORDER BY bucket DESC
-LIMIT 2000;
-`;
+import { Prisma } from '@prisma/client';
 
 export async function publishFinalizedMinuteFeatures() {
-  const rows: any[] = await AppDataSource.query(SELECT_FINALIZED);
+  const rows: any[] = await prisma.$queryRaw(Prisma.sql`
+    SELECT bucket, tenant_id, device_id, metric, value_count as count, value_sum as sum, value_min as min, value_max as max, value_sumsq as sumsq
+    FROM analytics.minute_features
+    WHERE bucket < date_trunc('minute', now())
+      AND bucket >= now() - interval '2 hour'
+    ORDER BY bucket DESC
+    LIMIT 2000
+  `);
   if (!rows.length) return;
 
   const msgs = rows.map((r) => {

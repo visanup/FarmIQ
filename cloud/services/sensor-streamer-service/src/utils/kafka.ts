@@ -1,44 +1,26 @@
 // src/utils/kafka.ts
 import { Kafka, logLevel, SASLOptions, CompressionTypes, Partitioners } from 'kafkajs';
-import { KAFKA } from '../configs/config';
+import { KAFKA_BROKERS, KAFKA_SSL, KAFKA_CLIENT_ID } from '../configs/config';
 
 // ---- log ค่า ENV ดิบ ๆ เพื่อดีบั๊ก ----
 console.log('[kafka.config.raw]', JSON.stringify({
-  brokers: KAFKA.brokers,
-  ssl: (KAFKA as any).ssl,
-  sasl: KAFKA.sasl ? { mechanism: (KAFKA.sasl as any).mechanism } : undefined,
+  brokers: KAFKA_BROKERS,
+  ssl: KAFKA_SSL,
 }));
 
 // ---- ตีความ ssl ให้เป็น boolean แท้ ๆ (กันกรณีถูกส่งมาเป็นสตริง) ----
-const sslFlag =
-  typeof (KAFKA as any).ssl === 'string'
-    ? (KAFKA as any).ssl.toLowerCase() === 'true'
-    : !!(KAFKA as any).ssl;
+const sslFlag = KAFKA_SSL;
 
-// ---- ประกอบ SASL ให้ตรง type ของ kafkajs แบบปลอดภัย ----
-type SaslMech = 'plain' | 'scram-sha-256' | 'scram-sha-512';
-let sasl: SASLOptions | undefined;
-if (KAFKA.sasl && (KAFKA.sasl as any).mechanism) {
-  const mech = (KAFKA.sasl as any).mechanism as SaslMech;
-  const user = (KAFKA.sasl as any).username;
-  const pass = (KAFKA.sasl as any).password;
-  if (user && pass && (mech === 'plain' || mech === 'scram-sha-256' || mech === 'scram-sha-512')) {
-    sasl = { mechanism: mech, username: user, password: pass };
-  }
-}
-
-// ---- config ที่ “ถูกใช้จริง” ตอนสร้าง client ----
+// ---- config ที่ "ถูกใช้จริง" ตอนสร้าง client ----
 console.log('[kafka.config.effective]', JSON.stringify({
-  brokers: KAFKA.brokers,
+  brokers: KAFKA_BROKERS,
   ssl: sslFlag,
-  sasl: sasl ? { mechanism: sasl.mechanism } : undefined,
 }));
 
 const kafka = new Kafka({
-  clientId: KAFKA.clientId,
-  brokers: KAFKA.brokers,     // เช่น ["kafka:9092"]
-  ssl: sslFlag,               // ค่า effective ตามที่คำนวณ
-  sasl,                       // undefined ถ้าไม่ตั้งค่า
+  clientId: KAFKA_CLIENT_ID,
+  brokers: KAFKA_BROKERS.split(','),
+  ssl: sslFlag,
   logLevel: logLevel.INFO,
 });
 
