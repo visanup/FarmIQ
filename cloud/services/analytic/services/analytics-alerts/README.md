@@ -2,7 +2,7 @@
 
 Analytics alerts service for FarmIQ - manages and processes alerts from analytics data with real-time notifications.
 
-## 🏗️ Architecture
+## ๐—๏ธ Architecture
 
 - **Framework**: Express + TypeORM + PostgreSQL
 - **Database**: PostgreSQL with TimescaleDB (analytics schema)
@@ -10,13 +10,13 @@ Analytics alerts service for FarmIQ - manages and processes alerts from analytic
 - **Documentation**: Swagger/OpenAPI
 - **Port**: 7306
 
-## 📋 Prerequisites
+## ๐“ Prerequisites
 
 - Node.js 18+
 - PostgreSQL with TimescaleDB extension
 - Docker & Docker Compose (optional)
 
-## 🚀 Quick Start
+## ๐€ Quick Start
 
 ### 1. Database Setup
 
@@ -120,7 +120,7 @@ docker build -t analytics-alerts .
 docker run -p 7306:7306 --env-file .env analytics-alerts
 ```
 
-## 🧪 Testing
+## ๐งช Testing
 
 ### Health Checks
 
@@ -184,7 +184,7 @@ ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-## 📊 API Endpoints
+## ๐“ API Endpoints
 
 ### Authentication Required
 
@@ -209,7 +209,7 @@ All API endpoints require JWT authentication via `Authorization: Bearer <token>`
 | GET | `/health` | Health check |
 | GET | `/api-docs` | Swagger documentation |
 
-## 🔧 Configuration
+## ๐”ง Configuration
 
 ### Environment Variables
 
@@ -229,7 +229,7 @@ All API endpoints require JWT authentication via `Authorization: Bearer <token>`
 | `LINE_NOTIFY_TOKEN` | - | Line Notify token (optional) |
 | `ALERT_BACKEND` | - | Notification backend (optional) |
 
-## 🔄 Alert Processing Flow
+## ๐” Alert Processing Flow
 
 ### 1. **Alert Creation**
 - Alerts created via API or internal processes
@@ -251,7 +251,7 @@ All API endpoints require JWT authentication via `Authorization: Bearer <token>`
 - Swagger documentation
 - Error logging and monitoring
 
-## 📈 Alert Types
+## ๐“ Alert Types
 
 ### Severity Levels
 - **low**: Informational alerts
@@ -266,7 +266,7 @@ All API endpoints require JWT authentication via `Authorization: Bearer <token>`
 - **data_quality**: Data quality issues
 - **system_error**: System-level errors
 
-## 🚨 Troubleshooting
+## ๐จ Troubleshooting
 
 ### Common Issues
 
@@ -304,37 +304,37 @@ ENV=dev npm run dev
 docker logs farmiq-analytics-alerts -f
 ```
 
-## 📁 Project Structure
+## ๐“ Project Structure
 
 ```
 src/
-├── configs/
-│   └── config.ts           # Configuration management
-├── consumers/              # Kafka consumers (if needed)
-├── middlewares/
-│   ├── auth.ts            # JWT authentication
-│   ├── errorHandler.ts    # Error handling
-│   └── validation.ts      # Input validation
-├── models/
-│   └── alert.model.ts     # Alert entity
-├── pipelines/             # Data processing pipelines
-├── routes/
-│   └── alert.routes.ts    # Alert API routes
-├── schemas/               # Zod validation schemas
-├── services/
-│   ├── alert.service.ts   # Alert business logic
-│   └── notification.service.ts # Notification service
-├── stores/                # Data stores
-├── types/                 # TypeScript types
-├── utils/
-│   ├── dataSource.ts      # TypeORM configuration
-│   ├── logger.ts          # Logging utilities
-│   └── swagger.ts         # Swagger configuration
-├── index.ts               # Application entry point
-└── server.ts              # Server setup
+โ”โ”€โ”€ configs/
+โ”   โ””โ”€โ”€ config.ts           # Configuration management
+โ”โ”€โ”€ consumers/              # Kafka consumers (if needed)
+โ”โ”€โ”€ middlewares/
+โ”   โ”โ”€โ”€ auth.ts            # JWT authentication
+โ”   โ”โ”€โ”€ errorHandler.ts    # Error handling
+โ”   โ””โ”€โ”€ validation.ts      # Input validation
+โ”โ”€โ”€ models/
+โ”   โ””โ”€โ”€ alert.model.ts     # Alert entity
+โ”โ”€โ”€ pipelines/             # Data processing pipelines
+โ”โ”€โ”€ routes/
+โ”   โ””โ”€โ”€ alert.routes.ts    # Alert API routes
+โ”โ”€โ”€ schemas/               # Zod validation schemas
+โ”โ”€โ”€ services/
+โ”   โ”โ”€โ”€ alert.service.ts   # Alert business logic
+โ”   โ””โ”€โ”€ notification.service.ts # Notification service
+โ”โ”€โ”€ stores/                # Data stores
+โ”โ”€โ”€ types/                 # TypeScript types
+โ”โ”€โ”€ utils/
+โ”   โ”โ”€โ”€ dataSource.ts      # TypeORM configuration
+โ”   โ”โ”€โ”€ logger.ts          # Logging utilities
+โ”   โ””โ”€โ”€ swagger.ts         # Swagger configuration
+โ”โ”€โ”€ index.ts               # Application entry point
+โ””โ”€โ”€ server.ts              # Server setup
 ```
 
-## 🔒 Security
+## ๐”’ Security
 
 ### Authentication
 - JWT-based authentication
@@ -351,7 +351,7 @@ src/
 - No sensitive information leakage
 - Comprehensive logging
 
-## 🤝 Contributing
+## ๐ค Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -359,6 +359,55 @@ src/
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## ๐“ License
 
 This project is part of the FarmIQ platform.
+
+## Testing Helpers
+
+### Publish Test Feature to Kafka
+
+- From host (external listener):
+```bash
+cd cloud/services/analytic/services/analytics-alerts
+KAFKA_BROKERS=localhost:9094 node scripts/publish-feature.js \
+  --tenant tenant-001 --factory factory-001 --machine device-001 \
+  --sensor sensor-001 --metric temp --avg 36.7 --window 60
+```
+
+- From container (internal DNS):
+```bash
+docker exec -e KAFKA_BROKERS=kafka:9092 farmiq-analytics-alerts \
+  node /app/scripts/publish-feature.js \
+  --tenant tenant-001 --factory factory-001 --machine device-001 \
+  --sensor sensor-001 --metric temp --avg 36.7 --window 60
+```
+
+This publishes to topic `analytics.features` with a payload aligned to the service’s handler. If `avg > 30` and `metric=temp`, an alert of type `high_temperature` is created.
+
+### Kafka Brokers Note
+
+- Host: use `KAFKA_BROKERS=localhost:9094`
+- Container: use `KAFKA_BROKERS=kafka:9092`
+
+### cURL Examples (Alerts API)
+
+- List alerts (paged):
+```bash
+curl "http://localhost:7306/api/alerts?limit=10&page=1"
+```
+
+- List by tenant:
+```bash
+curl "http://localhost:7306/api/alerts/tenant/tenant-001?limit=10&page=1"
+```
+
+- Get by id:
+```bash
+curl "http://localhost:7306/api/alerts/1"
+```
+
+- Resolve alert:
+```bash
+curl -X PUT "http://localhost:7306/api/alerts/1/resolve"
+```

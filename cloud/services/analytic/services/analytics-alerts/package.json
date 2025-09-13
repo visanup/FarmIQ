@@ -9,7 +9,8 @@
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "publish:feature": "node scripts/publish-feature.js"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.1.0",
