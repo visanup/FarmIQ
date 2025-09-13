@@ -1,44 +1,50 @@
-# Economic Service
+﻿# Monitoring Service
 
-This microservice handles CRUD operations for farm economic data, including costs and prices.
+This microservice handles monitoring operations for the FarmIQ platform, including alert management, alert rules, and device health logging.
 
 ## Project Structure
 ```
-economic-service/
-├── src/
-│   ├── models/
-│   │   ├── economicData.model.ts
-│   │   └── index.ts
-│   ├── services/
-│   │   ├── economicData.service.ts
-│   │   └── index.ts
-│   ├── routes/
-│   │   ├── economicData.route.ts
-│   │   └── index.ts
-│   ├── utils/
-│   │   └── dataSource.ts
-│   ├── configs/
-│   │   └── config.ts
-│   └── server.ts
-├── .env                # environment variables
-├── package.json
-├── tsconfig.json
-└── README.md
+monitoring-service/
+à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ src/
+à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ config/
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ config.ts
+à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ models/
+à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ routes/
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ alerts.route.ts
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ alertRules.route.ts
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ deviceHealthLogs.route.ts
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ index.ts
+à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ services/
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ alert.service.ts
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ alertRule.service.ts
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ deviceHealthLog.service.ts
+à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ utils/
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ prisma.ts
+à¹‚â€Â‚   à¹‚â€Â‚   à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ jwt.ts
+à¹‚â€Â‚   à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ server.ts
+à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ prisma/
+à¹‚â€Â‚   à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ schema.prisma
+à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ .env
+à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ package.json
+à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ tsconfig.json
+à¹‚â€Âœà¹‚â€â‚¬à¹‚â€â‚¬ Dockerfile
+à¹‚â€â€à¹‚â€â‚¬à¹‚â€â‚¬ README.md
 ```
 
 ## Environment Variables
 Create a `.env` file at the project root with:
 
 ```
-DB_HOST=your_db_host
-DB_PORT=5432
-DB_NAME=your_db_name
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
-JWT_SECRET_KEY=your_jwt_secret
-TOKEN_EXPIRATION_MINUTES=1440
-REFRESH_TOKEN_EXPIRE_DAYS=7
-ECONOMIC_SERVICE_PORT=4111
+# Database configuration
+DATABASE_URL=postgresql://postgres:postgres1611@localhost:25432/farmiq_cloud?schema=monitoring
+
+# Server configuration
+PORT=4112
+HOST=localhost
+
+# JWT configuration
+JWT_SECRET=monitoring-service-secret
+JWT_EXPIRES_IN=1d
 ```
 
 ## Installation
@@ -47,96 +53,103 @@ ECONOMIC_SERVICE_PORT=4111
 yarn install
 ```
 
+## Database Setup
+
+Migrations (recommended for teams/CI):
+```bash
+# Create a new migration in dev (interactive)
+npx prisma migrate dev --name <migration_name>
+
+# Apply existing migrations in non‑interactive env (CI/Prod)
+npx prisma migrate deploy
+
+# Quick start (no migration files) — not for Prod
+npx prisma db push
+
+# Generate Prisma client
+npx prisma generate
+```
+
+Notes:
+- Baseline migration exists at `prisma/migrations/0001_init/` to match current schema.
+- For Docker container, run inside the service to deploy migrations:
+  - `docker exec -it farmiq-monitoring-service npx prisma migrate deploy`
+
 ## Running the Service
 
+Development mode:
+```bash
+yarn dev
+```
+
+Production mode:
 ```bash
 yarn build
 yarn start
 ```
 
+## Auth Testing (JWT)
+
+- The API routes under `/api` require a JWT signed with HS256 using `JWT_SECRET` (default: `monitoring-service-secret`).
+- Generate a sample token via helper script:
+
+```bash
+# From project root of monitoring-service
+node scripts/generate-jwt.js --tenant tenant-001 --scope alerts:read,alerts:write --exp 1d
+
+# Use with curl (example: list alerts for tenant-001)
+curl -H "Authorization: Bearer <PASTE_TOKEN>" http://localhost:4112/api/alerts/tenant-001
+```
+
+## Kafka Testing Notes
+
+- From host machine, use the external listener: `KAFKA_BROKERS=localhost:9094`
+- From inside Docker network/containers, use the internal DNS: `KAFKA_BROKERS=kafka:9092`
+- Example (host):
+  - `KAFKA_BROKERS=localhost:9094 node test-monitoring-integration.js`
+- Example (container):
+  - `docker exec -e KAFKA_BROKERS=kafka:9092 farmiq-monitoring-service node test-monitoring-integration.js`
+
 ## API Design
 
-Base URL: `http://localhost:${PORT}/api`
+Base URL: `http://localhost:4112/api` (health: `/health`, ready: `/ready`)
 
-| Method | Endpoint                  | Body                             | Description                    |
-| ------ | ------------------------- | -------------------------------- | ------------------------------ |
-| GET    | `/economic-data`          | —                                | Retrieve all economic records  |
-| GET    | `/economic-data/:id`      | —                                | Retrieve a specific record     |
-| POST   | `/economic-data`          | JSON of EconomicData             | Create a new record            |
-| PUT    | `/economic-data/:id`      | JSON of fields to update         | Update an existing record      |
-| DELETE | `/economic-data/:id`      | —                                | Delete a specific record       |
+### Alerts
+| Method | Endpoint             | Description              |
+| ------ | -------------------- | ------------------------ |
+| GET    | `/alerts/:tenantId`  | Retrieve all alerts      |
+| GET    | `/alerts/:tenantId/:alertId` | Retrieve specific alert |
+| POST   | `/alerts`            | Create new alert         |
+| PUT    | `/alerts/:tenantId/:alertId` | Update alert |
+| DELETE | `/alerts/:tenantId/:alertId` | Delete alert |
 
-## Postman Collection
+### Alert Rules
+| Method | Endpoint                  | Description              |
+| ------ | ------------------------- | ------------------------ |
+| GET    | `/alert-rules/:tenantId`  | Retrieve all alert rules |
+| GET    | `/alert-rules/:tenantId/:ruleId` | Retrieve specific rule |
+| POST   | `/alert-rules`            | Create new rule          |
+| PUT    | `/alert-rules/:tenantId/:ruleId` | Update rule |
+| DELETE | `/alert-rules/:tenantId/:ruleId` | Delete rule |
 
-Import the following JSON into Postman to test the endpoints:
+### Device Health Logs
+| Method | Endpoint                          | Description              |
+| ------ | --------------------------------- | ------------------------ |
+| GET    | `/device-health-logs/:tenantId`   | Retrieve all health logs |
+| GET    | `/device-health-logs/:tenantId/:id` | Retrieve specific log |
+| POST   | `/device-health-logs`             | Create new health log    |
+| DELETE | `/device-health-logs/:tenantId/:id` | Delete health log |
 
-```json
-{
-  "info": {
-    "name": "Economic Service API",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "Get All",
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:4111/api/economic-data"
-      }
-    },
-    {
-      "name": "Get One",
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:4111/api/economic-data/1"
-      }
-    },
-    {
-      "name": "Create",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{
-  \"farmId\": 1,
-  \"costType\": \"feed\",
-  \"amount\": 200.5,
-  \"recordDate\": \"2025-06-27\"
-}"
-        },
-        "url": "http://localhost:4111/api/economic-data"
-      }
-    },
-    {
-      "name": "Update",
-      "request": {
-        "method": "PUT",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{ \"amount\": 250 }"
-        },
-        "url": "http://localhost:4111/api/economic-data/1"
-      }
-    },
-    {
-      "name": "Delete",
-      "request": {
-        "method": "DELETE",
-        "url": "http://localhost:4111/api/economic-data/1"
-      }
-    }
-  ]
-}
-```
+## Documentation
+
+Swagger UI is available at: `http://localhost:4112/docs`
 
 ## Service Details
 
-- **Server**: Express.js with TypeScript
-- **ORM**: TypeORM connecting to PostgreSQL
-- **Authentication**: JWT middleware (optional; can be enabled by mounting auth routes before protected routes)
+- **Server**: Fastify with TypeScript
+- **ORM**: Prisma
+- **Database**: PostgreSQL with monitoring schema
+- **Authentication**: JWT middleware
 - **Error Handling**: Centralized error handler in `server.ts`
-- **Schema**: `economics.economic_data` with trigger to auto-update `updated_at`
-- **Logging**: `morgan` for HTTP logs
-- **Security**: `helmet` and `cors` enabled
+- **Logging**: Built-in Fastify logger
+- **Security**: Helmet and CORS enabled
