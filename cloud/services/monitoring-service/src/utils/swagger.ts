@@ -1,5 +1,5 @@
-// services/auth-service/src/utils/swagger.ts
-import { PORT } from '../configs/config';
+import { PORT } from '../config/config';
+
 /**
  * Configuration object for swagger-jsdoc.
  * We define our own minimal type here to avoid issues importing
@@ -24,9 +24,9 @@ export const swaggerOptions: SwaggerJsdocOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Economic Service API',
+      title: 'Monitoring Service API',
       version: '1.0.0',
-      description: 'Economic Service endpoints',
+      description: 'API for the FarmIQ Monitoring Service',
     },
     servers: [
       {
@@ -52,4 +52,3 @@ export const swaggerOptions: SwaggerJsdocOptions = {
     './src/models/**/*.ts',
   ],
 };
-

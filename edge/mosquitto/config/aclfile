@@ -52,6 +52,18 @@ topic write image/created
 user edge_viewer
 topic read #
 
+# Bridge service (translates to edge/* topics)
+user edge_bridge
+topic read  sensor.clean/#
+topic read  sensor.anomaly/#
+topic read  dm/+/+/health
+topic read  dm/+/+/lwt
+topic read  image/created
+topic read  weight/associated
+topic write edge/tele/#
+topic write edge/evt/#
+topic write edge/stat/#
+
 # ===== Device rules (username = tenant, clientid = deviceId) =====
 # Shadow / Health / LWT
 pattern write dm/%u/%c/shadow/reported

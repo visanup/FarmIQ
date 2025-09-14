@@ -5,33 +5,33 @@
 ### Project Structure
 ```
 service-name/
-├── src/
-│   ├── configs/
-│   │   └── config.ts
-│   ├── models/
-│   │   └── entity.model.ts
-│   ├── routes/
-│   │   └── api.route.ts
-│   ├── services/
-│   │   └── business.service.ts
-│   ├── middlewares/
-│   │   ├── auth.middleware.ts
-│   │   ├── errorHandler.middleware.ts
-│   │   └── validate.middleware.ts
-│   ├── schemas/
-│   │   └── validation.schemas.ts
-│   ├── types/
-│   │   └── common.types.ts
-│   ├── utils/
-│   │   ├── dataSource.ts
-│   │   ├── kafka.ts
-│   │   ├── logger.ts
-│   │   └── openapi.ts
-│   └── server.ts
-├── Dockerfile
-├── package.json
-├── tsconfig.json
-└── README.md
+โ”โ”€โ”€ src/
+โ”   โ”โ”€โ”€ configs/
+โ”   โ”   โ””โ”€โ”€ config.ts
+โ”   โ”โ”€โ”€ models/
+โ”   โ”   โ””โ”€โ”€ entity.model.ts
+โ”   โ”โ”€โ”€ routes/
+โ”   โ”   โ””โ”€โ”€ api.route.ts
+โ”   โ”โ”€โ”€ services/
+โ”   โ”   โ””โ”€โ”€ business.service.ts
+โ”   โ”โ”€โ”€ middlewares/
+โ”   โ”   โ”โ”€โ”€ auth.middleware.ts
+โ”   โ”   โ”โ”€โ”€ errorHandler.middleware.ts
+โ”   โ”   โ””โ”€โ”€ validate.middleware.ts
+โ”   โ”โ”€โ”€ schemas/
+โ”   โ”   โ””โ”€โ”€ validation.schemas.ts
+โ”   โ”โ”€โ”€ types/
+โ”   โ”   โ””โ”€โ”€ common.types.ts
+โ”   โ”โ”€โ”€ utils/
+โ”   โ”   โ”โ”€โ”€ dataSource.ts
+โ”   โ”   โ”โ”€โ”€ kafka.ts
+โ”   โ”   โ”โ”€โ”€ logger.ts
+โ”   โ”   โ””โ”€โ”€ openapi.ts
+โ”   โ””โ”€โ”€ server.ts
+โ”โ”€โ”€ Dockerfile
+โ”โ”€โ”€ package.json
+โ”โ”€โ”€ tsconfig.json
+โ””โ”€โ”€ README.md
 ```
 
 ### package.json Template
@@ -102,7 +102,7 @@ import { openApiDoc } from './utils/openapi';
 
 async function start() {
   await AppDataSource.initialize();
-  console.log('✅ DataSource initialized');
+  console.log('โ… DataSource initialized');
 
   const app: Application = express();
   app.set('trust proxy', true);
@@ -141,17 +141,17 @@ async function start() {
   app.use(errorHandler);
 
   const server = app.listen(PORT, () => {
-    console.log(`🚀 service-name listening on ${baseUrl}`);
-    console.log(`📖 OpenAPI docs: ${baseUrl}/api-docs`);
+    console.log(`๐€ service-name listening on ${baseUrl}`);
+    console.log(`๐“– OpenAPI docs: ${baseUrl}/api-docs`);
   });
 
   // Graceful shutdown
   const shutdown = (sig: string) => {
-    console.log(`⚡ Shutting down on ${sig}...`);
+    console.log(`โก Shutting down on ${sig}...`);
     server.close(async () => {
       try {
         await AppDataSource.destroy();
-        console.log('✅ DataSource destroyed');
+        console.log('โ… DataSource destroyed');
       } finally {
         process.exit(0);
       }
@@ -163,7 +163,7 @@ async function start() {
 }
 
 start().catch((err) => {
-  console.error('❌ Server bootstrap failed:', err);
+  console.error('โ Server bootstrap failed:', err);
   process.exit(1);
 });
 ```
@@ -269,34 +269,34 @@ CMD ["node", "dist/server.js"]
 ### Project Structure
 ```
 service-name/
-├── src/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   └── entity.py
-│   │   ├── routers/
-│   │   │   ├── __init__.py
-│   │   │   └── api.py
-│   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   └── business.py
-│   │   ├── schemas/
-│   │   │   ├── __init__.py
-│   │   │   └── validation.py
-│   │   └── utils/
-│   │       ├── __init__.py
-│   │       ├── database.py
-│   │       └── kafka.py
-│   └── tests/
-│       ├── __init__.py
-│       └── test_api.py
-├── Dockerfile
-├── requirements.txt
-├── pyproject.toml
-└── README.md
+โ”โ”€โ”€ src/
+โ”   โ”โ”€โ”€ app/
+โ”   โ”   โ”โ”€โ”€ __init__.py
+โ”   โ”   โ”โ”€โ”€ main.py
+โ”   โ”   โ”โ”€โ”€ config.py
+โ”   โ”   โ”โ”€โ”€ models/
+โ”   โ”   โ”   โ”โ”€โ”€ __init__.py
+โ”   โ”   โ”   โ””โ”€โ”€ entity.py
+โ”   โ”   โ”โ”€โ”€ routers/
+โ”   โ”   โ”   โ”โ”€โ”€ __init__.py
+โ”   โ”   โ”   โ””โ”€โ”€ api.py
+โ”   โ”   โ”โ”€โ”€ services/
+โ”   โ”   โ”   โ”โ”€โ”€ __init__.py
+โ”   โ”   โ”   โ””โ”€โ”€ business.py
+โ”   โ”   โ”โ”€โ”€ schemas/
+โ”   โ”   โ”   โ”โ”€โ”€ __init__.py
+โ”   โ”   โ”   โ””โ”€โ”€ validation.py
+โ”   โ”   โ””โ”€โ”€ utils/
+โ”   โ”       โ”โ”€โ”€ __init__.py
+โ”   โ”       โ”โ”€โ”€ database.py
+โ”   โ”       โ””โ”€โ”€ kafka.py
+โ”   โ””โ”€โ”€ tests/
+โ”       โ”โ”€โ”€ __init__.py
+โ”       โ””โ”€โ”€ test_api.py
+โ”โ”€โ”€ Dockerfile
+โ”โ”€โ”€ requirements.txt
+โ”โ”€โ”€ pyproject.toml
+โ””โ”€โ”€ README.md
 ```
 
 ### requirements.txt Template
@@ -416,47 +416,47 @@ settings = Settings()
 ### Project Structure
 ```
 app-name/
-├── src/
-│   ├── components/
-│   │   ├── common/
-│   │   │   ├── Layout.tsx
-│   │   │   ├── Loading.tsx
-│   │   │   └── ErrorBoundary.tsx
-│   │   └── features/
-│   │       └── FeatureName/
-│   │           ├── FeatureName.tsx
-│   │           ├── FeatureNameList.tsx
-│   │           └── FeatureNameForm.tsx
-│   ├── pages/
-│   │   ├── HomePage.tsx
-│   │   ├── LoginPage.tsx
-│   │   └── DashboardPage.tsx
-│   ├── services/
-│   │   ├── apiClient.ts
-│   │   ├── authService.ts
-│   │   └── dataService.ts
-│   ├── hooks/
-│   │   ├── useAuth.ts
-│   │   ├── useApi.ts
-│   │   └── useWebSocket.ts
-│   ├── contexts/
-│   │   ├── AuthContext.tsx
-│   │   └── ThemeContext.tsx
-│   ├── types/
-│   │   ├── api.types.ts
-│   │   └── common.types.ts
-│   ├── utils/
-│   │   ├── constants.ts
-│   │   ├── helpers.ts
-│   │   └── validation.ts
-│   ├── theme.ts
-│   ├── App.tsx
-│   └── main.tsx
-├── public/
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── README.md
+โ”โ”€โ”€ src/
+โ”   โ”โ”€โ”€ components/
+โ”   โ”   โ”โ”€โ”€ common/
+โ”   โ”   โ”   โ”โ”€โ”€ Layout.tsx
+โ”   โ”   โ”   โ”โ”€โ”€ Loading.tsx
+โ”   โ”   โ”   โ””โ”€โ”€ ErrorBoundary.tsx
+โ”   โ”   โ””โ”€โ”€ features/
+โ”   โ”       โ””โ”€โ”€ FeatureName/
+โ”   โ”           โ”โ”€โ”€ FeatureName.tsx
+โ”   โ”           โ”โ”€โ”€ FeatureNameList.tsx
+โ”   โ”           โ””โ”€โ”€ FeatureNameForm.tsx
+โ”   โ”โ”€โ”€ pages/
+โ”   โ”   โ”โ”€โ”€ HomePage.tsx
+โ”   โ”   โ”โ”€โ”€ LoginPage.tsx
+โ”   โ”   โ””โ”€โ”€ DashboardPage.tsx
+โ”   โ”โ”€โ”€ services/
+โ”   โ”   โ”โ”€โ”€ apiClient.ts
+โ”   โ”   โ”โ”€โ”€ authService.ts
+โ”   โ”   โ””โ”€โ”€ dataService.ts
+โ”   โ”โ”€โ”€ hooks/
+โ”   โ”   โ”โ”€โ”€ useAuth.ts
+โ”   โ”   โ”โ”€โ”€ useApi.ts
+โ”   โ”   โ””โ”€โ”€ useWebSocket.ts
+โ”   โ”โ”€โ”€ contexts/
+โ”   โ”   โ”โ”€โ”€ AuthContext.tsx
+โ”   โ”   โ””โ”€โ”€ ThemeContext.tsx
+โ”   โ”โ”€โ”€ types/
+โ”   โ”   โ”โ”€โ”€ api.types.ts
+โ”   โ”   โ””โ”€โ”€ common.types.ts
+โ”   โ”โ”€โ”€ utils/
+โ”   โ”   โ”โ”€โ”€ constants.ts
+โ”   โ”   โ”โ”€โ”€ helpers.ts
+โ”   โ”   โ””โ”€โ”€ validation.ts
+โ”   โ”โ”€โ”€ theme.ts
+โ”   โ”โ”€โ”€ App.tsx
+โ”   โ””โ”€โ”€ main.tsx
+โ”โ”€โ”€ public/
+โ”โ”€โ”€ package.json
+โ”โ”€โ”€ tsconfig.json
+โ”โ”€โ”€ vite.config.ts
+โ””โ”€โ”€ README.md
 ```
 
 ### package.json Template

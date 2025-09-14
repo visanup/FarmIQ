@@ -1,0 +1,56 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model alerts {
+  tenant_id   String      @db.Text
+  alert_id    String      @db.Text
+  alert_type  String      @db.Text
+  severity    String      @db.Text
+  status      String      @default("active") @db.Text
+  description String?     @db.Text
+  farm_id     String?     @db.Text
+  house_id    String?     @db.Text
+  device_id   String?     @db.Text
+  batch_id    String?     @db.Text
+  created_at  DateTime    @default(now()) @db.Timestamptz
+  resolved_at DateTime?   @db.Timestamptz
+  updated_at  DateTime    @default(now()) @updatedAt @db.Timestamptz
+
+  @@id([tenant_id, alert_id])
+  @@index([tenant_id, status, severity, created_at], name: "ix_alerts_status")
+}
+
+model alert_rules {
+  tenant_id   String   @db.Text
+  rule_id     String   @db.Text
+  metric_name String   @db.Text
+  threshold   Decimal  @db.Decimal
+  condition   String   @db.Text
+  scope       Json     @default("{}")
+  created_at  DateTime @default(now()) @db.Timestamptz
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  @@id([tenant_id, rule_id])
+  @@index([tenant_id, metric_name], name: "ix_rules_metric")
+}
+
+model device_health_log {
+  tenant_id  String   @db.Text
+  id         BigInt   @id @default(autoincrement())
+  device_id  String   @db.Text
+  status     String   @db.Text
+  time       DateTime @db.Timestamptz
+  meta       Json     @default("{}")
+  created_at DateTime @default(now()) @db.Timestamptz
+
+  @@index([tenant_id, device_id, time], name: "ix_health_time")
+}

@@ -1,21 +1,14 @@
-// src/routes/models.route.ts
-import { Router } from 'express';
+import { FastifyInstance } from 'fastify';
 import { apiKey } from '../middleware/apiKey';
 import { registerAndDeployModel } from '../services/model-intake.service';
 import { ModelRegisterRequestSchema } from '../schemas/orchestrator.schemas';
 
-const r = Router();
-
-r.post('/register', apiKey, async (req, res, next) => {
-  try {
-    const parsed = ModelRegisterRequestSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+export default async function models(fastify: FastifyInstance) {
+  fastify.post('/register', { preHandler: [apiKey] }, async (req, reply) => {
+    const parsed = ModelRegisterRequestSchema.safeParse((req as any).body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const out = await registerAndDeployModel(parsed.data);
-    res.json(out);
-  } catch (e) { next(e); }
-});
-
-export default r;
+    return out;
+  });
+}
 

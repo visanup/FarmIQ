@@ -1,52 +1,33 @@
-// src/routes/ingestion.routes.ts
-import { Router, Request, Response, NextFunction } from 'express';
-import multer from 'multer';
+// src/routes/ingestion.routes.ts (Fastify)
+import { FastifyInstance } from 'fastify';
 import { apiKey } from '../middleware/apiKey';
 import { ingestImage, listRecentMedia } from '../services/media.service';
-import { z } from 'zod';
 import { IngestMetaSchema } from '../schemas/ingestion.schemas';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const uploadSingle: import('express').RequestHandler = (req, res, next) =>
-  (upload.single('file') as any)(req, res, next);
+export default async function ingestionRoutes(fastify: FastifyInstance) {
+  // Register multipart
+  await fastify.register(require('@fastify/multipart'));
 
-const router = Router();
+  fastify.post('/image', { preHandler: [apiKey] }, async (req, reply) => {
+    const mp: any = await (req as any).file();
+    if (!mp) return reply.code(400).send({ error: 'file is required' });
 
-router.post(
-  '/image',
-  apiKey as any,
-  uploadSingle,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.file) return res.status(400).json({ error: 'file is required' });
+    const fields = await mp.fields();
+    const body: any = {};
+    for (const [k, v] of Object.entries(fields)) body[k] = Array.isArray(v) ? v[0].value : (v as any).value;
+    const parsed = IngestMetaSchema.safeParse(body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
-      const parsed = IngestMetaSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const buf = await mp.toBuffer();
+    const out = await ingestImage({ buffer: buf, originalname: mp.filename, mimetype: mp.mimetype, size: mp.file?.bytesRead }, parsed.data);
+    return reply.code(201).send(out);
+  });
 
-      const out = await ingestImage(
-        {
-          buffer: req.file!.buffer,
-          originalname: req.file!.originalname,
-          mimetype: req.file!.mimetype,
-          size: req.file!.size,
-        },
-        parsed.data
-      );
-      return res.status(201).json(out);
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-router.get('/recent', apiKey as any, async (req, res: Response, next: NextFunction) => {
-  try {
-    const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10) || 20, 200);
-    res.json(await listRecentMedia(limit));
-  } catch (e) {
-    next(e);
-  }
-});
-
-export default router;
+  fastify.get('/recent', { preHandler: [apiKey] }, async (req, reply) => {
+    const q: any = req.query || {};
+    const limit = Math.min(parseInt(String(q.limit ?? '20'), 10) || 20, 200);
+    const data = await listRecentMedia(limit);
+    return { data };
+  });
+}
 

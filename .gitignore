@@ -75,3 +75,23 @@ log/
 
 yarn.lock
 edge/mosquitto/config/passwd
+edge/mosquitto/data/
+edge/mosquitto/log/
+
+# General caches
+*.log
+.eslintcache
+**/.cache/
+**/.vite/
+**/.parcel-cache/
+**/.turbo/
+**/tmp/
+**/.tmp/
+
+# Coverage anywhere in repo
+**/coverage/
+
+# Local overrides
+docker-compose.override.yml
+.envrc
+.tool-versions

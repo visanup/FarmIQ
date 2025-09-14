@@ -1,15 +1,15 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
-# Install dependencies for Prisma
-RUN apk add --no-cache openssl
+# Install system dependencies (Prisma + native modules like bcrypt)
+RUN apk add --no-cache openssl python3 make g++
 
 WORKDIR /app
 
 # Copy package files
 COPY package.json yarn.lock ./
 
-# Install dependencies
-RUN yarn install --frozen-lockfile
+# Install dependencies (prefer frozen lockfile; fallback to normal install)
+RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile --non-interactive || yarn install --non-interactive; else yarn install --non-interactive; fi
 
 # Copy source code
 COPY . .
@@ -20,8 +20,8 @@ RUN yarn db:generate
 # Build the application
 RUN yarn build
 
-# Remove dev dependencies
-RUN yarn install --production --frozen-lockfile && yarn cache clean
+# Remove dev dependencies (use fallback if lockfile changed)
+RUN if [ -f yarn.lock ]; then yarn install --production --frozen-lockfile --non-interactive || yarn install --production --non-interactive; else yarn install --production --non-interactive; fi && yarn cache clean
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs

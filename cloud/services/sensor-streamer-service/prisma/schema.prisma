@@ -13,24 +13,30 @@ datasource db {
   schemas  = ["sensors"]
 }
 
-model SensorReading {
-  id          String   @id @default(cuid())
-  deviceId    String
-  farmId      String?
-  houseId     String?
-  sensorType  String
-  value       Decimal  @db.Decimal(10, 4)
-  unit        String
-  location    Json?    // Store location as JSON {x, y, z}
-  metadata    Json?    // Store additional metadata as JSON
-  timestamp   DateTime @default(now())
-  createdAt   DateTime @default(now())
+model DeviceReading {
+  id        String   @id @default(cuid())
+  time      DateTime @db.Timestamptz(6)
+  tenantId  String   @map("tenant_id")
+  deviceId  String   @map("device_id")
+  metric    String
+  sensorId  String?  @map("sensor_id")
+  value     Float
+  quality   String   @default("clean")
+  payload   Json?
 
+  // Relationships
+  alerts       SensorAlert[]
+  qualityChecks DataQualityCheck[]
+
+  // Unique constraint to prevent duplicate readings for same device/metric/time
+  @@unique([time, deviceId, metric])
+  
   // Indexes for performance
-  @@index([deviceId, timestamp])
-  @@index([sensorType, timestamp])
-  @@index([farmId, timestamp])
-  @@map("sensor_readings")
+  @@index([deviceId, time])
+  @@index([metric, time])
+  @@index([tenantId, time])
+  @@index([time])
+  @@map("device_readings")
   @@schema("sensors")
 }
 
@@ -47,13 +53,20 @@ model DeviceHealth {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Relationships
+  // deviceReadings DeviceReading[] // Removed to avoid foreign key constraints
+
+  // Indexes
+  @@index([deviceId])
+  @@index([status])
+  @@index([lastSeen])
   @@map("device_health")
   @@schema("sensors")
 }
 
 model LabReading {
-  id          String   @id @default(cuid())
-  sampleId    String
+  id          String?  @default(cuid())
+  sampleId    String   @id
   farmId      String?
   testType    String
   value       Decimal  @db.Decimal(10, 4)
@@ -63,26 +76,36 @@ model LabReading {
   timestamp   DateTime @default(now())
   createdAt   DateTime @default(now())
 
+  // Relationships
+  qualityChecks DataQualityCheck[]
+
+  // Indexes
   @@index([sampleId, timestamp])
   @@index([testType, timestamp])
   @@index([farmId, timestamp])
+  @@index([timestamp])
   @@map("lab_readings")
   @@schema("sensors")
 }
 
 model SweepReading {
-  id          String   @id @default(cuid())
+  id          String?  @default(cuid())
   deviceId    String
   farmId      String?
-  sweepId     String
+  sweepId     String   @id
   data        Json     // Store sweep data as JSON
   metadata    Json?    // Store additional metadata as JSON
   timestamp   DateTime @default(now())
   createdAt   DateTime @default(now())
 
+  // Relationships
+  qualityChecks DataQualityCheck[]
+
+  // Indexes
   @@index([deviceId, timestamp])
   @@index([sweepId, timestamp])
   @@index([farmId, timestamp])
+  @@index([timestamp])
   @@map("sweep_readings")
   @@schema("sensors")
 }
@@ -103,6 +126,100 @@ model DataIngestionLog {
   @@schema("sensors")
 }
 
+model StreamState {
+  id          String   @id @default(cuid())
+  deviceId    String   @unique
+  streamType  StreamType
+  isActive    Boolean  @default(true)
+  lastProcessedAt DateTime?
+  lastError   String?
+  retryCount  Int      @default(0)
+  config      Json?    // Stream configuration as JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  // deviceHealth DeviceHealth
+
+  @@index([deviceId, streamType])
+  @@index([isActive])
+  @@map("stream_states")
+  @@schema("sensors")
+}
+
+model DeviceConfiguration {
+  id          String   @id @default(cuid())
+  deviceId    String   @unique
+  configType  ConfigType
+  configData  Json     // Configuration data as JSON
+  version     String   @default("1.0.0")
+  isActive    Boolean  @default(true)
+  appliedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  // deviceHealth DeviceHealth
+
+  @@index([deviceId, configType])
+  @@index([isActive])
+  @@map("device_configurations")
+  @@schema("sensors")
+}
+
+model SensorAlert {
+  id          String   @id @default(cuid())
+  deviceId    String
+  farmId      String?
+  houseId     String?
+  alertType   String   // threshold, anomaly, offline, error
+  severity    AlertSeverity
+  message     String
+  value       Decimal? @db.Decimal(10, 4)
+  threshold   Decimal? @db.Decimal(10, 4)
+  isResolved  Boolean  @default(false)
+  resolvedAt  DateTime?
+  metadata    Json?    // Additional alert metadata
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  deviceReadings DeviceReading[]
+
+  // Indexes
+  @@index([deviceId, createdAt])
+  @@index([alertType, severity])
+  @@index([isResolved])
+  @@index([farmId, createdAt])
+  @@index([houseId, createdAt])
+  @@map("sensor_alerts")
+  @@schema("sensors")
+}
+
+model DataQualityCheck {
+  id          String   @id @default(cuid())
+  deviceId    String
+  checkType   String   // range_check, null_check, duplicate_check
+  status      String   // pass, fail, warning
+  message     String?
+  value       Decimal? @db.Decimal(10, 4)
+  expectedMin Decimal? @db.Decimal(10, 4)
+  expectedMax Decimal? @db.Decimal(10, 4)
+  metadata    Json?    // Check configuration and results
+  timestamp   DateTime @default(now())
+
+  // Relationships
+  deviceReadings DeviceReading[]
+  labReadings    LabReading[]
+  sweepReadings  SweepReading[]
+
+  // Indexes
+  @@index([deviceId, timestamp])
+  @@index([checkType, status])
+  @@index([timestamp])
+  @@map("data_quality_checks")
+  @@schema("sensors")
+}
+
 enum DeviceStatus {
   ONLINE
   OFFLINE
@@ -112,3 +229,38 @@ enum DeviceStatus {
   @@schema("sensors")
 }
 
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@schema("sensors")
+}
+
+enum StreamType {
+  SENSOR
+  LAB
+  SWEEP
+  HEALTH
+
+  @@schema("sensors")
+}
+
+enum ConfigType {
+  SENSOR_CONFIG
+  STREAM_CONFIG
+  ALERT_CONFIG
+  DEVICE_CONFIG
+
+  @@schema("sensors")
+}
+
+enum DataQualityStatus {
+  PASS
+  FAIL
+  WARNING
+  SKIPPED
+
+  @@schema("sensors")
+}

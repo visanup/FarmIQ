@@ -238,6 +238,92 @@ DROP TRIGGER IF EXISTS trg_dim_flock_touch ON analytics.dim_flock;
 CREATE TRIGGER trg_dim_flock_touch BEFORE UPDATE ON analytics.dim_flock
 FOR EACH ROW EXECUTE PROCEDURE analytics.touch_updated_at();
 
+-- Additional dimension tables from master-service
+-- dim_customer
+CREATE TABLE IF NOT EXISTS analytics.dim_customer (
+  tenant_id  TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  name       TEXT,
+  email      TEXT,
+  phone      TEXT,
+  address    TEXT,
+  meta       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, customer_id)
+);
+CREATE INDEX IF NOT EXISTS gin_dim_customer_meta ON analytics.dim_customer USING GIN (meta);
+DROP TRIGGER IF EXISTS trg_dim_customer_touch ON analytics.dim_customer;
+CREATE TRIGGER trg_dim_customer_touch BEFORE UPDATE ON analytics.dim_customer
+FOR EACH ROW EXECUTE PROCEDURE analytics.touch_updated_at();
+
+-- dim_animal_type
+CREATE TABLE IF NOT EXISTS analytics.dim_animal_type (
+  tenant_id     TEXT NOT NULL,
+  animal_type_id TEXT NOT NULL,
+  name          TEXT,
+  category      TEXT, -- "poultry", "livestock", "aquaculture"
+  description   TEXT,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, animal_type_id)
+);
+CREATE INDEX IF NOT EXISTS gin_dim_animal_type_meta ON analytics.dim_animal_type USING GIN (meta);
+DROP TRIGGER IF EXISTS trg_dim_animal_type_touch ON analytics.dim_animal_type;
+CREATE TRIGGER trg_dim_animal_type_touch BEFORE UPDATE ON analytics.dim_animal_type
+FOR EACH ROW EXECUTE PROCEDURE analytics.touch_updated_at();
+
+-- dim_breed
+CREATE TABLE IF NOT EXISTS analytics.dim_breed (
+  tenant_id     TEXT NOT NULL,
+  breed_id      TEXT NOT NULL,
+  animal_type_id TEXT NOT NULL,
+  name          TEXT,
+  description   TEXT,
+  characteristics JSONB DEFAULT '{}'::jsonb,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, breed_id)
+);
+CREATE INDEX IF NOT EXISTS ix_dim_breed_animal_type ON analytics.dim_breed(tenant_id, animal_type_id);
+CREATE INDEX IF NOT EXISTS gin_dim_breed_meta ON analytics.dim_breed USING GIN (meta);
+DROP TRIGGER IF EXISTS trg_dim_breed_touch ON analytics.dim_breed;
+CREATE TRIGGER trg_dim_breed_touch BEFORE UPDATE ON analytics.dim_breed
+FOR EACH ROW EXECUTE PROCEDURE analytics.touch_updated_at();
+
+-- dim_feed_type
+CREATE TABLE IF NOT EXISTS analytics.dim_feed_type (
+  tenant_id     TEXT NOT NULL,
+  feed_type_id  TEXT NOT NULL,
+  name          TEXT,
+  category      TEXT, -- "starter", "grower", "finisher", "layer"
+  description   TEXT,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, feed_type_id)
+);
+CREATE INDEX IF NOT EXISTS gin_dim_feed_type_meta ON analytics.dim_feed_type USING GIN (meta);
+DROP TRIGGER IF EXISTS trg_dim_feed_type_touch ON analytics.dim_feed_type;
+CREATE TRIGGER trg_dim_feed_type_touch BEFORE UPDATE ON analytics.dim_feed_type
+FOR EACH ROW EXECUTE PROCEDURE analytics.touch_updated_at();
+
+-- dim_formula
+CREATE TABLE IF NOT EXISTS analytics.dim_formula (
+  tenant_id     TEXT NOT NULL,
+  formula_id    TEXT NOT NULL,
+  name          TEXT,
+  description   TEXT,
+  composition   JSONB DEFAULT '{}'::jsonb, -- { "protein": 20, "fat": 5, "fiber": 3, "ash": 8 }
+  energy        DECIMAL(10,4), -- kcal/kg
+  cost          DECIMAL(10,4), -- THB/kg
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, formula_id)
+);
+CREATE INDEX IF NOT EXISTS gin_dim_formula_meta ON analytics.dim_formula USING GIN (meta);
+DROP TRIGGER IF EXISTS trg_dim_formula_touch ON analytics.dim_formula;
+CREATE TRIGGER trg_dim_formula_touch BEFORE UPDATE ON analytics.dim_formula
+FOR EACH ROW EXECUTE PROCEDURE analytics.touch_updated_at();
+
 -- =====================================================
 -- 6. AGGREGATED DATA TABLES (from complete schema)
 -- =====================================================
@@ -545,7 +631,335 @@ CREATE TABLE IF NOT EXISTS analytics.analytics_alerts (
 );
 
 -- =====================================================
--- 11. ADDITIONAL TABLES (from complete schema)
+-- 11. MASTER DATA TABLES (from master-service)
+-- =====================================================
+
+-- Master data tables for reference and analytics
+-- customers
+CREATE TABLE IF NOT EXISTS analytics.customers (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL UNIQUE,
+  name      TEXT NOT NULL,
+  email     TEXT UNIQUE,
+  phone     TEXT,
+  address   TEXT,
+  meta      JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_customers_tenant ON analytics.customers(tenant_id);
+CREATE INDEX IF NOT EXISTS gin_customers_meta ON analytics.customers USING GIN (meta);
+
+-- farms
+CREATE TABLE IF NOT EXISTS analytics.farms (
+  id          TEXT PRIMARY KEY,
+  farm_id     TEXT NOT NULL UNIQUE,
+  tenant_id   TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  location    JSONB, -- { "lat": 13.7563, "lon": 100.5018, "address": "..." }
+  region      TEXT,
+  farm_type   TEXT, -- "poultry", "livestock", "mixed"
+  total_area  INTEGER,
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, farm_id)
+);
+CREATE INDEX IF NOT EXISTS ix_farms_tenant ON analytics.farms(tenant_id);
+CREATE INDEX IF NOT EXISTS ix_farms_customer ON analytics.farms(customer_id);
+CREATE INDEX IF NOT EXISTS gin_farms_meta ON analytics.farms USING GIN (meta);
+
+-- houses
+CREATE TABLE IF NOT EXISTS analytics.houses (
+  id           TEXT PRIMARY KEY,
+  house_id     TEXT NOT NULL UNIQUE,
+  tenant_id    TEXT NOT NULL,
+  farm_id      TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  type         TEXT, -- "broiler", "layer", "breeding", "quarantine"
+  capacity     INTEGER,
+  dimensions   JSONB, -- { "length": 50, "width": 20, "height": 3 }
+  ventilation  TEXT, -- "natural", "mechanical", "mixed"
+  heating      TEXT, -- "gas", "electric", "solar"
+  meta         JSONB DEFAULT '{}'::jsonb,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, farm_id, house_id)
+);
+CREATE INDEX IF NOT EXISTS ix_houses_tenant_farm ON analytics.houses(tenant_id, farm_id);
+CREATE INDEX IF NOT EXISTS gin_houses_meta ON analytics.houses USING GIN (meta);
+
+-- devices
+CREATE TABLE IF NOT EXISTS analytics.devices (
+  id          TEXT PRIMARY KEY,
+  device_id   TEXT NOT NULL UNIQUE,
+  tenant_id   TEXT NOT NULL,
+  farm_id     TEXT NOT NULL,
+  house_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL, -- "controller", "sensor", "actuator", "gateway"
+  model       TEXT,
+  vendor      TEXT,
+  serial_no   TEXT UNIQUE,
+  status      TEXT DEFAULT 'active', -- "active", "inactive", "maintenance", "error"
+  location    JSONB, -- { "x": 0, "y": 0, "z": 0 }
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, farm_id, house_id, device_id)
+);
+CREATE INDEX IF NOT EXISTS ix_devices_tenant_farm_house ON analytics.devices(tenant_id, farm_id, house_id);
+CREATE INDEX IF NOT EXISTS ix_devices_type ON analytics.devices(type);
+CREATE INDEX IF NOT EXISTS gin_devices_meta ON analytics.devices USING GIN (meta);
+
+-- flocks
+CREATE TABLE IF NOT EXISTS analytics.flocks (
+  id          TEXT PRIMARY KEY,
+  flock_id    TEXT NOT NULL UNIQUE,
+  tenant_id   TEXT NOT NULL,
+  farm_id     TEXT NOT NULL,
+  house_id    TEXT NOT NULL,
+  breed_id    TEXT,
+  animal_type_id TEXT,
+  sex         TEXT,
+  population  INTEGER,
+  start_date  DATE,
+  end_date    DATE,
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, farm_id, house_id, flock_id)
+);
+CREATE INDEX IF NOT EXISTS ix_flocks_tenant_farm_house ON analytics.flocks(tenant_id, farm_id, house_id);
+CREATE INDEX IF NOT EXISTS ix_flocks_breed ON analytics.flocks(breed_id);
+CREATE INDEX IF NOT EXISTS gin_flocks_meta ON analytics.flocks USING GIN (meta);
+
+-- animal_types
+CREATE TABLE IF NOT EXISTS analytics.animal_types (
+  id          TEXT PRIMARY KEY,
+  animal_type_id TEXT NOT NULL UNIQUE,
+  tenant_id   TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  category    TEXT, -- "poultry", "livestock", "aquaculture"
+  description TEXT,
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, animal_type_id)
+);
+CREATE INDEX IF NOT EXISTS ix_animal_types_tenant ON analytics.animal_types(tenant_id);
+CREATE INDEX IF NOT EXISTS gin_animal_types_meta ON analytics.animal_types USING GIN (meta);
+
+-- breeds
+CREATE TABLE IF NOT EXISTS analytics.breeds (
+  id            TEXT PRIMARY KEY,
+  breed_id      TEXT NOT NULL UNIQUE,
+  tenant_id     TEXT NOT NULL,
+  animal_type_id TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  characteristics JSONB DEFAULT '{}'::jsonb,
+  meta          JSONB DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, breed_id)
+);
+CREATE INDEX IF NOT EXISTS ix_breeds_tenant_animal_type ON analytics.breeds(tenant_id, animal_type_id);
+CREATE INDEX IF NOT EXISTS gin_breeds_meta ON analytics.breeds USING GIN (meta);
+
+-- feed_types
+CREATE TABLE IF NOT EXISTS analytics.feed_types (
+  id          TEXT PRIMARY KEY,
+  feed_type_id TEXT NOT NULL UNIQUE,
+  tenant_id   TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  category    TEXT, -- "starter", "grower", "finisher", "layer"
+  description TEXT,
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, feed_type_id)
+);
+CREATE INDEX IF NOT EXISTS ix_feed_types_tenant ON analytics.feed_types(tenant_id);
+CREATE INDEX IF NOT EXISTS gin_feed_types_meta ON analytics.feed_types USING GIN (meta);
+
+-- formulas
+CREATE TABLE IF NOT EXISTS analytics.formulas (
+  id          TEXT PRIMARY KEY,
+  formula_id  TEXT NOT NULL UNIQUE,
+  tenant_id   TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  description TEXT,
+  composition JSONB DEFAULT '{}'::jsonb, -- { "protein": 20, "fat": 5, "fiber": 3, "ash": 8 }
+  energy      DECIMAL(10,4), -- kcal/kg
+  cost        DECIMAL(10,4), -- THB/kg
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, formula_id)
+);
+CREATE INDEX IF NOT EXISTS ix_formulas_tenant ON analytics.formulas(tenant_id);
+CREATE INDEX IF NOT EXISTS gin_formulas_meta ON analytics.formulas USING GIN (meta);
+
+-- economic_data
+CREATE TABLE IF NOT EXISTS analytics.economic_data (
+  id          TEXT PRIMARY KEY,
+  tenant_id   TEXT NOT NULL,
+  data_type   TEXT NOT NULL, -- "FeedCost", "AnimalPrice", "LaborCost"
+  region      TEXT,
+  value       DECIMAL(10,4) NOT NULL,
+  unit        TEXT, -- "THB/kg", "THB/head"
+  currency    TEXT DEFAULT 'THB',
+  timestamp   TIMESTAMPTZ DEFAULT NOW(),
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_economic_data_type_region ON analytics.economic_data(data_type, region, timestamp);
+CREATE INDEX IF NOT EXISTS gin_economic_data_meta ON analytics.economic_data USING GIN (meta);
+
+-- external_data_sources
+CREATE TABLE IF NOT EXISTS analytics.external_data_sources (
+  id          TEXT PRIMARY KEY,
+  tenant_id   TEXT NOT NULL,
+  name        TEXT NOT NULL UNIQUE, -- "กรมอุตุนิยมวิทยา", "MarketPriceAPI"
+  type        TEXT, -- "Weather", "Market", "Government"
+  api_url     TEXT,
+  api_key     TEXT,
+  description TEXT,
+  status      TEXT DEFAULT 'active', -- "active", "inactive", "error"
+  meta        JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_external_sources_tenant ON analytics.external_data_sources(tenant_id);
+CREATE INDEX IF NOT EXISTS gin_external_sources_meta ON analytics.external_data_sources USING GIN (meta);
+
+-- zones
+CREATE TABLE IF NOT EXISTS analytics.zones (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  farm_id   TEXT NOT NULL,
+  house_id  TEXT,
+  name      TEXT NOT NULL,
+  geometry  JSONB, -- GeoJSON polygon
+  type      TEXT, -- "Feeding", "Resting", "Watering"
+  capacity  INTEGER,
+  meta      JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, farm_id, name)
+);
+CREATE INDEX IF NOT EXISTS ix_zones_tenant_farm ON analytics.zones(tenant_id, farm_id);
+CREATE INDEX IF NOT EXISTS gin_zones_meta ON analytics.zones USING GIN (meta);
+
+-- stations
+CREATE TABLE IF NOT EXISTS analytics.stations (
+  id        TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  farm_id   TEXT NOT NULL,
+  house_id  TEXT,
+  name      TEXT NOT NULL,
+  location  JSONB, -- { "lat": ..., "lon": ... }
+  type      TEXT, -- "Lab", "FeedingStation", "WaterStation"
+  status    TEXT DEFAULT 'active', -- "active", "inactive", "maintenance"
+  meta      JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, farm_id, name)
+);
+CREATE INDEX IF NOT EXISTS ix_stations_tenant_farm ON analytics.stations(tenant_id, farm_id);
+CREATE INDEX IF NOT EXISTS gin_stations_meta ON analytics.stations USING GIN (meta);
+
+-- device_health
+CREATE TABLE IF NOT EXISTS analytics.device_health (
+  id             TEXT PRIMARY KEY,
+  device_id      TEXT NOT NULL UNIQUE,
+  tenant_id      TEXT NOT NULL,
+  status         TEXT NOT NULL, -- "ONLINE", "OFFLINE", "ERROR", "MAINTENANCE"
+  last_seen      TIMESTAMPTZ NOT NULL,
+  battery_level  INTEGER,
+  signal_strength INTEGER,
+  temperature    DECIMAL(5,2),
+  errors         TEXT[], -- Array of error codes
+  warnings       TEXT[], -- Array of warning codes
+  meta           JSONB DEFAULT '{}'::jsonb,
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_device_health_tenant_device ON analytics.device_health(tenant_id, device_id);
+CREATE INDEX IF NOT EXISTS ix_device_health_status ON analytics.device_health(status);
+CREATE INDEX IF NOT EXISTS gin_device_health_meta ON analytics.device_health USING GIN (meta);
+
+-- master_events
+CREATE TABLE IF NOT EXISTS analytics.master_events (
+  id          TEXT PRIMARY KEY,
+  tenant_id   TEXT NOT NULL,
+  event_type  TEXT NOT NULL, -- "customer.created", "farm.updated"
+  entity_type TEXT NOT NULL, -- "Customer", "Farm", "Device"
+  entity_id   TEXT NOT NULL,
+  data        JSONB, -- Event payload
+  metadata    JSONB DEFAULT '{}'::jsonb,
+  timestamp   TIMESTAMPTZ DEFAULT NOW(),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_master_events_type_entity ON analytics.master_events(event_type, entity_type, timestamp);
+CREATE INDEX IF NOT EXISTS ix_master_events_tenant ON analytics.master_events(tenant_id, timestamp);
+CREATE INDEX IF NOT EXISTS gin_master_events_data ON analytics.master_events USING GIN (data);
+
+-- =====================================================
+-- 12. MONITORING TABLES (from monitoring-service)
+-- =====================================================
+
+-- monitoring_alerts (compatible with monitoring-service)
+CREATE TABLE IF NOT EXISTS analytics.monitoring_alerts (
+  tenant_id   TEXT NOT NULL,
+  alert_id    TEXT NOT NULL,
+  alert_type  TEXT NOT NULL,
+  severity    TEXT NOT NULL,
+  status      TEXT DEFAULT 'active',
+  description TEXT,
+  farm_id     TEXT,
+  house_id    TEXT,
+  device_id   TEXT,
+  batch_id    TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, alert_id)
+);
+CREATE INDEX IF NOT EXISTS ix_monitoring_alerts_status ON analytics.monitoring_alerts(tenant_id, status, severity, created_at);
+
+-- monitoring_alert_rules
+CREATE TABLE IF NOT EXISTS analytics.monitoring_alert_rules (
+  tenant_id   TEXT NOT NULL,
+  rule_id     TEXT NOT NULL,
+  metric_name TEXT NOT NULL,
+  threshold   DECIMAL NOT NULL,
+  condition   TEXT NOT NULL,
+  scope       JSONB DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, rule_id)
+);
+CREATE INDEX IF NOT EXISTS ix_monitoring_rules_metric ON analytics.monitoring_alert_rules(tenant_id, metric_name);
+
+-- monitoring_device_health_log
+CREATE TABLE IF NOT EXISTS analytics.monitoring_device_health_log (
+  tenant_id  TEXT NOT NULL,
+  id         BIGSERIAL,
+  device_id  TEXT NOT NULL,
+  status     TEXT NOT NULL,
+  time       TIMESTAMPTZ NOT NULL,
+  meta       JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS ix_monitoring_health_time ON analytics.monitoring_device_health_log(tenant_id, device_id, time);
+
+-- =====================================================
+-- 13. ADDITIONAL TABLES (from complete schema)
 -- =====================================================
 
 -- Spec limits / Control limits
@@ -870,7 +1284,8 @@ BEGIN
     RAISE NOTICE '';
     RAISE NOTICE 'Tables created:';
     RAISE NOTICE '- analytics.minute_features (TimescaleDB hypertable + CAGGs)';
-    RAISE NOTICE '- analytics.dim_device, dim_farm, dim_house, dim_flock';
+    RAISE NOTICE '- analytics.dim_device, dim_farm, dim_house, dim_flock, dim_customer';
+    RAISE NOTICE '- analytics.dim_animal_type, dim_breed, dim_feed_type, dim_formula';
     RAISE NOTICE '- analytics.analytics_agg (TimescaleDB hypertable)';
     RAISE NOTICE '- analytics.analytics_event (TimescaleDB hypertable)';
     RAISE NOTICE '- analytics.analytics_event_rollup (TimescaleDB hypertable)';
@@ -880,6 +1295,11 @@ BEGIN
     RAISE NOTICE '- analytics.analytics_spec_limits';
     RAISE NOTICE '- analytics.worker_checkpoints';
     RAISE NOTICE '- analytics.feature_publish_log, minute_watermark, metric_catalog';
+    RAISE NOTICE '- analytics.customers, farms, houses, devices, flocks (Master Data)';
+    RAISE NOTICE '- analytics.animal_types, breeds, feed_types, formulas (Reference Data)';
+    RAISE NOTICE '- analytics.economic_data, external_data_sources (External Data)';
+    RAISE NOTICE '- analytics.zones, stations, device_health, master_events (Extended Features)';
+    RAISE NOTICE '- analytics.monitoring_alerts, monitoring_alert_rules, monitoring_device_health_log (Monitoring)';
     RAISE NOTICE '';
     RAISE NOTICE 'Views created:';
     RAISE NOTICE '- analytics.v_minute_stats, v_minute_with_dims, v_minute_stats_enriched';

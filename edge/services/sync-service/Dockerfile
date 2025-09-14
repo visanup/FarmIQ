@@ -6,7 +6,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
+RUN yarn install --non-interactive --no-progress
 COPY tsconfig.json ./
 COPY src ./src
 RUN yarn build

@@ -2,7 +2,7 @@
 
 Analytics worker service for FarmIQ - processes real-time data from Kafka, performs aggregations, and runs scheduled analytics jobs.
 
-## 🏗️ Architecture
+## ๐—๏ธ Architecture
 
 - **Framework**: FastAPI + SQLAlchemy + APScheduler
 - **Database**: PostgreSQL with TimescaleDB (analytics schema)
@@ -10,14 +10,14 @@ Analytics worker service for FarmIQ - processes real-time data from Kafka, perfo
 - **Scheduler**: APScheduler for background jobs
 - **Port**: 7305
 
-## 📋 Prerequisites
+## ๐“ Prerequisites
 
 - Python 3.11+
 - PostgreSQL with TimescaleDB extension
 - Kafka
 - Docker & Docker Compose (optional)
 
-## 🚀 Quick Start
+## ๐€ Quick Start
 
 ### 1. Database Setup
 
@@ -108,7 +108,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 7305 --reload
 docker-compose -f ../../../docker-compose.apps.yml up analytics-worker --build
 ```
 
-## 🧪 Testing
+## ๐งช Testing
 
 ### Health Checks
 
@@ -120,14 +120,14 @@ curl http://localhost:7305/v1/health
 curl http://localhost:7305/v1/metrics
 ```
 
-## 📊 API Endpoints
+## ๐“ API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/v1/health` | Health check with worker status |
 | GET | `/v1/metrics` | Prometheus metrics |
 
-## 🔧 Configuration
+## ๐”ง Configuration
 
 ### Environment Variables
 
@@ -148,7 +148,7 @@ curl http://localhost:7305/v1/metrics
 | `ENABLE_WORKER` | `1` | Enable Kafka consumer worker |
 | `ENABLE_SCHEDULER` | `1` | Enable background scheduler |
 
-## 🔄 Data Processing Flow
+## ๐” Data Processing Flow
 
 ### 1. **Kafka Consumer**
 - Consumes messages from configured topics
@@ -170,7 +170,7 @@ curl http://localhost:7305/v1/metrics
 - **Batch Processing**: Optimizes database performance
 - **Transaction Management**: Ensures data consistency
 
-## 📈 Monitoring
+## ๐“ Monitoring
 
 ### Prometheus Metrics
 
@@ -180,7 +180,7 @@ curl http://localhost:7305/v1/metrics
 - `aw_worker_status` - Worker thread status
 - `aw_scheduler_jobs` - Scheduled job count
 
-## 🚨 Troubleshooting
+## ๐จ Troubleshooting
 
 ### Common Issues
 
@@ -202,45 +202,45 @@ curl http://localhost:7305/v1/metrics
    curl http://localhost:7305/v1/health
    ```
 
-## 📁 Project Structure
+## ๐“ Project Structure
 
 ```
 app/
-├── adapters/
-│   ├── kafka_consumer.py    # Kafka consumer setup
-│   ├── kafka_producer.py    # Kafka producer setup
-│   └── repository.py        # Database repository
-├── api/
-│   └── v1/
-│       └── endpoint.py      # Health & metrics endpoints
-├── config.py                # Configuration management
-├── database.py              # Database connection
-├── domain/
-│   ├── models.py            # Domain models
-│   ├── rules.py             # Business rules
-│   └── windows.py           # Time window utilities
-├── instrumentation/
-│   ├── metrics.py           # Prometheus metrics
-│   └── tracing.py           # Distributed tracing
-├── pipelines/
-│   ├── map/                 # Data mapping functions
-│   └── registry.py          # Pipeline registry
-├── services/
-│   ├── aggregator.py        # Data aggregation
-│   ├── anomaly_detector.py  # Anomaly detection
-│   ├── kpi.py              # KPI calculations
-│   └── spec_limits.py      # Specification limits
-├── utils/
-│   ├── time.py             # Time utilities
-│   ├── stats.py            # Statistical functions
-│   └── serialization.py    # Data serialization
-├── workers/
-│   ├── scheduler.py        # Background scheduler
-│   └── stream_worker.py    # Kafka stream worker
-└── main.py                 # FastAPI application
+โ”โ”€โ”€ adapters/
+โ”   โ”โ”€โ”€ kafka_consumer.py    # Kafka consumer setup
+โ”   โ”โ”€โ”€ kafka_producer.py    # Kafka producer setup
+โ”   โ””โ”€โ”€ repository.py        # Database repository
+โ”โ”€โ”€ api/
+โ”   โ””โ”€โ”€ v1/
+โ”       โ””โ”€โ”€ endpoint.py      # Health & metrics endpoints
+โ”โ”€โ”€ config.py                # Configuration management
+โ”โ”€โ”€ database.py              # Database connection
+โ”โ”€โ”€ domain/
+โ”   โ”โ”€โ”€ models.py            # Domain models
+โ”   โ”โ”€โ”€ rules.py             # Business rules
+โ”   โ””โ”€โ”€ windows.py           # Time window utilities
+โ”โ”€โ”€ instrumentation/
+โ”   โ”โ”€โ”€ metrics.py           # Prometheus metrics
+โ”   โ””โ”€โ”€ tracing.py           # Distributed tracing
+โ”โ”€โ”€ pipelines/
+โ”   โ”โ”€โ”€ map/                 # Data mapping functions
+โ”   โ””โ”€โ”€ registry.py          # Pipeline registry
+โ”โ”€โ”€ services/
+โ”   โ”โ”€โ”€ aggregator.py        # Data aggregation
+โ”   โ”โ”€โ”€ anomaly_detector.py  # Anomaly detection
+โ”   โ”โ”€โ”€ kpi.py              # KPI calculations
+โ”   โ””โ”€โ”€ spec_limits.py      # Specification limits
+โ”โ”€โ”€ utils/
+โ”   โ”โ”€โ”€ time.py             # Time utilities
+โ”   โ”โ”€โ”€ stats.py            # Statistical functions
+โ”   โ””โ”€โ”€ serialization.py    # Data serialization
+โ”โ”€โ”€ workers/
+โ”   โ”โ”€โ”€ scheduler.py        # Background scheduler
+โ”   โ””โ”€โ”€ stream_worker.py    # Kafka stream worker
+โ””โ”€โ”€ main.py                 # FastAPI application
 ```
 
-## 🤝 Contributing
+## ๐ค Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -248,6 +248,6 @@ app/
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## ๐“ License
 
 This project is part of the FarmIQ platform.

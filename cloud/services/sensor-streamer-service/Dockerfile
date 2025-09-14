@@ -7,7 +7,8 @@ WORKDIR /app
 # Install system dependencies
 RUN apk add --no-cache \
     curl \
-    dumb-init
+    dumb-init \
+    openssl
 
 # Copy package files
 COPY package.json yarn.lock ./

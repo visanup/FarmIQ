@@ -46,6 +46,12 @@ const configSchema = z.object({
   STREAMER_INTERVAL_MS: z.string().transform(Number).default('5000'),
   BATCH_SIZE: z.string().transform(Number).default('100'),
 
+  // Kafka Topics
+  TOPIC_SENSOR_READINGS: z.string().default('sensors.device.readings.v1'),
+  TOPIC_DEVICE_HEALTH: z.string().default('sensors.device.health.v1'),
+  TOPIC_LAB_READINGS: z.string().default('sensors.lab.readings.v1'),
+  TOPIC_SWEEP_READINGS: z.string().default('sensors.sweep.readings.v1'),
+
   // API Keys
   ADMIN_API_KEY: z.string().default('admin-key'),
 });
@@ -76,6 +82,10 @@ export const {
   ENABLE_PROMETHEUS,
   STREAMER_INTERVAL_MS,
   BATCH_SIZE,
+  TOPIC_SENSOR_READINGS,
+  TOPIC_DEVICE_HEALTH,
+  TOPIC_LAB_READINGS,
+  TOPIC_SWEEP_READINGS,
   ADMIN_API_KEY,
 } = config;
 

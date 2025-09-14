@@ -9,6 +9,7 @@ export class SweepReadingService {
   async createSweepReading(data: CreateSweepReadingInput): Promise<SweepReadingResponse> {
     const sweepReading = await prisma.sweepReading.create({
       data: {
+        id: `sweep_${data.sweepId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         deviceId: data.deviceId,
         farmId: data.farmId || null,
         sweepId: data.sweepId,
@@ -30,7 +31,7 @@ export class SweepReadingService {
 
   async getSweepReadingById(id: string): Promise<SweepReadingResponse | null> {
     const sweepReading = await prisma.sweepReading.findUnique({
-      where: { id },
+      where: { sweepId: id },
     });
 
     if (!sweepReading) {

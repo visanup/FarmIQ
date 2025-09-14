@@ -36,19 +36,25 @@ def detect_anomalies_endpoint(
     Returns list of anomalies found in the specified time range
     """
     try:
-        # Build query to get data points
+        # Build query to get data points from minute_features
         sql = text("""
-            SELECT tenant_id, factory_id, machine_id, sensor_id, metric, value, time
-            FROM analytics.analytics_agg
+            SELECT 
+                tenant_id, 
+                tags->>'farm_id' as farm_id,
+                tags->>'house_id' as house_id,
+                sensor_id, 
+                metric, 
+                value_sum / NULLIF(value_count, 0) as value,
+                bucket as time
+            FROM analytics.minute_features
             WHERE tenant_id = :tenant_id
-              AND factory_id = :factory_id
-              AND machine_id = :machine_id
+              AND tags->>'farm_id' = :factory_id
+              AND tags->>'house_id' = :machine_id
               AND metric = :metric
-              AND window_s = :window_s
-              AND bucket_start >= :start
-              AND bucket_start < :end
+              AND bucket >= :start
+              AND bucket < :end
               AND (:sensor_id IS NULL OR sensor_id = :sensor_id)
-            ORDER BY bucket_start ASC
+            ORDER BY bucket ASC
             LIMIT :limit
         """)
         

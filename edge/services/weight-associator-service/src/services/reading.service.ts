@@ -1,13 +1,13 @@
 //src/services/reading.service.ts
-
-import { AppDataSource } from '../utils/dataSource';
-import { Reading } from '../models/Reading';
+import { prisma } from '../utils/prisma';
 
 export const WEIGHT_METRICS = ['weight', 'mass'] as const;
 export type WeightMetric = typeof WEIGHT_METRICS[number];
 
 export async function getReadingById(id: string | number) {
-  return AppDataSource.getRepository(Reading).findOneByOrFail({ id: String(id) });
+  const rows = await (prisma.$queryRawUnsafe(`SELECT * FROM sensors.readings WHERE id=$1`, String(id)) as Promise<any[]>);
+  if (!rows[0]) throw new Error('Reading not found');
+  return rows[0];
 }
 
 /** ดึง reading น้ำหนักที่ "ใกล้เวลา t ที่สุด" ภายใน windowMs */
@@ -17,21 +17,18 @@ export async function findNearestWeightReading(
   t: Date,
   windowMs: number
 ) {
-  const repo = AppDataSource.getRepository(Reading);
-  const qb = repo
-    .createQueryBuilder('r')
-    .where('r.tenant_id = :tenant', { tenant: tenantId })
-    .andWhere('(r.sensor_id = :sid OR :sid IS NULL)', { sid: sensorId ?? null })
-    .andWhere('r.metric IN (:...metrics)', { metrics: WEIGHT_METRICS })
-    .andWhere('r.time BETWEEN :start AND :end', {
-      start: new Date(t.getTime() - windowMs),
-      end: new Date(t.getTime() + windowMs),
-    })
-    .orderBy('ABS(EXTRACT(EPOCH FROM (r.time - :t)))', 'ASC')
-    .setParameter('t', t)
-    .limit(1);
-
-  const reading = await qb.getOne();
+  const start = new Date(t.getTime() - windowMs);
+  const end = new Date(t.getTime() + windowMs);
+  const rows = await (prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.readings r
+     WHERE r.tenant_id=$1 AND (r.sensor_id = $2 OR $2 IS NULL)
+       AND r.metric = ANY($3)
+       AND r.time BETWEEN $4 AND $5
+     ORDER BY ABS(EXTRACT(EPOCH FROM (r.time - $6))) ASC
+     LIMIT 1`,
+    tenantId, sensorId ?? null, WEIGHT_METRICS as any, start, end, t
+  ) as Promise<any[]>);
+  const reading = rows[0];
   if (!reading) return null;
 
   const deltaMs = Math.abs(reading.time.getTime() - t.getTime());
@@ -45,12 +42,12 @@ export async function getWeightWindow(
   start: Date,
   end: Date
 ) {
-  return AppDataSource.getRepository(Reading)
-    .createQueryBuilder('r')
-    .where('r.tenant_id = :tenant', { tenant: tenantId })
-    .andWhere('(r.sensor_id = :sid OR :sid IS NULL)', { sid: sensorId ?? null })
-    .andWhere('r.metric IN (:...metrics)', { metrics: WEIGHT_METRICS })
-    .andWhere('r.time BETWEEN :start AND :end', { start, end })
-    .orderBy('r.time', 'ASC')
-    .getMany();
+  const rows = await (prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.readings r
+     WHERE r.tenant_id=$1 AND (r.sensor_id=$2 OR $2 IS NULL)
+       AND r.metric = ANY($3) AND r.time BETWEEN $4 AND $5
+     ORDER BY r.time ASC`,
+    tenantId, sensorId ?? null, WEIGHT_METRICS as any, start, end
+  ) as Promise<any[]>);
+  return rows as any[];
 }

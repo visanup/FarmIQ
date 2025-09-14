@@ -19,6 +19,7 @@
     "mock:generate": "node scripts/generate-mock-data.js",
     "mock:comprehensive": "node scripts/generate-comprehensive-mock-data.js",
     "mock:quick": "node scripts/generate-quick-mock-data.js",
+    "test:kafka": "node test-kafka-integration.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts || echo \"skip\"",
     "setup": "yarn db:generate && yarn db:push && yarn db:timescale",

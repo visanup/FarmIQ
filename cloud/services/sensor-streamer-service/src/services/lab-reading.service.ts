@@ -9,6 +9,7 @@ export class LabReadingService {
   async createLabReading(data: CreateLabReadingInput): Promise<LabReadingResponse> {
     const labReading = await prisma.labReading.create({
       data: {
+        id: `lab_${data.sampleId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         sampleId: data.sampleId,
         farmId: data.farmId || null,
         testType: data.testType,
@@ -32,7 +33,7 @@ export class LabReadingService {
 
   async getLabReadingById(id: string): Promise<LabReadingResponse | null> {
     const labReading = await prisma.labReading.findUnique({
-      where: { id },
+      where: { sampleId: id },
     });
 
     if (!labReading) {

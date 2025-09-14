@@ -11,7 +11,7 @@ services:
       - "25432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./services/sensor-streamer-service/prisma/migrations:/docker-entrypoint-initdb.d
+      - ./db:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d farmiq_cloud"]
       interval: 10s
@@ -19,7 +19,10 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - farmiq-network
+      farmiq-network: # ⬅️ per-service network mapping
+        aliases:
+          - farmiq-postgres # resolves too
+          - postgres
 
   redis:
     image: redis:7-alpine
@@ -35,7 +38,9 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - farmiq-network
+      farmiq-network:
+        aliases:
+          - farmiq-redis
 
   # 📊 Full-featured GUI by Redis
   redisinsight:
@@ -106,6 +111,7 @@ services:
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
     volumes:
       - kafka_data:/bitnami/kafka
+      - ./kafka-topics.yml:/opt/kafka-topics.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
       interval: 10s
@@ -116,56 +122,23 @@ services:
   # one-shot init (หยุดเมื่อทำงานเสร็จ ถือว่าปกติ)
   kafka-init-topics:
     image: bitnami/kafka:3.7
+    container_name: farmiq-kafka-init-topics
     depends_on:
       kafka:
         condition: service_healthy
+    volumes:
+      - ./scripts/create-kafka-topics.sh:/create-kafka-topics.sh:ro
+      - ./kafka-topics.yml:/kafka-topics.yml:ro
+    command: >
+      bash -c "
+        echo 'Waiting for Kafka to be ready...'
+        sleep 10
+        echo 'Creating Kafka topics...'
+        chmod +x /create-kafka-topics.sh
+        /create-kafka-topics.sh
+        echo 'Kafka topics initialization completed!'
+      "
     networks: [farmiq-network]
-    entrypoint:
-      - /bin/bash
-      - -lc
-      - |
-        set -euo pipefail
-
-        # ==== ของเดิม (คงไว้เหมือนเดิม) ====
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.readings  --partitions 6 --replication-factor 1
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.health    --partitions 3 --replication-factor 1
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.lab.readings     --partitions 3 --replication-factor 1
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.sweep.readings   --partitions 6 --replication-factor 1
-
-        # ==== เพิ่มหัวข้อแบบมีเวอร์ชัน (.v1) ====
-        # Sensors (append-only, เก็บ 365 วัน)
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.readings.v1  --partitions 6 --replication-factor 1 --config retention.ms=31536000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.health.v1    --partitions 3 --replication-factor 1 --config retention.ms=15552000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.lab.readings.v1     --partitions 3 --replication-factor 1 --config retention.ms=15552000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.sweep.readings.v1   --partitions 6 --replication-factor 1 --config retention.ms=31536000000
-
-        # Master snapshots (ต้องการค่า "ล่าสุด" → compact)
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic devices.device.snapshot.v1  --partitions 6 --replication-factor 1 --config cleanup.policy=compact
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.farm.snapshot.v1      --partitions 6 --replication-factor 1 --config cleanup.policy=compact
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.house.snapshot.v1     --partitions 6 --replication-factor 1 --config cleanup.policy=compact
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.flock.snapshot.v1     --partitions 6 --replication-factor 1 --config cleanup.policy=compact
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic formula.recipe.snapshot.v1  --partitions 3 --replication-factor 1 --config cleanup.policy=compact
-            
-        # Operational / Feed / Economics / External (append-only, 180 วัน)
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.operational.event.v1      --partitions 6 --replication-factor 1 --config retention.ms=15552000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic feed.batch.created.v1           --partitions 6 --replication-factor 1 --config retention.ms=15552000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic feed.quality.result.v1          --partitions 3 --replication-factor 1 --config retention.ms=15552000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic economics.cost.txn.v1           --partitions 6 --replication-factor 1 --config retention.ms=31536000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic external.weather.observation.v1 --partitions 6 --replication-factor 1 --config retention.ms=15552000000
-
-        # Analytics outputs (append-only, 90 วัน)
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic analytics.features.materialized.v1 --partitions 6 --replication-factor 1 --config retention.ms=7776000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic analytics.prediction.v1           --partitions 6 --replication-factor 1 --config retention.ms=7776000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic analytics.anomaly.v1              --partitions 6 --replication-factor 1 --config retention.ms=7776000000
-
-        # DLQ (30 วัน) — อย่างน้อยสำหรับสตรีมหลัก
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.device.readings.v1.dlq      --partitions 6 --replication-factor 1 --config retention.ms=2592000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic farms.operational.event.v1.dlq      --partitions 6 --replication-factor 1 --config retention.ms=2592000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic feed.batch.created.v1.dlq           --partitions 6 --replication-factor 1 --config retention.ms=2592000000
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic external.weather.observation.v1.dlq --partitions 3 --replication-factor 1 --config retention.ms=2592000000
-
-        # List สรุป
-        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
     restart: "no" 
 
   # --- Kafka UI ---

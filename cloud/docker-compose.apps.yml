@@ -1,3 +1,4 @@
+# Project name kept
 name: farmiq-cloud
 
 networks:
@@ -5,39 +6,149 @@ networks:
     name: cloud_farmiq-network
     external: true
 
+# # If your Compose supports `include`, keep it; otherwise bring infra up separately.
+# include:
+#   - docker-compose.infra.yml
+
 services:
+  # ----------------- Infra dependencies referenced by apps -----------------
+  # NOTE: These are defined in docker-compose.infra.yml and share the same network.
+  # postgres service name there is `postgres` with container_name `farmiq-postgres`.
+  # We added aliases at infra level so both `postgres` and `farmiq-postgres` resolve.
+
+  # ----------------- App services -----------------
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: farmiq-auth-service
+    environment:
+      - NODE_ENV=production
+      - PORT=7300
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgresql://postgres:postgres1611@farmiq-postgres:5432/farmiq_cloud
+      - JWT_SECRET=change-me-super-secret
+      - JWT_ALGORITHM=HS256
+      - JWT_ISSUER=farmiq-auth
+      - JWT_AUDIENCE=farmiq-clients
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - CORS_ALLOW_CREDENTIALS=true
+      - CORS_ALLOWED_ORIGINS=http://localhost:7320,http://127.0.0.1:7320
+      - CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS
+      - CORS_ALLOW_HEADERS=Content-Type,Authorization
+      - LOG_LEVEL=info
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_SSL=false
+      - MASTER_SERVICE_URL=http://master-service:7307
+      - EMAIL_FROM=no-reply@farmiq.local
+      - APP_BASE_URL=http://localhost:7300
+    ports:
+      - "7300:7300"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7300/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   sensor-streamer:
-    build: 
+    build:
       context: ./services/sensor-streamer-service
       dockerfile: Dockerfile
     container_name: farmiq-sensor-streamer
     environment:
-      DATABASE_URL: postgresql://postgres:postgres1611@postgres:5432/farmiq_cloud?schema=sensors
-      PORT: 7302
-      NODE_ENV: production
-      HOST: 0.0.0.0
-      ADMIN_API_KEY: admin-key
-      LOG_LEVEL: info
-      KAFKA_BROKERS: kafka:9092
-      KAFKA_SSL: false
-      KAFKA_CLIENT_ID: sensor-streamer-service
+      - DATABASE_URL=postgresql://postgres:postgres1611@farmiq-postgres:5432/farmiq_cloud?schema=sensors
+      - PORT=7302
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - ADMIN_API_KEY=admin-key
+      - LOG_LEVEL=info
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_SSL=false
+      - KAFKA_CLIENT_ID=sensor-streamer-service
+      - TOPIC_SENSOR_READINGS=sensors.device.readings.v1
+      - TOPIC_DEVICE_HEALTH=sensors.device.health.v1
+      - TOPIC_LAB_READINGS=sensors.lab.readings.v1
+      - TOPIC_SWEEP_READINGS=sensors.sweep.readings.v1
     ports:
       - "7302:7302"
-    # depends_on: postgres (external service from docker-compose.infra.yml)
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:7302/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - default
+
+  master-service:
+    build:
+      context: ./services/master-service
+    container_name: farmiq-master-service
+    environment:
+      - NODE_ENV=production
+      - PORT=7307
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgresql://postgres:postgres1611@farmiq-postgres:5432/farmiq_cloud?schema=master
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_SSL=false
+      - KAFKA_CLIENT_ID=master-service
+      - CORS_ALLOW_CREDENTIALS=true
+      - CORS_ALLOWED_ORIGINS=*
+      - CORS_ALLOW_METHODS=*
+      - CORS_ALLOW_HEADERS=*
+      - LOG_LEVEL=info
+      - ENABLE_PROMETHEUS=false
+      - ADMIN_API_KEY=admin-key
+      - SWAGGER_TITLE=Master Service API
+      - SWAGGER_DESCRIPTION=Master data management service for FarmIQ
+      - SWAGGER_VERSION=1.0.0
+      - SWAGGER_BASE_URL=http://localhost:7307
+    ports:
+      - "7307:7307"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7307/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  monitoring-service:
+    build:
+      context: ./services/monitoring-service
+    container_name: farmiq-monitoring-service
+    environment:
+      - NODE_ENV=production
+      - PORT=4112
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgresql://postgres:postgres1611@farmiq-postgres:5432/farmiq_cloud?schema=monitoring
+      - JWT_SECRET=monitoring-service-secret
+      - CORS_ALLOWED_ORIGINS=*
+      - CORS_ALLOW_CREDENTIALS=false
+      - CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS
+      - CORS_ALLOW_HEADERS=Content-Type,Authorization
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_CLIENT_ID=monitoring-service
+      - CONSUMER_GROUP=monitoring-group
+      - TOPIC_DEVICE_HEALTH=sensors.device.health.v1
+      - TOPIC_ANALYTICS_ALERTS=analytics.anomaly.v1
+      - TOPIC_MONITORING_ALERTS=monitoring.alerts.v1
+      - TOPIC_MONITORING_HEALTH=monitoring.health.v1
+    ports:
+      - "7312:4112"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4112/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   # --- Analytics Services (apps) ---
   analytics-alerts:
     build:
       context: ./services/analytic/services/analytics-alerts
-      dockerfile: Dockerfile
     container_name: farmiq-analytics-alerts
     restart: unless-stopped
     environment:
@@ -48,10 +159,18 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres1611
       - DB_SCHEMA=analytics
+      - DATABASE_URL=postgresql://postgres:postgres1611@farmiq-postgres:5432/farmiq_cloud?schema=analytics
       - KAFKA_BROKERS=kafka:9092
+      - KAFKA_CLIENT_ID=analytics-alerts
+      - CONSUMER_GROUP=analytics-alerts-group
+      - KAFKA_PARTITIONER=legacy
       - DATA_SERVICE_PORT=7306
       - JWT_SECRET_KEY=your-jwt-secret-key-here
       - ENV=dev
+      - TOPIC_ANALYTICS_FEATURES=analytics.features
+      - TOPIC_ANALYTICS_PREDICTIONS=analytics.prediction.v1
+      - TOPIC_ANALYTICS_ANOMALIES=analytics.anomaly.v1
+      - TOPIC_ANALYTICS_DLQ=analytics.invalid-readings
     ports:
       - "7306:7306"
     healthcheck:
@@ -60,13 +179,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    networks:
-      - default
 
   analytics-stream:
     build:
       context: ./services/analytic/services/analytics-stream
-      dockerfile: Dockerfile
     container_name: farmiq-analytics-stream
     restart: unless-stopped
     environment:
@@ -82,6 +198,16 @@ services:
       - REDIS_URL=redis://redis:6379
       - ANALYTIC_STREAM_PORT=7303
       - ENV=dev
+      - TOPIC_MASTER_CUSTOMER=master.customer.snapshot.v1
+      - TOPIC_MASTER_DEVICE=master.device.snapshot.v1
+      - TOPIC_MASTER_FARM=master.farm.snapshot.v1
+      - TOPIC_MASTER_HOUSE=master.house.snapshot.v1
+      - TOPIC_MASTER_FLOCK=master.flock.snapshot.v1
+      - TOPIC_MASTER_ANIMAL_TYPE=master.animal-type.snapshot.v1
+      - TOPIC_MASTER_BREED=master.breed.snapshot.v1
+      - KAFKA_TOPICS_IN=sensors.device.readings.v1,sensors.device.health.v1,external.weather.observation.v1,sensors.lab.readings.v1,sensors.sweep.readings.v1,farms.operational.event.v1,feed.batch.created.v1,feed.quality.result.v1,economics.cost.txn.v1,devices.device.snapshot.v1,farms.farm.snapshot.v1,farms.house.snapshot.v1,farms.flock.snapshot.v1,master.customer.snapshot.v1,master.device.snapshot.v1,master.farm.snapshot.v1,master.house.snapshot.v1,master.flock.snapshot.v1,master.animal-type.snapshot.v1,master.breed.snapshot.v1
+      - KAFKA_TOPIC_OUT=analytics.features
+      - KAFKA_TOPIC_DLQ=analytics.invalid-readings
     ports:
       - "7303:7303"
     healthcheck:
@@ -90,13 +216,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    networks:
-      - default
 
   analytics-api:
     build:
       context: ./services/analytic/services/analytics-api
-      dockerfile: Dockerfile
     container_name: farmiq-analytics-api
     restart: unless-stopped
     environment:
@@ -108,8 +231,11 @@ services:
       - DB_PASSWORD=postgres1611
       - DB_SCHEMA=analytics
       - KAFKA_BROKERS=kafka:9092
+      - CONSUMER_GROUP=analytics-api-group
+      - KAFKA_CLIENT_ID=analytics-api
       - ANALYTICS_API_PORT=7304
       - ENV=dev
+      - KAFKA_TOPICS=sensors.device.readings.v1,sensors.device.health.v1,sensors.lab.readings.v1,sensors.sweep.readings.v1,external.weather.observation.v1,farms.operational.event.v1,feed.batch.created.v1,feed.quality.result.v1,economics.cost.txn.v1,devices.device.snapshot.v1,farms.farm.snapshot.v1,farms.house.snapshot.v1,farms.flock.snapshot.v1,master.customer.snapshot.v1,master.device.snapshot.v1,master.farm.snapshot.v1,master.house.snapshot.v1,master.flock.snapshot.v1,master.animal-type.snapshot.v1,master.breed.snapshot.v1,analytics.features,analytics.prediction.v1,analytics.anomaly.v1
     ports:
       - "7304:7304"
     healthcheck:
@@ -118,13 +244,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    networks:
-      - default
 
   analytics-worker:
     build:
       context: ./services/analytic/services/analytics-worker
-      dockerfile: Dockerfile
     container_name: farmiq-analytics-worker
     restart: unless-stopped
     environment:
@@ -136,8 +259,13 @@ services:
       - DB_PASSWORD=postgres1611
       - DB_SCHEMA=analytics
       - KAFKA_BROKERS=kafka:9092
+      - CONSUMER_GROUP=analytics-worker-group
+      - KAFKA_CLIENT_ID=analytics-worker
       - ANALYTICS_WORKER_PORT=7305
       - ENV=dev
+      - ENABLE_WORKER=1
+      - ENABLE_SCHEDULER=1
+      - KAFKA_TOPICS=sensors.device.readings.v1,sensors.device.health.v1,sensors.lab.readings.v1,sensors.sweep.readings.v1,external.weather.observation.v1,farms.operational.event.v1,feed.batch.created.v1,feed.quality.result.v1,economics.cost.txn.v1,devices.device.snapshot.v1,farms.farm.snapshot.v1,farms.house.snapshot.v1,farms.flock.snapshot.v1,master.customer.snapshot.v1,master.device.snapshot.v1,master.farm.snapshot.v1,master.house.snapshot.v1,master.flock.snapshot.v1,master.animal-type.snapshot.v1,master.breed.snapshot.v1,analytics.features,analytics.prediction.v1,analytics.anomaly.v1
     ports:
       - "7305:7305"
     healthcheck:
@@ -146,5 +274,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    networks:
-      - default

@@ -8,6 +8,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
     userId: string;
     email: string;
     role: string;
+    scopes?: string[];
   };
 }
 
@@ -30,6 +31,7 @@ export async function authenticateToken(
       userId: payload.userId,
       email: payload.email,
       role: payload.role || 'USER',
+      scopes: (payload as any).scopes || [],
     };
   } catch (error) {
     return reply.status(401).send({ error: 'Invalid or expired token' });
@@ -56,5 +58,16 @@ export async function requireAdmin(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  return requireRole(['ADMIN'])(request, reply);
+  const roleChecker = await requireRole(['ADMIN']);
+  return await roleChecker(request, reply);
+}
+
+export function requireScopes(required: string[]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const user = (request as AuthenticatedRequest).user;
+    if (!user) return reply.status(401).send({ error: 'Authentication required' });
+    const scopes = user.scopes || [];
+    const ok = required.every((s) => scopes.includes(s));
+    if (!ok) return reply.status(403).send({ error: 'Insufficient scopes' });
+  };
 }

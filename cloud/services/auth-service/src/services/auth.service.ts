@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
 import {
   CreateUserInput,
@@ -11,15 +12,22 @@ import {
   TokenResponse,
   UserResponse,
 } from '../schemas/auth.schemas';
-import {
-  JWT_SECRET,
-  JWT_ALGORITHM,
-  ACCESS_TOKEN_EXPIRE_MINUTES,
-  REFRESH_TOKEN_EXPIRE_DAYS,
-} from '../configs/config';
+import { JWT_SECRET, JWT_ALGORITHM, JWT_ISSUER, JWT_AUDIENCE, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS } from '../configs/config';
 
 export class AuthService {
   private readonly saltRounds = 12;
+
+  private roleScopes(role: string): string[] {
+    switch (role) {
+      case 'ADMIN':
+        return ['users:read', 'users:write', 'customers:read', 'customers:write'];
+      case 'USER':
+        return ['customers:read', 'customers:write'];
+      case 'VIEWER':
+      default:
+        return ['customers:read'];
+    }
+  }
 
   async register(data: RegisterInput): Promise<AuthResponse> {
     // Check if user already exists
@@ -46,6 +54,19 @@ export class AuthService {
 
     // Generate tokens
     const tokens = await this.generateTokens(user.id);
+
+    // Create email verification token (valid 24h)
+    const vExp = new Date();
+    vExp.setHours(vExp.getHours() + 24);
+    const vtoken = jwt.sign({ userId: user.id, type: 'verify' }, JWT_SECRET, {
+      algorithm: JWT_ALGORITHM,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      expiresIn: '24h',
+    });
+    await prisma.verificationToken.create({
+      data: { token: vtoken, userId: user.id, expiresAt: vExp },
+    });
 
     return {
       user: this.formatUserResponse(user),
@@ -85,7 +106,18 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!refreshToken || refreshToken.isRevoked || refreshToken.expiresAt < new Date()) {
+    if (!refreshToken) {
+      throw new Error('Invalid refresh token');
+    }
+
+    if (refreshToken.isRevoked || refreshToken.expiresAt < new Date()) {
+      // Possible reuse attempt; revoke all active tokens for this user
+      if (refreshToken.user) {
+        await prisma.refreshToken.updateMany({
+          where: { userId: refreshToken.user.id, isRevoked: false },
+          data: { isRevoked: true },
+        });
+      }
       throw new Error('Invalid refresh token');
     }
 
@@ -110,6 +142,61 @@ export class AuthService {
       where: { token: refreshToken },
       data: { isRevoked: true },
     });
+  }
+
+  async requestEmailVerification(userId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+    const vExp = new Date();
+    vExp.setHours(vExp.getHours() + 24);
+    const vtoken = jwt.sign({ userId: user.id, type: 'verify' }, JWT_SECRET, {
+      algorithm: JWT_ALGORITHM,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      expiresIn: '24h',
+    });
+    await prisma.verificationToken.create({ data: { token: vtoken, userId: user.id, expiresAt: vExp } });
+    return { token: vtoken };
+  }
+
+  async verifyEmail(token: string) {
+    const rec = await prisma.verificationToken.findUnique({ where: { token } });
+    if (!rec || rec.usedAt || rec.expiresAt < new Date()) throw new Error('Invalid or expired token');
+    // Verify signature
+    jwt.verify(token, JWT_SECRET, { algorithms: [JWT_ALGORITHM], issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
+    await prisma.verificationToken.update({ where: { id: rec.id }, data: { usedAt: new Date() } });
+    // Mark user as active if needed (here we could set a flag if existed)
+    return { ok: true };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return; // to avoid user enumeration
+    const exp = new Date();
+    exp.setHours(exp.getHours() + 2);
+    const token = jwt.sign({ userId: user.id, type: 'reset' }, JWT_SECRET, {
+      algorithm: JWT_ALGORITHM,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      expiresIn: '2h',
+    });
+    await prisma.passwordResetToken.create({ data: { token, userId: user.id, expiresAt: exp } });
+    return { token };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const rec = await prisma.passwordResetToken.findUnique({ where: { token } });
+    if (!rec || rec.usedAt || rec.expiresAt < new Date()) throw new Error('Invalid or expired token');
+    const payload = jwt.verify(token, JWT_SECRET, {
+      algorithms: [JWT_ALGORITHM],
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }) as any;
+    const hash = await bcrypt.hash(newPassword, this.saltRounds);
+    await prisma.user.update({ where: { id: payload.userId }, data: { password: hash } });
+    await prisma.passwordResetToken.update({ where: { id: rec.id }, data: { usedAt: new Date() } });
+    // Revoke all refresh tokens
+    await prisma.refreshToken.updateMany({ where: { userId: payload.userId, isRevoked: false }, data: { isRevoked: true } });
   }
 
   async changePassword(userId: string, data: ChangePasswordInput): Promise<void> {
@@ -162,7 +249,7 @@ export class AuthService {
       data: {
         email: data.email,
         password: hashedPassword,
-        name: data.name,
+        name: data.name || null,
         role: data.role || 'USER',
       },
     });
@@ -195,10 +282,14 @@ export class AuthService {
     return user ? this.formatUserResponse(user) : null;
   }
 
-  async verifyToken(token: string): Promise<{ userId: string; email: string }> {
+  async verifyToken(token: string): Promise<{ userId: string; email: string; role?: string }> {
     try {
-      const payload = jwt.verify(token, JWT_SECRET, { algorithms: [JWT_ALGORITHM] }) as any;
-      return { userId: payload.userId, email: payload.email };
+      const payload = jwt.verify(token, JWT_SECRET, {
+        algorithms: [JWT_ALGORITHM],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+      }) as any;
+      return { userId: payload.userId, email: payload.email, role: payload.role };
     } catch (error) {
       throw new Error('Invalid token');
     }
@@ -215,10 +306,13 @@ export class AuthService {
 
     // Generate access token
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { userId: user.id, email: user.email, role: user.role, scopes: this.roleScopes(user.role) },
       JWT_SECRET,
       {
         algorithm: JWT_ALGORITHM,
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        jwtid: crypto.randomUUID(),
         expiresIn: `${ACCESS_TOKEN_EXPIRE_MINUTES}m`,
       }
     );
@@ -229,6 +323,9 @@ export class AuthService {
       JWT_SECRET,
       {
         algorithm: JWT_ALGORITHM,
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        jwtid: crypto.randomUUID(),
         expiresIn: `${REFRESH_TOKEN_EXPIRE_DAYS}d`,
       }
     );

@@ -1,5 +1,5 @@
 // src/utils/test/database.test.helper.ts
-import { AppDataSource } from '../../database';
+import { AppDataSource } from '../dataSource';
 import { Alert } from '../../models/alert.model';
 import { getRepository } from 'typeorm';
 

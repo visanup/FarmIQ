@@ -1,5 +1,5 @@
 // src/__tests__/__init__.ts
-import { AppDataSource } from '../database';
+import { AppDataSource } from '../utils/dataSource';
 import { Alert } from '../models/alert.model';
 import { AlertService } from '../services/alert.service';
 import { getRepository } from 'typeorm';

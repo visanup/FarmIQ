@@ -1,9 +1,6 @@
-// src/routes/sensor.route.ts
-
-import { Router } from "express";
-import { apiKey } from "../middlewares/apiKey"; // ✅ middleware (ไม่มี s)
-
-const router = Router();
+// src/routes/sensor.route.ts (Fastify plugin)
+import { FastifyInstance } from "fastify";
+import { apiKey } from "../middlewares/apiKey";
 
 const latestCache: any[] = [];
 export function stashLatest(msg: any) {
@@ -11,7 +8,12 @@ export function stashLatest(msg: any) {
   if (latestCache.length > 50) latestCache.pop();
 }
 
-router.get("/health", (_req, res) => res.json({ ok: true }));
-router.get("/latest", apiKey, (_req, res) => res.json({ data: latestCache }));
+export default async function sensorRoutes(fastify: FastifyInstance) {
+  fastify.get("/health", async (_req, _reply) => ({ ok: true }));
 
-export default router;
+  fastify.get(
+    "/latest",
+    { preHandler: [apiKey] },
+    async (_req, _reply) => ({ data: latestCache })
+  );
+}

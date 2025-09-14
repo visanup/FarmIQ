@@ -25,25 +25,32 @@ def get_agg(
     limit: int = Query(1000, ge=1, le=10000),
     db: Session = Depends(get_db),
 ):
+    # Use minute_features and aggregate on the fly
     sql = text(f"""
       SELECT
-        bucket_start, window_s, tenant_id, factory_id, machine_id, sensor_id, metric,
-        count_n,
-        COALESCE(sum_val,0)    AS sum_val,
-        COALESCE(avg_val,0)    AS avg_val,
-        COALESCE(min_val,0)    AS min_val,
-        COALESCE(max_val,0)    AS max_val,
-        COALESCE(stddev_val,0) AS stddev_val,
-        COALESCE(p95_val,0)    AS p95_val
-      FROM analytics.analytics_agg
-      WHERE tenant_id = :tenant_id
-        AND factory_id = :factory_id
-        AND machine_id = :machine_id
+        time_bucket(INTERVAL '{window_s} seconds', bucket) AS bucket_start,
+        {window_s} AS window_s,
+        tenant_id,
+          tags->>'farm_id' AS farm_id,
+          tags->>'house_id' AS house_id,
+        sensor_id,
+        metric,
+        SUM(value_count) AS count_n,
+        SUM(value_sum) AS sum_val,
+        AVG(value_sum / NULLIF(value_count, 0)) AS avg_val,
+        MIN(value_min) AS min_val,
+        MAX(value_max) AS max_val,
+        STDDEV_POP(value_sum / NULLIF(value_count, 0)) AS stddev_val,
+        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY value_sum / NULLIF(value_count, 0)) AS p95_val
+      FROM analytics.minute_features
+        WHERE tenant_id = :tenant_id
+          AND tags->>'farm_id' = :factory_id
+          AND tags->>'house_id' = :machine_id
         AND metric = :metric
-        AND window_s = :window_s
-        AND bucket_start >= :start
-        AND bucket_start < :end
+        AND bucket >= :start
+        AND bucket < :end
         { "AND sensor_id = :sensor_id" if sensor_id else "" }
+      GROUP BY time_bucket(INTERVAL '{window_s} seconds', bucket), tenant_id, tags->>'farm_id', tags->>'house_id', sensor_id, metric
       ORDER BY bucket_start ASC
       LIMIT :limit
     """)

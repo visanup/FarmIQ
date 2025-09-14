@@ -1,21 +1,21 @@
 # Analytics API Service
 
-Analytics API service for FarmIQ - provides statistical analysis, anomaly detection, and KPI calculations for sensor data.
+Analytics API service for FarmIQ - provides statistical analysis, anomaly detection, KPI calculations, FCR (Feed Conversion Ratio) calculations, and Size Distribution analysis for sensor data.
 
-## 🏗️ Architecture
+## ๐—๏ธ Architecture
 
 - **Framework**: FastAPI + SQLAlchemy + Pydantic
 - **Database**: PostgreSQL with TimescaleDB (analytics schema)
 - **Message Queue**: Kafka (optional)
 - **Port**: 7304
 
-## 📋 Prerequisites
+## ๐“ Prerequisites
 
 - Python 3.11+
 - PostgreSQL with TimescaleDB extension
 - Docker & Docker Compose (optional)
 
-## 🚀 Quick Start
+## ๐€ Quick Start
 
 ### 1. Database Setup
 
@@ -152,7 +152,7 @@ docker build -t analytics-api .
 docker run -p 7304:7304 --env-file .env analytics-api
 ```
 
-## 🧪 Testing
+## ๐งช Testing
 
 ### Health Checks
 
@@ -194,6 +194,27 @@ curl -X POST "http://localhost:7304/v1/kpi" \
     "metric": "temperature",
     "use_window_s": 60
   }'
+
+# Calculate FCR (Feed Conversion Ratio)
+curl "http://localhost:7304/v1/fcr?tenant_id=test-tenant&house_id=house-001&start_date=2024-01-01&end_date=2024-01-31&weight_source=both"
+
+# Calculate daily FCR
+curl "http://localhost:7304/v1/fcr/daily?tenant_id=test-tenant&house_id=house-001&start_date=2024-01-01&end_date=2024-01-31&weight_source=both"
+
+# Calculate weekly FCR
+curl "http://localhost:7304/v1/fcr/weekly?tenant_id=test-tenant&house_id=house-001&start_date=2024-01-01&end_date=2024-01-31&weight_source=both"
+
+# Calculate Size Distribution
+curl "http://localhost:7304/v1/size-distribution?tenant_id=test-tenant&house_id=house-001&measurement_date=2024-01-15&weight_source=predict"
+
+# Calculate weekly Size Distribution
+curl "http://localhost:7304/v1/size-distribution/weekly?tenant_id=test-tenant&house_id=house-001&measurement_date=2024-01-15&weight_source=predict"
+
+# Compare Weight Sources (Scale vs Predict)
+curl "http://localhost:7304/v1/size-distribution/compare?tenant_id=test-tenant&house_id=house-001&measurement_date=2024-01-15"
+
+# Get available metrics for FCR calculation
+curl "http://localhost:7304/v1/fcr/metrics?tenant_id=test-tenant&house_id=house-001"
 ```
 
 ### Database Testing
@@ -215,7 +236,7 @@ ORDER BY bucket_start DESC
 LIMIT 10;
 ```
 
-## 📊 API Endpoints
+## ๐“ API Endpoints
 
 ### Health & Metrics
 
@@ -237,6 +258,18 @@ LIMIT 10;
 |--------|----------|-------------|
 | POST | `/v1/anomalies` | Detect anomalies using Western Electric rules |
 | POST | `/v1/kpi` | Calculate process capability indices (Cp/Cpk) |
+
+### FCR & Size Distribution
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/fcr` | Calculate FCR (Feed Conversion Ratio) |
+| GET | `/v1/fcr/daily` | Calculate daily FCR for specified period |
+| GET | `/v1/fcr/weekly` | Calculate weekly FCR for specified period |
+| GET | `/v1/size-distribution` | Calculate size distribution for specified date |
+| GET | `/v1/size-distribution/weekly` | Calculate weekly size distribution |
+| GET | `/v1/size-distribution/compare` | Compare scale vs predict weight sources |
+| GET | `/v1/fcr/metrics` | Get available metrics for FCR calculation |
 
 ### Query Parameters
 
@@ -262,7 +295,24 @@ LIMIT 10;
 - `end` (required): End time (ISO8601)
 - `limit` (optional): Maximum results (default: 1000, max: 10000)
 
-## 🔧 Configuration
+#### `/v1/fcr`
+- `tenant_id` (required): Tenant identifier
+- `house_id` (required): House identifier
+- `start_date` (required): Start date (ISO8601)
+- `end_date` (required): End date (ISO8601)
+- `farm_id` (optional): Farm identifier
+- `animal_count` (optional): Number of animals
+- `period` (optional): Period type - "daily", "weekly", or "total" (default: "total")
+- `weight_source` (optional): Weight source - "scale", "predict", or "both" (default: "both")
+
+#### `/v1/size-distribution`
+- `tenant_id` (required): Tenant identifier
+- `house_id` (required): House identifier
+- `measurement_date` (required): Measurement date (ISO8601)
+- `farm_id` (optional): Farm identifier
+- `weight_source` (optional): Weight source - "scale" or "predict" (default: "predict")
+
+## ๐”ง Configuration
 
 ### Environment Variables
 
@@ -278,25 +328,94 @@ LIMIT 10;
 | `ANALYTICS_API_PORT` | `7304` | API port |
 | `WINDOWS` | `60,300,3600` | Aggregation windows (seconds) |
 
-## 📈 Statistical Analysis
+## ๐“ Statistical Analysis
 
 ### Western Electric Rules
 
 The service implements Western Electric rules for anomaly detection:
 
-- **WE-1**: Points beyond 3σ limits
-- **WE-2**: 2 of 3 consecutive points beyond 2σ on same side
-- **WE-3**: 4 of 5 consecutive points beyond 1σ on same side  
+- **WE-1**: Points beyond 3ฯ limits
+- **WE-2**: 2 of 3 consecutive points beyond 2ฯ on same side
+- **WE-3**: 4 of 5 consecutive points beyond 1ฯ on same side  
 - **WE-4**: 8 consecutive points on same side of center line
 
 ### Process Capability Indices
 
-- **Cp**: Process capability (USL - LSL) / (6σ)
+- **Cp**: Process capability (USL - LSL) / (6ฯ)
 - **Cpk**: Process capability index (min of CPU, CPL)
-- **Pp**: Process performance (USL - LSL) / (6σ)
+- **Pp**: Process performance (USL - LSL) / (6ฯ)
 - **Ppk**: Process performance index
 
-## 🚨 Troubleshooting
+## ๐ท FCR (Feed Conversion Ratio) Analysis
+
+### Overview
+
+FCR calculation provides insights into feed efficiency by comparing total feed consumption to animal weight gain.
+
+### Supported Weight Sources
+
+- **Scale**: Direct weight measurements from scales
+- **Predict**: AI-predicted weights from image analysis
+- **Both**: Combined/averaged data from both sources
+
+### Calculation Logic
+
+```
+FCR = Total Feed Consumed (kg) / Total Weight Gain (kg)
+```
+
+### Supported Metrics
+
+**Feed Metrics:**
+- `feed.batch.mass_kg`
+- `feed.consumption.kg`
+- `feed.intake.kg`
+- `feed.daily.kg`
+- `sensors.feed.weight`
+- `sensors.feed.mass`
+
+**Weight Metrics:**
+- `sensors.weight_scale.total`
+- `sensors.weight_scale.individual`
+- `sensors.weight_predict.total`
+- `sensors.weight_predict.individual`
+- `animal.weight.total`
+- `animal.weight.avg`
+- `flock.weight.total`
+- `flock.weight.sum`
+
+## ๐“ Size Distribution Analysis
+
+### Overview
+
+Size distribution analysis provides statistical insights into animal weight distribution within a house.
+
+### Statistical Measures
+
+- **Mean Weight**: Average weight across all animals
+- **Median Weight**: Middle value when weights are sorted
+- **Standard Deviation**: Measure of weight variability
+- **Variance**: Square of standard deviation
+- **Range**: Difference between maximum and minimum weights
+- **Coefficient of Variation**: Relative variability (std dev / mean)
+
+### Weight Categories
+
+Animals are automatically categorized into 5 groups:
+- **Very Small**: Bottom 20% of weight range
+- **Small**: 20-40% of weight range
+- **Medium**: 40-60% of weight range
+- **Large**: 60-80% of weight range
+- **Very Large**: Top 20% of weight range
+
+### Quartile Analysis
+
+- **Q1 (25th percentile)**: First quartile
+- **Q2 (50th percentile)**: Median (second quartile)
+- **Q3 (75th percentile)**: Third quartile
+- **IQR**: Interquartile range (Q3 - Q1)
+
+## ๐จ Troubleshooting
 
 ### Common Issues
 
@@ -330,44 +449,73 @@ ENV=dev python -m app.main
 docker logs farmiq-analytics-api -f
 ```
 
-## 📁 Project Structure
+## ๐“ Project Structure
 
 ```
 app/
-├── api/
-│   └── v1/
-│       ├── endpoint.py      # Health & metrics endpoints
-│       ├── agg.py          # Aggregated data API
-│       └── events.py       # Event rollup API
-├── config.py               # Configuration management
-├── database.py             # Database connection
-├── domain/
-│   ├── models.py           # Pydantic models
-│   ├── rules.py            # Western Electric rules
-│   └── windows.py          # Time window utilities
-├── instrumentation/
-│   └── metrics.py          # Prometheus metrics
-├── services/
-│   ├── aggregator.py       # Data aggregation logic
-│   ├── anomaly_detector.py # Anomaly detection
-│   ├── kpi.py             # KPI calculations
-│   └── spec_limits.py     # Specification limits
-├── utils/
-│   ├── time.py            # Time utilities
-│   ├── stats.py           # Statistical functions
-│   └── serialization.py   # Data serialization
-└── main.py                # FastAPI application
+โ”โ”€โ”€ api/
+โ”   โ””โ”€โ”€ v1/
+โ”       โ”โ”€โ”€ endpoint.py      # Health & metrics endpoints
+โ”       โ”โ”€โ”€ agg.py          # Aggregated data API
+โ”       โ”โ”€โ”€ events.py       # Event rollup API
+โ”       โ”โ”€โ”€ anomalies.py    # Anomaly detection API
+โ”       โ”โ”€โ”€ kpi.py          # KPI calculations API
+โ”       โ””โ”€โ”€ fcr.py          # FCR & Size Distribution API
+โ”โ”€โ”€ config.py               # Configuration management
+โ”โ”€โ”€ database.py             # Database connection (sync & async)
+โ”โ”€โ”€ domain/
+โ”   โ”โ”€โ”€ models.py           # Pydantic models
+โ”   โ”โ”€โ”€ rules.py            # Western Electric rules
+โ”   โ””โ”€โ”€ windows.py          # Time window utilities
+โ”โ”€โ”€ instrumentation/
+โ”   โ””โ”€โ”€ metrics.py          # Prometheus metrics
+โ”โ”€โ”€ services/
+โ”   โ”โ”€โ”€ aggregator.py       # Data aggregation logic
+โ”   โ”โ”€โ”€ anomaly_detector.py # Anomaly detection
+โ”   โ”โ”€โ”€ kpi.py             # KPI calculations
+โ”   โ”โ”€โ”€ spec_limits.py     # Specification limits
+โ”   โ”โ”€โ”€ fcr_calculator.py  # FCR calculation logic
+โ”   โ””โ”€โ”€ size_distribution.py # Size distribution analysis
+โ”โ”€โ”€ utils/
+โ”   โ”โ”€โ”€ time.py            # Time utilities
+โ”   โ”โ”€โ”€ stats.py           # Statistical functions
+โ”   โ””โ”€โ”€ serialization.py   # Data serialization
+โ””โ”€โ”€ main.py                # FastAPI application
 ```
 
-## 🔄 Data Flow
+## ๐” Data Flow
 
-1. **Data Ingestion**: Raw sensor data → Kafka topics
-2. **Aggregation**: analytics-stream → analytics_agg table
-3. **API Queries**: FastAPI → PostgreSQL → JSON response
-4. **Anomaly Detection**: Statistical analysis → anomaly alerts
-5. **KPI Calculation**: Process capability analysis → KPI metrics
+1. **Data Ingestion**: Raw sensor data โ’ Kafka topics (analytics-stream)
+2. **Data Processing**: Kafka โ’ analytics-worker โ’ PostgreSQL (analytics.minute_features)
+3. **API Queries**: FastAPI โ’ PostgreSQL โ’ JSON response
+4. **Anomaly Detection**: Statistical analysis โ’ anomaly alerts
+5. **KPI Calculation**: Process capability analysis โ’ KPI metrics
+6. **FCR Calculation**: Feed consumption + Weight gain โ’ FCR ratio
+7. **Size Distribution**: Individual weights โ’ Statistical analysis
 
-## 🤝 Contributing
+## ๐—๏ธ Architecture Overview
+
+```
+โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+โ”   Sensors/      โ”    โ”  analytics-     โ”    โ”  analytics-     โ”
+โ”   Edge Devices  โ”โ”€โ”€โ”€โ–ถโ”     stream      โ”โ”€โ”€โ”€โ–ถโ”     worker      โ”
+โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+                                                         โ”
+                                                         โ–ผ
+โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+โ”   analytics-    โ”    โ”   PostgreSQL    โ”    โ”   analytics-    โ”
+โ”     alerts      โ”โ—€โ”€โ”€โ”€โ”  TimescaleDB    โ”โ—€โ”€โ”€โ”€โ”      api        โ”
+โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+```
+
+### Service Responsibilities
+
+- **analytics-stream**: Data ingestion from sensors to Kafka
+- **analytics-worker**: Data processing, aggregation, and storage
+- **analytics-api**: Business logic, FCR calculation, Size distribution analysis
+- **analytics-alerts**: Alert rules and notifications
+
+## ๐ค Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -375,6 +523,6 @@ app/
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## ๐“ License
 
 This project is part of the FarmIQ platform.

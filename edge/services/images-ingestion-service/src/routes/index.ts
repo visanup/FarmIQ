@@ -1,8 +1,7 @@
-// src/routes/index.ts
+// src/routes/index.ts (Fastify plugin)
+import { FastifyInstance } from 'fastify';
+import ingestionRoutes from './ingestion.routes';
 
-import { Router } from 'express';
-import ingestion from './ingestion.routes';
-
-const router = Router();
-router.use('/ingest', ingestion);
-export default router;
+export default async function routes(fastify: FastifyInstance) {
+  await fastify.register(ingestionRoutes, { prefix: '/ingest' });
+}

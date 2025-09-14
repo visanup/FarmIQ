@@ -75,7 +75,7 @@ def compute_kpi(
            n, mean_val, stddev_val, cp, cpk, pp, ppk)
           VALUES (:period, :period_start, :tenant_id, :factory_id, :machine_id, :sensor_id, :metric,
                   :n, :mean_val, :stddev_val, :cp, :cpk, :pp, :ppk)
-          ON CONFLICT (tenant_id, factory_id, machine_id, metric, period, period_start)
+          ON CONFLICT (tenant_id, factory_id, machine_id, sensor_id, metric, period, period_start)
           DO UPDATE SET
             n = EXCLUDED.n, mean_val = EXCLUDED.mean_val, stddev_val = EXCLUDED.stddev_val,
             cp = EXCLUDED.cp, cpk = EXCLUDED.cpk, pp = EXCLUDED.pp, ppk = EXCLUDED.ppk,

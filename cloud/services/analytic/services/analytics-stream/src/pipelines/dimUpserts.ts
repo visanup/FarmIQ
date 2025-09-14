@@ -71,6 +71,9 @@ const TABLES = {
   farm:   'dim_farm',
   house:  'dim_house',
   flock:  'dim_flock',
+  customer: 'dim_customer',
+  animalType: 'dim_animal_type',
+  breed: 'dim_breed',
 };
 
 /** ---------- Schemas ---------- */
@@ -118,6 +121,30 @@ const FlockSnap = BaseSnap.extend({
   population:z.number().int().nonnegative().optional(),
   start_date: Time.optional(),
   end_date:   Time.optional(),
+});
+
+const CustomerSnap = BaseSnap.extend({
+  customer_id: z.string().min(1),
+  name:        z.string().optional(),
+  email:       z.string().optional(),
+  phone:       z.string().optional(),
+  address:     z.string().optional(),
+});
+
+const AnimalTypeSnap = BaseSnap.extend({
+  animal_type_id: z.string().min(1),
+  name:           z.string().optional(),
+  category:       z.string().optional(),
+  description:    z.string().optional(),
+});
+
+const BreedSnap = BaseSnap.extend({
+  breed_id:       z.string().min(1),
+  animal_type_id: z.string().min(1),
+  name:           z.string().optional(),
+  code:           z.string().optional(),
+  description:    z.string().optional(),
+  characteristics: z.record(z.unknown()).optional(),
 });
 
 /** ---------- Upsert functions ---------- */
@@ -202,5 +229,62 @@ export async function handleFlockSnapshot(o: any) {
     },
     ['tenant_id', 'flock_id'],
     ['meta']
+  );
+}
+
+export async function handleCustomerSnapshot(o: any) {
+  const d = CustomerSnap.parse(o);
+  await upsertRow(
+    TABLES.customer,
+    {
+      tenant_id:   d.tenant_id,
+      customer_id: d.customer_id,
+      name:        d.name ?? null,
+      email:       d.email ?? null,
+      phone:       d.phone ?? null,
+      address:     d.address ?? null,
+      meta:        d.meta ?? {},
+      updated_at:  d.updated_at ?? new Date(),
+    },
+    ['tenant_id', 'customer_id'],
+    ['meta']
+  );
+}
+
+export async function handleAnimalTypeSnapshot(o: any) {
+  const d = AnimalTypeSnap.parse(o);
+  await upsertRow(
+    TABLES.animalType,
+    {
+      tenant_id:      d.tenant_id,
+      animal_type_id: d.animal_type_id,
+      name:           d.name ?? null,
+      category:       d.category ?? null,
+      description:    d.description ?? null,
+      meta:           d.meta ?? {},
+      updated_at:     d.updated_at ?? new Date(),
+    },
+    ['tenant_id', 'animal_type_id'],
+    ['meta']
+  );
+}
+
+export async function handleBreedSnapshot(o: any) {
+  const d = BreedSnap.parse(o);
+  await upsertRow(
+    TABLES.breed,
+    {
+      tenant_id:      d.tenant_id,
+      breed_id:       d.breed_id,
+      animal_type_id: d.animal_type_id,
+      name:           d.name ?? null,
+      code:           d.code ?? null,
+      description:    d.description ?? null,
+      characteristics: d.characteristics ?? {},
+      meta:           d.meta ?? {},
+      updated_at:     d.updated_at ?? new Date(),
+    },
+    ['tenant_id', 'breed_id'],
+    ['meta', 'characteristics']
   );
 }

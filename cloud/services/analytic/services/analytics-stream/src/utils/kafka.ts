@@ -14,4 +14,10 @@ export const producer = kafka.producer({
   createPartitioner: Partitioners.LegacyPartitioner,
 });
 
-export const consumer = kafka.consumer({ groupId: env.CONSUMER_GROUP });
+export const consumer = kafka.consumer({ 
+  groupId: env.CONSUMER_GROUP,
+  sessionTimeout: 30000,
+  heartbeatInterval: 3000,
+  maxWaitTimeInMs: 5000,
+  allowAutoTopicCreation: false,
+});

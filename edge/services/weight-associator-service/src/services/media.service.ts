@@ -1,7 +1,6 @@
 // src/services/media.service.ts
 
-import { AppDataSource } from '../utils/dataSource';
-import { MediaObject } from '../models/MediaObject';
+import { prisma } from '../utils/prisma';
 
 /**
  * ตัวชี้สื่อ (ไม่ผูกกับสคีม่า AssociateRequest เพื่อหลบปัญหา window_ms)
@@ -12,20 +11,24 @@ export type MediaRef = {
   object_key?: string;
 };
 
-const repo = () => AppDataSource.getRepository(MediaObject);
+async function findOne(sql: string, ...args: any[]) {
+  const rows = await (prisma.$queryRawUnsafe(sql, ...args) as Promise<any[]>);
+  if (!rows[0]) throw new Error('Media not found');
+  return rows[0];
+}
 
 /**
  * ดึง MediaObject ตาม media_id (string/bigint)
  */
-export async function getMediaById(mediaId: number | string): Promise<MediaObject> {
-  return repo().findOneByOrFail({ mediaId: String(mediaId) });
+export async function getMediaById(mediaId: number | string): Promise<any> {
+  return findOne(`SELECT * FROM sensors.media_objects WHERE media_id=$1`, String(mediaId));
 }
 
 /**
  * ดึง MediaObject ตาม (bucket, object_key)
  */
-export async function getMediaByBucketKey(bucket: string, object_key: string): Promise<MediaObject> {
-  return repo().findOneByOrFail({ bucket, object_key });
+export async function getMediaByBucketKey(bucket: string, object_key: string): Promise<any> {
+  return findOne(`SELECT * FROM sensors.media_objects WHERE bucket=$1 AND object_key=$2`, bucket, object_key);
 }
 
 /**
@@ -33,7 +36,7 @@ export async function getMediaByBucketKey(bucket: string, object_key: string): P
  * - ถ้ามี media_id → ใช้ดึงโดยตรง
  * - ถ้ามี bucket + object_key → ใช้คีย์ไฟล์
  */
-export async function resolveMedia(ref: MediaRef): Promise<MediaObject> {
+export async function resolveMedia(ref: MediaRef): Promise<any> {
   if (ref.media_id != null) {
     return getMediaById(ref.media_id);
   }
@@ -46,13 +49,12 @@ export async function resolveMedia(ref: MediaRef): Promise<MediaObject> {
 /**
  * รายการสื่อล่าสุดสำหรับ debug/ตรวจสอบเร็ว
  */
-export async function listRecentMedia(limit = 20): Promise<MediaObject[]> {
+export async function listRecentMedia(limit = 20): Promise<any[]> {
   const safeLimit = Math.min(Math.max(limit, 1), 200);
-  return repo()
-    .createQueryBuilder('m')
-    .orderBy('m.time', 'DESC')
-    .limit(safeLimit)
-    .getMany();
+  return prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.media_objects ORDER BY time DESC LIMIT $1`,
+    safeLimit
+  ) as Promise<any[]>;
 }
 
 

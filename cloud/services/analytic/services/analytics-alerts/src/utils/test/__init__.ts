@@ -1,5 +1,5 @@
 // src/utils/test/__init__.ts
-import { AppDataSource } from '../../database';
+import { AppDataSource } from '../dataSource';
 
 // Initialize database before all tests
 beforeAll(async () => {

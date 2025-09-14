@@ -121,7 +121,7 @@ services:
     networks: [farm_edge]
     healthcheck:
       # แนะนำใช้ node แทน curl (image slim ไม่มี curl)
-      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:6309/sensor/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:6300/sensor/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -148,7 +148,7 @@ services:
         condition: service_started
     networks: [farm_edge]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6310/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:6301/health || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -156,7 +156,7 @@ services:
     # ports:
     #   - "6315:6315"
     expose:
-      - "6310"
+      - "6301"
 
   # 6) sync-service
   sync-service:
@@ -170,7 +170,7 @@ services:
     #   - "${SYNC_PORT:-6311}:6311"
     environment:
       # ให้แน่ใจว่าแอปฟังพอร์ตเดียวกับที่ map
-      - SYNC_PORT=${SYNC_PORT:-6311}
+      - SYNC_PORT=${SYNC_PORT:-6302}
     env_file:
       - .env
     depends_on:
@@ -180,7 +180,7 @@ services:
     healthcheck:
       # ใช้ node (ภาพ slim ไม่มี curl)
       # ขีดเส้นใต้: health path ต้องเป็น /health
-      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:'+ (process.env.SYNC_PORT||'6311') +'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:'+ (process.env.SYNC_PORT||'6302') +'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -188,7 +188,7 @@ services:
     # ช่วยให้ process ภายในถูกเก็บกวาดดีขึ้น
     init: true
     expose:
-      - "6311"
+      - "6302"
 
   # 7) weight-associator-service
   weight-associator:
@@ -211,13 +211,13 @@ services:
       - edge-mqtt
     networks: [farm_edge]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6312/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:6303/health || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 5
       start_period: 10s
     expose:
-      - "6312"
+      - "6303"
 
   # 8) image-ingestion-service
   image-ingestion:
@@ -227,7 +227,7 @@ services:
     container_name: image-ingestion
     restart: unless-stopped
     ports:
-      - "${IMAGE_INGESTION_SERVICE_PORT:-6313}:6313" 
+      - "${IMAGE_INGESTION_SERVICE_PORT:-6304}:6304" 
     env_file:
       - .env
     environment:
@@ -241,10 +241,10 @@ services:
       - edge-mqtt
     networks: [farm_edge]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6313/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:6304/health || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 5
       start_period: 10s
     expose:
-      - "6313"
+      - "6304"

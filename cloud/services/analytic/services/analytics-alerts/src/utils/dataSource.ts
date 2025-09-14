@@ -1,28 +1,45 @@
+// ==========================
 // src/utils/dataSource.ts
+// ==========================
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { Alert } from '../models/alert.model';
-import { DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SCHEMA, ENV } from '../configs/config';
 
-// Initialize TypeORM data source
+
+// Resolve envs with safe defaults (prefer service name on Docker network)
+const HOST = (process.env.DB_HOST || 'farmiq-postgres').trim();
+const PORT = parseInt(process.env.DB_PORT || '5432', 10);
+const NAME = (process.env.DB_NAME || 'farmiq_cloud').trim();
+const USER = (process.env.DB_USER || 'postgres').trim();
+const PASS = (process.env.DB_PASSWORD || 'postgres').trim();
+const SCHEMA = (process.env.DB_SCHEMA || 'public').trim();
+const ENV = (process.env.ENV || 'dev').trim();
+
+
+// NOTE: TypeORM (postgres) options:
+// - Do NOT use `connectTimeoutMS` (that is for Mongo). For pg, pass timeouts via `extra`.
+// - `poolSize` is not a pg option here; use `extra.max` instead.
+
+
 export const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: DB_HOST,
-  port: parseInt(DB_PORT),
-  username: DB_USER,
-  password: DB_PASSWORD,
-  database: DB_NAME,
-  schema: DB_SCHEMA,
-  entities: [Alert],
-  synchronize: false,
-  logging: ENV === 'dev',
-  poolSize: 20,
-  maxQueryExecutionTime: 30000,
-  connectTimeoutMS: 30000,
-  extra: {
-    max: 20,
-    min: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-  }
+type: 'postgres',
+host: HOST,
+port: PORT,
+username: USER,
+password: PASS,
+database: NAME,
+schema: SCHEMA,
+entities: [Alert],
+synchronize: false,
+logging: ENV === 'dev',
+// Valid pg options go under `extra`
+extra: {
+application_name: process.env.PG_APP_NAME || 'analytics-alerts',
+max: Number(process.env.PG_POOL_MAX || 20), // pool size
+idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 30_000),
+connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 10_000),
+statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS || 0), // 0 = disabled
+query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS || 0),
+keepAlive: true,
+},
 });

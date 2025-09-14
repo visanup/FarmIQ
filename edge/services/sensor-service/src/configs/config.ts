@@ -54,7 +54,7 @@ export const DATABASE_URL =
   process.env.DATABASE_URL || `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
 
 /** ---------- Server ---------- */
-export const PORT = asNum(process.env.SENSOR_PORT ?? process.env.PORT, 6309);
+export const PORT = asNum(process.env.SENSOR_PORT ?? process.env.PORT, 6300);
 
 /** ---------- API Key ---------- */
 export const SERVICE_API_KEY = process.env.SERVICE_API_KEY ?? process.env.API_KEY ?? '';

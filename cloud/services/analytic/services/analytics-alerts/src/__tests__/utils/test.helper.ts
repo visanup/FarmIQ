@@ -1,6 +1,6 @@
 // src/__tests__/utils/test.helper.ts
 import { AlertService } from '../../services/alert.service';
-import { AppDataSource } from '../../database';
+import { AppDataSource } from '../../utils/dataSource';
 import { Alert } from '../../models/alert.model';
 import { getRepository } from 'typeorm';
 

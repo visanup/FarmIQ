@@ -1,10 +1,10 @@
 # FarmIQ Cloud-Layer Development Guide
 
-## ภาพรวม (Overview)
+## เธ เธฒเธเธฃเธงเธก (Overview)
 
-Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่ออกแบบตาม Event-Driven Architecture โดยใช้ Apache Kafka เป็น message broker หลัก และ TimescaleDB เป็น time-series database สำหรับเก็บข้อมูล sensor และ analytics
+Cloud-Layer เธเธญเธ FarmIQ เน€เธเนเธเธฃเธฐเธเธ microservices เธ—เธตเนเธญเธญเธเนเธเธเธ•เธฒเธก Event-Driven Architecture เนเธ”เธขเนเธเน Apache Kafka เน€เธเนเธ message broker เธซเธฅเธฑเธ เนเธฅเธฐ TimescaleDB เน€เธเนเธ time-series database เธชเธณเธซเธฃเธฑเธเน€เธเนเธเธเนเธญเธกเธนเธฅ sensor เนเธฅเธฐ analytics
 
-## สถาปัตยกรรมระบบ (System Architecture)
+## เธชเธ–เธฒเธเธฑเธ•เธขเธเธฃเธฃเธกเธฃเธฐเธเธ (System Architecture)
 
 ### Core Infrastructure
 - **Message Broker**: Apache Kafka (KRaft mode)
@@ -15,13 +15,13 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
 
 ### Network Architecture
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Edge Layer    │───▶│   Cloud Layer   │───▶│ Application Layer│
-│                 │    │                 │    │                 │
-│ • MQTT Broker   │    │ • Kafka         │    │ • React Apps    │
-│ • Edge Services │    │ • Microservices │    │ • Dashboards    │
-│ • Local Storage │    │ • TimescaleDB   │    │ • Management UI │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+โ”   Edge Layer    โ”โ”€โ”€โ”€โ–ถโ”   Cloud Layer   โ”โ”€โ”€โ”€โ–ถโ” Application Layerโ”
+โ”                 โ”    โ”                 โ”    โ”                 โ”
+โ” โ€ข MQTT Broker   โ”    โ” โ€ข Kafka         โ”    โ” โ€ข React Apps    โ”
+โ” โ€ข Edge Services โ”    โ” โ€ข Microservices โ”    โ” โ€ข Dashboards    โ”
+โ” โ€ข Local Storage โ”    โ” โ€ข TimescaleDB   โ”    โ” โ€ข Management UI โ”
+โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”    โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
 ```
 
 ## Microservices Architecture
@@ -39,16 +39,19 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
   - User registration and login
   - Role-based access control
 
-#### Customer Service (`customer-service`)
+#### Master Service (`master-service`) - NEW
 - **Port**: 7301
-- **Technology**: Node.js + TypeScript + Express + TypeORM
-- **Database**: PostgreSQL (customer schema)
-- **Purpose**: Customer management and billing
+- **Technology**: Node.js + TypeScript + Fastify + Prisma
+- **Database**: PostgreSQL (master schema)
+- **Purpose**: Centralized business data management
 - **Key Features**:
-  - Customer registration and profiles
-  - Subscription management
-  - Billing integration
-  - Plan catalog management
+  - Customer management and profiles
+  - Farm and house management
+  - Device and sensor management
+  - Feed and formula management
+  - Economic data tracking
+  - External factor integration
+  - Multi-tenant data isolation
 
 #### Sensor Streamer Service (`sensor-streamer-service`)
 - **Port**: 7302
@@ -63,8 +66,19 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
 
 ### 2. Analytics Services
 
-#### Analytics Stream (`analytics-stream`)
+#### Monitoring Service (`monitoring-service`)
 - **Port**: 7303
+- **Technology**: Node.js + TypeScript + Express
+- **Purpose**: System monitoring and health checks
+- **Key Features**:
+  - Service health monitoring
+  - Performance metrics
+  - Alert management
+  - System status dashboard
+  - Log aggregation
+
+#### Analytics Stream (`analytics-stream`)
+- **Port**: 7304
 - **Technology**: Node.js + TypeScript + Express + KafkaJS
 - **Purpose**: Real-time analytics data streaming
 - **Key Features**:
@@ -74,7 +88,7 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
   - WebSocket connections for real-time updates
 
 #### Analytics Worker (`analytics-worker`)
-- **Port**: 7304
+- **Port**: 7305
 - **Technology**: Python + FastAPI + APScheduler
 - **Purpose**: Background analytics processing
 - **Key Features**:
@@ -84,7 +98,7 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
   - Feature engineering
 
 #### Analytics API (`analytics-api`)
-- **Port**: 7305
+- **Port**: 7306
 - **Technology**: Python + FastAPI
 - **Purpose**: Analytics data API
 - **Key Features**:
@@ -94,7 +108,7 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
   - Dashboard data feeds
 
 #### Analytics Alerts (`analytics-alerts`)
-- **Port**: 7306
+- **Port**: 7307
 - **Technology**: Node.js + TypeScript + Express
 - **Purpose**: Alert management and notifications
 - **Key Features**:
@@ -105,79 +119,50 @@ Cloud-Layer ของ FarmIQ เป็นระบบ microservices ที่อ
 
 ### 3. Business Services
 
-#### Device Management Service (`devices-service`)
-- **Purpose**: IoT device management
+**Note**: All business services have been consolidated into the Master Service for better performance and maintainability.
+
+#### Master Service (`master-service`)
+- **Purpose**: Centralized business data management
 - **Key Features**:
-  - Device registration and provisioning
-  - Device health monitoring
-  - Configuration management
-  - Device lifecycle management
-
-#### Farm Management Services
-- **Farms Master Service** (`farms-master-service`): Farm, house, and flock management
-- **Farms Operational Service** (`farms-operational-service`): Daily operations and events
-- **Farm Service** (`farm-service`): General farm operations
-
-#### Feed & Formula Services
-- **Feed Service** (`feed-service`): Feed batch and quality management
-- **Formula Service** (`formula-service`): Feed composition and recipes
-
-#### Economic Service (`economic-service`)
-- **Purpose**: Cost tracking and economic analysis
-- **Key Features**:
-  - Cost transaction recording
-  - Economic metrics calculation
-  - ROI analysis
-  - Financial reporting
-
-#### External Factor Service (`external-factor-service`)
-- **Purpose**: External data integration
-- **Key Features**:
-  - Weather data integration
-  - Market data integration
-  - External API management
-  - Data synchronization
-
-#### Monitoring Service (`monitoring-service`)
-- **Purpose**: System monitoring and health checks
-- **Key Features**:
-  - Service health monitoring
-  - Performance metrics
-  - Alert management
-  - System status dashboard
+  - Customer management and profiles
+  - Farm and house management
+  - Device and sensor management
+  - Feed and formula management
+  - Economic data tracking
+  - External factor integration
+  - Multi-tenant data isolation
 
 ## Development Patterns
 
 ### 1. Service Structure Pattern
 
-ทุก microservice ควรมีโครงสร้างดังนี้:
+เธ—เธธเธ microservice เธเธงเธฃเธกเธตเนเธเธฃเธเธชเธฃเนเธฒเธเธ”เธฑเธเธเธตเน:
 
 ```
 service-name/
-├── src/
-│   ├── configs/           # Configuration files
-│   ├── models/            # Database models (TypeORM entities)
-│   ├── routes/            # API routes
-│   ├── services/          # Business logic
-│   ├── middlewares/       # Express middlewares
-│   ├── schemas/           # Zod validation schemas
-│   ├── types/             # TypeScript type definitions
-│   ├── utils/             # Utility functions
-│   └── server.ts          # Main server file
-├── Dockerfile
-├── package.json
-├── tsconfig.json
-└── README.md
+โ”โ”€โ”€ src/
+โ”   โ”โ”€โ”€ configs/           # Configuration files
+โ”   โ”โ”€โ”€ models/            # Database models (TypeORM entities)
+โ”   โ”โ”€โ”€ routes/            # API routes
+โ”   โ”โ”€โ”€ services/          # Business logic
+โ”   โ”โ”€โ”€ middlewares/       # Express middlewares
+โ”   โ”โ”€โ”€ schemas/           # Zod validation schemas
+โ”   โ”โ”€โ”€ types/             # TypeScript type definitions
+โ”   โ”โ”€โ”€ utils/             # Utility functions
+โ”   โ””โ”€โ”€ server.ts          # Main server file
+โ”โ”€โ”€ Dockerfile
+โ”โ”€โ”€ package.json
+โ”โ”€โ”€ tsconfig.json
+โ””โ”€โ”€ README.md
 ```
 
 ### 2. Database Patterns
 
 #### Schema Organization
 - **auth**: Authentication and user management
-- **customer**: Customer and billing data
+- **master**: All business data (Customer, Farm, Device, Feed, Formula, Economic, External Factor)
 - **sensors**: Time-series sensor data
 - **analytics**: Analytics and ML features
-- **business**: Business domain data
 
 #### TypeORM Configuration
 ```typescript
@@ -186,7 +171,7 @@ export const AppDataSource = new DataSource({
   url: DATABASE_URL,
   schema: 'schema_name',
   entities: [Entity1, Entity2],
-  synchronize: false, // ใช้ migration แทน
+  synchronize: false, // เนเธเน migration เนเธ—เธ
   logging: process.env.NODE_ENV === 'development'
 });
 ```
@@ -194,7 +179,7 @@ export const AppDataSource = new DataSource({
 ### 3. API Patterns
 
 #### OpenAPI Documentation
-ใช้ Zod schemas เพื่อ generate OpenAPI documentation:
+เนเธเน Zod schemas เน€เธเธทเนเธญ generate OpenAPI documentation:
 
 ```typescript
 import { z } from 'zod';
@@ -443,7 +428,7 @@ CORS_ALLOW_CREDENTIALS=true
 ## Deployment
 
 ### Docker Compose
-ใช้ `docker-compose.yml` หลักสำหรับ development และ production:
+เนเธเน `docker-compose.yml` เธซเธฅเธฑเธเธชเธณเธซเธฃเธฑเธ development เนเธฅเธฐ production:
 
 ```bash
 # Start all services
@@ -460,7 +445,7 @@ docker-compose up -d --scale analytics-worker=3
 ```
 
 ### Health Checks
-ทุก service ต้องมี health check endpoint:
+เธ—เธธเธ service เธ•เนเธญเธเธกเธต health check endpoint:
 
 ```typescript
 app.get('/health', (req, res) => {
@@ -475,7 +460,7 @@ app.get('/health', (req, res) => {
 ## Monitoring and Observability
 
 ### Logging
-ใช้ structured logging ด้วย Pino:
+เนเธเน structured logging เธ”เนเธงเธข Pino:
 
 ```typescript
 import pino from 'pino';
@@ -491,7 +476,7 @@ logger.info({ userId: '123', action: 'login' }, 'User logged in');
 ```
 
 ### Metrics
-ใช้ Prometheus client สำหรับ metrics:
+เนเธเน Prometheus client เธชเธณเธซเธฃเธฑเธ metrics:
 
 ```typescript
 import { register, Counter, Histogram } from 'prom-client';
@@ -512,49 +497,49 @@ const httpRequestDuration = new Histogram({
 ## Best Practices
 
 ### 1. Service Design
-- **Single Responsibility**: แต่ละ service ควรมีหน้าที่เดียวที่ชัดเจน
-- **Loose Coupling**: ใช้ events สำหรับ service-to-service communication
-- **High Cohesion**: ข้อมูลที่เกี่ยวข้องกันควรอยู่ใน service เดียวกัน
+- **Single Responsibility**: เนเธ•เนเธฅเธฐ service เธเธงเธฃเธกเธตเธซเธเนเธฒเธ—เธตเนเน€เธ”เธตเธขเธงเธ—เธตเนเธเธฑเธ”เน€เธเธ
+- **Loose Coupling**: เนเธเน events เธชเธณเธซเธฃเธฑเธ service-to-service communication
+- **High Cohesion**: เธเนเธญเธกเธนเธฅเธ—เธตเนเน€เธเธตเนเธขเธงเธเนเธญเธเธเธฑเธเธเธงเธฃเธญเธขเธนเนเนเธ service เน€เธ”เธตเธขเธงเธเธฑเธ
 
 ### 2. Data Management
-- **Event Sourcing**: ใช้ events เป็น source of truth
-- **CQRS**: แยก command และ query operations
-- **Saga Pattern**: จัดการ distributed transactions
+- **Event Sourcing**: เนเธเน events เน€เธเนเธ source of truth
+- **CQRS**: เนเธขเธ command เนเธฅเธฐ query operations
+- **Saga Pattern**: เธเธฑเธ”เธเธฒเธฃ distributed transactions
 
 ### 3. Security
-- **Authentication**: ใช้ JWT tokens
+- **Authentication**: เนเธเน JWT tokens
 - **Authorization**: Role-based access control
-- **Input Validation**: ใช้ Zod schemas
-- **Rate Limiting**: ป้องกัน API abuse
+- **Input Validation**: เนเธเน Zod schemas
+- **Rate Limiting**: เธเนเธญเธเธเธฑเธ API abuse
 
 ### 4. Performance
-- **Caching**: ใช้ Redis สำหรับ caching
-- **Connection Pooling**: ใช้ connection pool สำหรับ database
-- **Async Processing**: ใช้ Kafka สำหรับ heavy operations
+- **Caching**: เนเธเน Redis เธชเธณเธซเธฃเธฑเธ caching
+- **Connection Pooling**: เนเธเน connection pool เธชเธณเธซเธฃเธฑเธ database
+- **Async Processing**: เนเธเน Kafka เธชเธณเธซเธฃเธฑเธ heavy operations
 
 ### 5. Error Handling
-- **Circuit Breaker**: ป้องกัน cascade failures
-- **Retry Logic**: Retry สำหรับ transient failures
-- **Dead Letter Queue**: เก็บ messages ที่ process ไม่ได้
+- **Circuit Breaker**: เธเนเธญเธเธเธฑเธ cascade failures
+- **Retry Logic**: Retry เธชเธณเธซเธฃเธฑเธ transient failures
+- **Dead Letter Queue**: เน€เธเนเธ messages เธ—เธตเน process เนเธกเนเนเธ”เน
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Database Connection Issues**
-   - ตรวจสอบ DATABASE_URL
-   - ตรวจสอบ network connectivity
-   - ตรวจสอบ database schema
+   - เธ•เธฃเธงเธเธชเธญเธ DATABASE_URL
+   - เธ•เธฃเธงเธเธชเธญเธ network connectivity
+   - เธ•เธฃเธงเธเธชเธญเธ database schema
 
 2. **Kafka Connection Issues**
-   - ตรวจสอบ KAFKA_BROKERS
-   - ตรวจสอบ topic existence
-   - ตรวจสอบ consumer group
+   - เธ•เธฃเธงเธเธชเธญเธ KAFKA_BROKERS
+   - เธ•เธฃเธงเธเธชเธญเธ topic existence
+   - เธ•เธฃเธงเธเธชเธญเธ consumer group
 
 3. **Service Communication Issues**
-   - ตรวจสอบ service discovery
-   - ตรวจสอบ network policies
-   - ตรวจสอบ authentication
+   - เธ•เธฃเธงเธเธชเธญเธ service discovery
+   - เธ•เธฃเธงเธเธชเธญเธ network policies
+   - เธ•เธฃเธงเธเธชเธญเธ authentication
 
 ### Debug Commands
 
@@ -574,5 +559,5 @@ docker-compose logs -f --tail=100 service-name
 
 ## Conclusion
 
-Cloud-Layer ของ FarmIQ ถูกออกแบบให้เป็นระบบ microservices ที่ scalable, maintainable และ resilient โดยใช้ modern technologies และ best practices การพัฒนาตาม guide นี้จะช่วยให้ทีมสามารถสร้างและ maintain services ได้อย่างมีประสิทธิภาพ
+Cloud-Layer เธเธญเธ FarmIQ เธ–เธนเธเธญเธญเธเนเธเธเนเธซเนเน€เธเนเธเธฃเธฐเธเธ microservices เธ—เธตเน scalable, maintainable เนเธฅเธฐ resilient เนเธ”เธขเนเธเน modern technologies เนเธฅเธฐ best practices เธเธฒเธฃเธเธฑเธ’เธเธฒเธ•เธฒเธก guide เธเธตเนเธเธฐเธเนเธงเธขเนเธซเนเธ—เธตเธกเธชเธฒเธกเธฒเธฃเธ–เธชเธฃเนเธฒเธเนเธฅเธฐ maintain services เนเธ”เนเธญเธขเนเธฒเธเธกเธตเธเธฃเธฐเธชเธดเธ—เธเธดเธ เธฒเธ
 

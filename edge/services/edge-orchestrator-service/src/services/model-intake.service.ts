@@ -1,7 +1,6 @@
 // src/services/model-intake.service.ts
 import axios from 'axios';
-import { AppDataSource } from '../utils/dataSource';
-import { ModelRegistry } from '../models/ModelRegistry';
+import { prisma } from '../utils/prisma';
 import { publish } from '../utils/mqtt';
 import { INFERENCE_BASE_URL } from '../configs/config';
 
@@ -12,16 +11,12 @@ export async function registerAndDeployModel(p: {
   metrics?: Record<string, any>;
   auto_deploy?: boolean;
 }) {
-  const repo = AppDataSource.getRepository(ModelRegistry);
-
-  const rec = repo.create({
-    model_name: p.model_name,
-    version: p.version,
-    artifact_s3: p.artifact_s3,
-    metrics_json: p.metrics ?? {},
-    is_active: false
-  });
-  await repo.save(rec);
+  const recRows = await (prisma.$queryRawUnsafe(
+    `INSERT INTO sensors.model_registry(model_name,version,artifact_s3,metrics_json,is_active)
+     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    p.model_name, p.version, p.artifact_s3, p.metrics ?? {}, false
+  ) as Promise<any[]>);
+  const rec = recRows[0];
 
   if (p.auto_deploy !== false) {
     await axios.post(`${INFERENCE_BASE_URL}/models/deploy`, {
@@ -31,8 +26,8 @@ export async function registerAndDeployModel(p: {
     }, { timeout: 30000 });
 
     // set active
-    await repo.update({ model_name: p.model_name }, { is_active: false });
-    await repo.update({ model_name: p.model_name, version: p.version }, { is_active: true });
+    await prisma.$executeRawUnsafe(`UPDATE sensors.model_registry SET is_active=false WHERE model_name=$1`, p.model_name);
+    await prisma.$executeRawUnsafe(`UPDATE sensors.model_registry SET is_active=true WHERE model_name=$1 AND version=$2`, p.model_name, p.version);
 
     publish('edge/model/deploy.done', { model_name: p.model_name, version: p.version });
   }

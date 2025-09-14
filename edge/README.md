@@ -21,10 +21,10 @@ edge/
    ├─ robot-orchestrator-port:6308
    ├─ station-service-port
    ├─ sensor-service-port:6309
-   ├─ edge-orchestrator-service-port:6310
-   ├─ sync-service-port:6311
-   ├─ weigh-associator-service-port:6312
-   ├─ image-ingestion-service -port:6313
+   ├─ edge-orchestrator-service-port:6301
+   ├─ sync-service-port:6302
+   ├─ weigh-associator-service-port:6303
+   ├─ image-ingestion-service -port:6304
    ├─ vision-inference-service-port:6314
    └─ zone-mapper-service-port:6315
 ```

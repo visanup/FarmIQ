@@ -1,28 +1,17 @@
-// src/server.ts
+// src/server.ts (Fastify + Prisma)
 import "reflect-metadata";
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 
-import {
-  PORT,
-  SENSOR_RAW_SUB,
-  PUB_NS_CLEAN,
-  PUB_NS_ANOMALY,
-  PUB_NS_DLQ,
-  WRITE_DB,
-} from "./configs/config";
+import { PORT, SENSOR_RAW_SUB, PUB_NS_CLEAN, PUB_NS_ANOMALY, PUB_NS_DLQ, WRITE_DB } from "./configs/config";
 
 import { mqttClient, pubJSON } from "./utils/mqtt";
 import { parseRaw, applyDQ, parseHealth } from "./utils/zod";
-import sensorRouter, { stashLatest } from "./routes/sensor.route";
+import sensorRoutes, { stashLatest } from "./routes/sensor.route";
 
-import { AppDataSource } from "./utils/dataSource";
-import {
-  saveSweepReading,
-  upsertDeviceHealth,
-  ingestDeviceReadingSQL,
-} from "./services/sensor.service";
+import { prisma } from "./util/prisma";
+import { saveSweepReading, upsertDeviceHealth, ingestDeviceReadingSQL } from "./services/sensor.service";
 
 // เผื่อยังไม่ได้ประกาศใน configs/config.ts — ใช้ค่า env/fallback ที่นี่ได้เลย
 const DM_HEALTH_SUB = process.env.DM_HEALTH_SUB || "dm/+/+/health";
@@ -45,9 +34,9 @@ function parseDmTopic(topic: string) {
 
 // ----------------- bootstrap -----------------
 async function bootstrap() {
-  // 1) DB init (service นี้เขียน DB เอง)
-  await AppDataSource.initialize();
-  console.log("🔗 Database connected (sensor-service writes)");
+  // 1) DB init
+  await prisma.$connect();
+  console.log("🔗 Prisma connected (sensor-service)");
 
   // 2) Subscribe MQTT (บน event 'connect' เพื่อให้ re-subscribe ออโต้ตอน reconnect)
   mqttClient.on("connect", () => {
@@ -172,16 +161,17 @@ async function bootstrap() {
     }
   });
 
-  // 4) HTTP server
-  const app = express();
-  app.use(helmet());
-  app.use(cors());
-  app.use(express.json());
-  app.use("/sensor", sensorRouter);
+  // 4) HTTP server (Fastify)
+  const app = Fastify({ logger: false });
+  await app.register(cors, { origin: true });
+  await app.register(helmet, { contentSecurityPolicy: false });
 
-  app.listen(PORT, () => {
-    console.log(`🚀 sensor-service http://0.0.0.0:${PORT}`);
-  });
+  await app.register(async (f) => {
+    await sensorRoutes(f);
+  }, { prefix: "/sensor" });
+
+  await app.listen({ port: PORT, host: "0.0.0.0" });
+  console.log(`🚀 sensor-service http://0.0.0.0:${PORT}`);
 }
 
 bootstrap().catch((e) => {

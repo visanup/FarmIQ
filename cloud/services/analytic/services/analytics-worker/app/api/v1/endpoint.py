@@ -1,6 +1,7 @@
 # app/v1/endpoint.py
 from fastapi import APIRouter, Response, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.database import get_db
 from app.instrumentation.metrics import metrics_response
 import threading
@@ -13,7 +14,7 @@ def health(db: Session = Depends(get_db)):
     """Health check endpoint with database connectivity and worker status"""
     try:
         # Test database connection
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         database_status = "connected"
     except Exception as e:
         database_status = f"disconnected: {str(e)}"

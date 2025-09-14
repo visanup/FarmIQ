@@ -10,7 +10,7 @@ def aggregate(measurements: Iterable[dict], windows: List[int]) -> Iterable[dict
     # group by (key, window, bucket_start)
     buckets: Dict[Tuple, list] = defaultdict(list)
     for m in measurements:
-        key = (m["tenant_id"], m["factory_id"], m["machine_id"], m.get("sensor_id"), m["metric"])
+        key = (m["tenant_id"], m.get("farm_id"), m.get("house_id"), m.get("sensor_id"), m["metric"])
         t: datetime = m["time"]
         for w in windows:
             b = floor_to_bucket(t, w)
@@ -22,11 +22,11 @@ def aggregate(measurements: Iterable[dict], windows: List[int]) -> Iterable[dict
         mn, mx = min(vals), max(vals)
         sd = pstdev(vals) if n > 1 else 0.0
         p95 = sorted(vals)[max(0, int(0.95*n)-1)]
-        (tenant, factory, machine, sensor, metric) = key
+        (tenant, farm, house, sensor, metric) = key
         yield {
             "bucket_start": b.replace(tzinfo=timezone.utc),
             "window_s": w,
-            "tenant_id": tenant, "factory_id": factory, "machine_id": machine,
+            "tenant_id": tenant, "farm_id": farm, "house_id": house,
             "sensor_id": sensor, "metric": metric,
             "count_n": n, "sum_val": sum(vals), "avg_val": avg,
             "min_val": mn, "max_val": mx, "stddev_val": sd, "p95_val": p95

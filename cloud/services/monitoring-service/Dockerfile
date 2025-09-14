@@ -1,34 +1,32 @@
-# services/sensor-service/Dockerfile
+# Use Node.js 18 as the base image
+FROM node:20-alpine
 
-# ——— Stage 1: build ———
-FROM node:18-alpine AS builder
+# Install system dependencies (Prisma requires OpenSSL)
+RUN apk add --no-cache openssl
 
+# Set the working directory
 WORKDIR /app
 
-# install dev & prod deps
+# Copy package.json and yarn.lock
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
 
-# compile TS to JS
-COPY tsconfig.json ./
-COPY src ./src
+# Install dependencies (use frozen lockfile if valid; fall back to normal install)
+RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile --non-interactive || yarn install --non-interactive; else yarn install --non-interactive; fi
+
+# Copy Prisma schema
+COPY prisma ./prisma/
+
+# Generate Prisma client
+RUN yarn prisma generate
+
+# Copy source code
+COPY . .
+
+# Build the TypeScript code
 RUN yarn build
 
-# ——— Stage 2: runtime ———
-FROM node:18-alpine
+# Expose the port the app runs on
+EXPOSE 4112
 
-WORKDIR /app
-
-# only prod deps
-COPY package.json yarn.lock ./
-RUN yarn install --production --frozen-lockfile
-
-# copy compiled output
-COPY --from=builder /app/dist ./dist
-
-# expose the sensor-service port
-ENV NODE_ENV=production
-EXPOSE 4111
-
-# start the service
-CMD ["node", "dist/server.js"]
+# Run the application
+CMD ["yarn", "start"]

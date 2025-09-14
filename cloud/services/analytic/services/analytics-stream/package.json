@@ -2,7 +2,7 @@
   "name": "analytics-stream",
   "version": "1.0.0",
   "private": true,
-  "description": "Customer Service (Express + TypeORM + Zod + OpenAPI)",
+  "description": "Analytics Stream Service - Data ingestion from sensors to Kafka",
   "scripts": {
     "dev": "ts-node-dev --transpile-only --respawn src/server.ts",
     "build": "tsc -p .",

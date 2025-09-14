@@ -98,31 +98,46 @@ def get_kpi(
     Get calculated KPI values
     """
     try:
-        sql = text("""
+        conditions = ["period = :period"]
+        params = {"period": period}
+        
+        if metric:
+            conditions.append("metric = :metric")
+            params["metric"] = metric
+        
+        if tenant_id:
+            conditions.append("tenant_id = :tenant_id")
+            params["tenant_id"] = tenant_id
+        
+        if factory_id:
+            conditions.append("factory_id = :factory_id")
+            params["factory_id"] = factory_id
+        
+        if machine_id:
+            conditions.append("machine_id = :machine_id")
+            params["machine_id"] = machine_id
+        
+        if start:
+            conditions.append("period_start >= :start")
+            params["start"] = start
+        
+        if end:
+            conditions.append("period_start < :end")
+            params["end"] = end
+        
+        where_clause = " AND ".join(conditions)
+        
+        sql = text(f"""
             SELECT period, period_start, tenant_id, factory_id, machine_id, sensor_id, metric,
                    n, mean_val, stddev_val, cp, cpk, pp, ppk
             FROM analytics.analytics_kpi
-            WHERE period = :period
-              AND (:metric IS NULL OR metric = :metric)
-              AND (:tenant_id IS NULL OR tenant_id = :tenant_id)
-              AND (:factory_id IS NULL OR factory_id = :factory_id)
-              AND (:machine_id IS NULL OR machine_id = :machine_id)
-              AND (:start IS NULL OR period_start >= :start)
-              AND (:end IS NULL OR period_start < :end)
+            WHERE {where_clause}
             ORDER BY period_start DESC
             LIMIT :limit
         """)
         
-        rows = db.execute(sql, {
-            "period": period,
-            "metric": metric,
-            "tenant_id": tenant_id,
-            "factory_id": factory_id,
-            "machine_id": machine_id,
-            "start": start,
-            "end": end,
-            "limit": limit
-        }).mappings().all()
+        params["limit"] = limit
+        rows = db.execute(sql, params).mappings().all()
         
         return [KpiResponse(**row) for row in rows]
         

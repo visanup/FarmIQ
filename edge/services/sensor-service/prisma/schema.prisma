@@ -1,0 +1,19 @@
+// Minimal Prisma schema for raw SQL usage (models optional). We keep models
+// light because Timescale hypertables and composite PKs are easier via SQL.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
+}
+
+// Placeholder model to allow client generation; we use raw SQL primarily.
+model Placeholder {
+  id Int @id
+}
+
+

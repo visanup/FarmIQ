@@ -1,6 +1,6 @@
 // src/__tests__/alert.service.test.ts
 import { AlertService } from '../services/alert.service';
-import { AppDataSource } from '../database';
+import { AppDataSource } from '../utils/dataSource';
 import { Alert } from '../models/alert.model';
 import { getRepository } from 'typeorm';
 import { registerAlertRule, handleAnalyticsFeature } from '../pipelines/registry';

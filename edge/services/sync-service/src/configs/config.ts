@@ -66,17 +66,22 @@ export const CLOUD_DATABASE_URL = process.env.CLOUD_DATABASE_URL ||
 console.log(`Using CLOUD_DATABASE_URL: ${CLOUD_DATABASE_URL}`);
 
 // 3) Server port
-export const PORT = Number(process.env.SYNC_PORT) || 6311;
+export const PORT = Number(process.env.SYNC_PORT) || 6302;
 
 export const REQUIRE_API_KEY = String(process.env.API_KEY ?? "false").toLowerCase() === "true";
 export const SERVICE_API_KEY = process.env.API_KEY ?? "";
 
 export const SYNC_INTERVAL_MINUTES = Number(process.env.SYNC_INTERVAL_MINUTES) || 5;
 
-export const CLOUD_API_URL = process.env.CLOUD_API_URL || 'http://localhost:3000/api';
+// In container, use host.docker.internal to reach host services (Windows/macOS Docker Desktop)
+export const CLOUD_API_URL = process.env.CLOUD_API_URL || 'http://host.docker.internal:7302';
 export const CLOUD_API_KEY = process.env.CLOUD_API_KEY || 'your-api-key';
 
 export const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// 4) Sync retry/backoff
+export const SYNC_MAX_RETRIES = Number(process.env.SYNC_MAX_RETRIES || 3);
+export const SYNC_BACKOFF_MS  = Number(process.env.SYNC_BACKOFF_MS  || 1000); // base backoff per attempt
 
 
 

@@ -10,6 +10,10 @@ import { deviceHealthRoutes } from './routes/device-health.routes';
 import { labReadingRoutes } from './routes/lab-reading.routes';
 import { sweepReadingRoutes } from './routes/sweep-reading.routes';
 import { dataIngestionLogRoutes } from './routes/data-ingestion-log.routes';
+import { sensorAlertRoutes } from './routes/sensor-alert.routes';
+import { dataQualityCheckRoutes } from './routes/data-quality-check.routes';
+import { streamStateRoutes } from './routes/stream-state.routes';
+import { deviceConfigurationRoutes } from './routes/device-configuration.routes';
 import { KafkaService } from './services/kafka.service';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -112,6 +116,10 @@ async function registerRoutes() {
   await fastify.register(labReadingRoutes, { prefix: '/api/lab-readings' });
   await fastify.register(sweepReadingRoutes, { prefix: '/api/sweep-readings' });
   await fastify.register(dataIngestionLogRoutes, { prefix: '/api/data-ingestion-logs' });
+  await fastify.register(sensorAlertRoutes, { prefix: '/api/sensor-alerts' });
+  await fastify.register(dataQualityCheckRoutes, { prefix: '/api/data-quality-checks' });
+  await fastify.register(streamStateRoutes, { prefix: '/api/stream-states' });
+  await fastify.register(deviceConfigurationRoutes, { prefix: '/api/device-configurations' });
 
   // Root redirect to docs
   fastify.get('/', async (request, reply) => {

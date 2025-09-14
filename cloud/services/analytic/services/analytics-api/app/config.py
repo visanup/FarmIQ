@@ -73,7 +73,31 @@ class Config:
     # topics ที่จะ consume
     KAFKA_TOPICS: List[str] = _get_list(
         "KAFKA_TOPICS",
-        ["sensors.device.readings", "sensors.lab.readings"]
+        [
+            "sensors.device.readings.v1",
+            "sensors.device.health.v1", 
+            "sensors.lab.readings.v1",
+            "sensors.sweep.readings.v1",
+            "external.weather.observation.v1",
+            "farms.operational.event.v1",
+            "feed.batch.created.v1",
+            "feed.quality.result.v1",
+            "economics.cost.txn.v1",
+            "devices.device.snapshot.v1",
+            "farms.farm.snapshot.v1",
+            "farms.house.snapshot.v1",
+            "farms.flock.snapshot.v1",
+            "master.customer.snapshot.v1",
+            "master.device.snapshot.v1",
+            "master.farm.snapshot.v1",
+            "master.house.snapshot.v1",
+            "master.flock.snapshot.v1",
+            "master.animal-type.snapshot.v1",
+            "master.breed.snapshot.v1",
+            "analytics.features",
+            "analytics.prediction.v1",
+            "analytics.anomaly.v1"
+        ]
     )
 
     # Aggregation windows (seconds)

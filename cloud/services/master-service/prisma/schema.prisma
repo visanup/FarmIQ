@@ -1,0 +1,352 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["master"]
+}
+
+// =====================================================
+// CORE MASTER DATA MODELS
+// =====================================================
+
+model Customer {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique @map("tenant_id")
+  name      String
+  email     String?  @unique
+  phone     String?
+  address   String?
+  meta      Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  farms Farm[]
+
+  @@map("customers")
+  @@schema("master")
+}
+
+model Farm {
+  id          String   @id @default(cuid())
+  farmId      String   @unique @map("farm_id")
+  tenantId    String   @map("tenant_id")
+  customerId  String   @map("customer_id")
+  name        String
+  location    Json?    // { "lat": 13.7563, "lon": 100.5018, "address": "..." }
+  region      String?
+  farmType    String?  @map("farm_type") // "poultry", "livestock", "mixed"
+  totalArea   Int?     @map("total_area")
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  houses   House[]
+  flocks   Flock[]
+
+  @@unique([tenantId, farmId])
+  @@map("farms")
+  @@schema("master")
+}
+
+model House {
+  id          String   @id @default(cuid())
+  houseId     String   @unique @map("house_id")
+  tenantId    String   @map("tenant_id")
+  farmId      String   @map("farm_id")
+  name        String
+  type        String?  // "broiler", "layer", "breeding", "quarantine"
+  capacity    Int?
+  dimensions  Json?    // { "length": 50, "width": 20, "height": 3 }
+  ventilation String?  // "natural", "mechanical", "mixed"
+  heating     String?  // "gas", "electric", "solar"
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  farm    Farm     @relation(fields: [farmId], references: [id])
+  devices Device[]
+  flocks  Flock[]
+
+  @@unique([tenantId, farmId, houseId])
+  @@map("houses")
+  @@schema("master")
+}
+
+model Device {
+  id          String   @id @default(cuid())
+  deviceId    String   @unique @map("device_id")
+  tenantId    String   @map("tenant_id")
+  farmId      String   @map("farm_id")
+  houseId     String   @map("house_id")
+  name        String
+  type        String   // "controller", "sensor", "actuator", "gateway"
+  model       String?
+  vendor      String?
+  serialNo    String?  @unique @map("serial_no")
+  status      String   @default("active") // "active", "inactive", "maintenance", "error"
+  location    Json?    // { "x": 0, "y": 0, "z": 0 }
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  house House @relation(fields: [houseId], references: [id])
+
+  @@unique([tenantId, farmId, houseId, deviceId])
+  @@map("devices")
+  @@schema("master")
+}
+
+// =====================================================
+// ANIMAL MANAGEMENT (กลุ่มที่ชนิดสัตว์, กลุ่มสัตว์, สายพันธุ์)
+// =====================================================
+
+model AnimalType {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Chicken", "Pig", "Cattle", "Duck"
+  category    String?  // "Poultry", "Livestock", "Aquaculture"
+  description String?
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  breeds Breed[]
+  flocks Flock[]
+
+  @@map("animal_types")
+  @@schema("master")
+}
+
+model Breed {
+  id           String     @id @default(cuid())
+  animalTypeId String     @map("animal_type_id")
+  name         String     // "Ross 308", "Cobb 500", "Hubbard"
+  code         String?    // "R308", "C500", "HUB"
+  description  String?
+  characteristics Json?   // { "growth_rate": "fast", "feed_conversion": 1.8 }
+  meta         Json?      @default("{}")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  animalType AnimalType @relation(fields: [animalTypeId], references: [id])
+  flocks     Flock[]
+
+  @@unique([animalTypeId, name])
+  @@map("breeds")
+  @@schema("master")
+}
+
+model Flock {
+  id           String   @id @default(cuid())
+  flockId      String   @unique @map("flock_id")
+  tenantId     String   @map("tenant_id")
+  farmId       String   @map("farm_id")
+  houseId      String?  @map("house_id")
+  animalTypeId String   @map("animal_type_id")
+  breedId      String   @map("breed_id")
+  name         String
+  startDate    DateTime @map("start_date")
+  endDate      DateTime? @map("end_date")
+  population   Int      // Number of animals
+  sex          String?  // "male", "female", "mixed"
+  sourceFarm   String?  @map("source_farm")
+  vaccinationStatus String? @map("vaccination_status") // "complete", "partial", "pending"
+  feedType     String?  @map("feed_type") // "starter", "grower", "finisher"
+  healthStatus String?  @map("health_status") // "healthy", "monitoring", "treatment"
+  status       String   @default("active") // "active", "completed", "archived"
+  meta         Json?    @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  farm       Farm       @relation(fields: [farmId], references: [id])
+  house      House?     @relation(fields: [houseId], references: [id])
+  animalType AnimalType @relation(fields: [animalTypeId], references: [id])
+  breed      Breed      @relation(fields: [breedId], references: [id])
+
+  @@unique([tenantId, farmId, flockId])
+  @@map("flocks")
+  @@schema("master")
+}
+
+// =====================================================
+// REFERENCE DATA MANAGEMENT
+// =====================================================
+
+model DeviceType {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Temperature Sensor", "Camera", "Feeder"
+  category    String?  // "Sensor", "Actuator", "Controller"
+  description String?
+  specifications Json? // { "range": "0-100°C", "accuracy": "±0.1°C" }
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("device_types")
+  @@schema("master")
+}
+
+model SensorType {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Temperature", "Humidity", "Weight"
+  unit        String?  // "°C", "%", "kg"
+  dataType    String?  @map("data_type") // "numeric", "boolean", "string"
+  range       Json?    // { "min": 0, "max": 100 }
+  description String?
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("sensor_types")
+  @@schema("master")
+}
+
+model FeedType {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Starter Feed", "Grower Feed", "Finisher Feed"
+  category    String?  // "Starter", "Grower", "Finisher", "Layer"
+  description String?
+  composition Json?    // { "protein": 20, "fat": 5, "fiber": 3 }
+  energy      Decimal? @db.Decimal(10, 4) // kcal/kg
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("feed_types")
+  @@schema("master")
+}
+
+model Formula {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  composition Json?    // { "protein": 20, "fat": 5, "fiber": 3, "ash": 8 }
+  energy      Decimal? @db.Decimal(10, 4) // kcal/kg
+  cost        Decimal? @db.Decimal(10, 4) // THB/kg
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("formulas")
+  @@schema("master")
+}
+
+model EconomicData {
+  id          String   @id @default(cuid())
+  dataType    String   @map("data_type") // "FeedCost", "AnimalPrice", "LaborCost"
+  region      String?
+  value       Decimal  @db.Decimal(10, 4)
+  unit        String?  // "THB/kg", "THB/head"
+  currency    String?  @default("THB")
+  timestamp   DateTime @default(now())
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([dataType, region, timestamp])
+  @@map("economic_data")
+  @@schema("master")
+}
+
+model ExternalDataSource {
+  id          String   @id @default(cuid())
+  name        String   @unique // "กรมอุตุนิยมวิทยา", "MarketPriceAPI"
+  type        String?  // "Weather", "Market", "Government"
+  apiUrl      String?  @map("api_url")
+  apiKey      String?  @map("api_key")
+  description String?
+  status      String   @default("active") // "active", "inactive", "error"
+  meta        Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("external_data_sources")
+  @@schema("master")
+}
+
+// =====================================================
+// EXTENDED FEATURES
+// =====================================================
+
+model Zone {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  farmId    String   @map("farm_id")
+  houseId   String?  @map("house_id")
+  name      String
+  geometry  Json?    // GeoJSON polygon
+  type      String?  // "Feeding", "Resting", "Watering"
+  capacity  Int?
+  meta      Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, farmId, name])
+  @@map("zones")
+  @@schema("master")
+}
+
+model Station {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  farmId    String   @map("farm_id")
+  houseId   String?  @map("house_id")
+  name      String
+  location  Json?    // { "lat": ..., "lon": ... }
+  type      String?  // "Lab", "FeedingStation", "WaterStation"
+  status    String   @default("active") // "active", "inactive", "maintenance"
+  meta      Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, farmId, name])
+  @@map("stations")
+  @@schema("master")
+}
+
+model DeviceHealth {
+  id            String   @id @default(cuid())
+  deviceId      String   @unique @map("device_id")
+  status        String   // "ONLINE", "OFFLINE", "ERROR", "MAINTENANCE"
+  lastSeen      DateTime @map("last_seen")
+  batteryLevel  Int?     @map("battery_level")
+  signalStrength Int?    @map("signal_strength")
+  temperature   Decimal? @db.Decimal(5, 2)
+  errors        String[] // Array of error codes
+  warnings      String[] // Array of warning codes
+  meta          Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("device_health")
+  @@schema("master")
+}
+
+// =====================================================
+// EVENT LOGGING
+// =====================================================
+
+model MasterEvent {
+  id          String   @id @default(cuid())
+  eventType   String   @map("event_type") // "customer.created", "farm.updated"
+  entityType  String   @map("entity_type") // "Customer", "Farm", "Device"
+  entityId    String   @map("entity_id")
+  tenantId    String   @map("tenant_id")
+  data        Json?    // Event payload
+  metadata    Json?    @default("{}")
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([eventType, entityType, timestamp])
+  @@index([tenantId, timestamp])
+  @@map("master_events")
+  @@schema("master")
+}

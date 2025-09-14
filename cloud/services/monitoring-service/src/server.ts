@@ -1,94 +1,84 @@
-// services/data-service/src/server.ts
-
-import 'reflect-metadata';
-import express, { Application, Request, Response, RequestHandler } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-
-// โหลด swagger-ui-express ด้วย require แล้ว cast type ให้ตรงกับ express ของเรา
-const swaggerUiModule = require('swagger-ui-express') as {
-  serve: RequestHandler[];
-  setup: (swaggerDoc: any, opts?: any) => RequestHandler;
-};
-
-// โหลด swagger-jsdoc ด้วย require เพื่อไม่ต้องรอ types
-const swaggerJSDoc = require('swagger-jsdoc');
-
-import { AppDataSource } from './utils/dataSource';
+import fastify from 'fastify';
+import fastifyCors from '@fastify/cors';
+import fastifyHelmet from '@fastify/helmet';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
+import fastifyJwt from '@fastify/jwt';
+import { PORT, HOST, SERVICE_NAME, JWT_SECRET, CORS_ALLOWED_ORIGINS, CORS_ALLOW_CREDENTIALS, CORS_ALLOW_METHODS, CORS_ALLOW_HEADERS } from './config/config';
+import prisma from './utils/prisma';
 import routes from './routes';
-import { authenticateToken } from './middlewares/auth';
-import { errorHandler } from './middlewares/errorHandler';
-import { PORT } from './configs/config';
-import { swaggerOptions } from './utils/swagger';
 
-async function startServer() {
+const app = fastify({ logger: true });
+
+// Register plugins
+app.register(fastifyCors, {
+  origin: CORS_ALLOWED_ORIGINS === '*' ? true : CORS_ALLOWED_ORIGINS.split(','),
+  methods: CORS_ALLOW_METHODS.split(',').map(s => s.trim()),
+  allowedHeaders: CORS_ALLOW_HEADERS.split(',').map(s => s.trim()),
+  credentials: CORS_ALLOW_CREDENTIALS,
+});
+
+// Keep CSP disabled to avoid conflicts with Swagger UI unless explicitly needed
+app.register(fastifyHelmet, { contentSecurityPolicy: false });
+
+app.register(fastifyJwt, {
+  secret: JWT_SECRET
+});
+
+// Register Swagger
+app.register(fastifySwagger, {
+  openapi: {
+    info: {
+      title: 'Monitoring Service API',
+      description: 'API for the FarmIQ Monitoring Service',
+      version: '1.0.0',
+    },
+    servers: [{
+      url: `http://${HOST}:${PORT}`,
+      description: 'Development server'
+    }],
+  },
+});
+
+app.register(fastifySwaggerUi, {
+  routePrefix: '/docs',
+  uiConfig: {
+    deepLinking: false,
+    docExpansion: 'full',
+  },
+});
+
+// Root health/readiness endpoints (not behind /api)
+app.get('/health', async () => ({ status: 'OK', service: SERVICE_NAME, timestamp: new Date().toISOString() }));
+app.get('/ready', async (_request, reply) => {
   try {
-    // 1) Initialize DB connection
-    await AppDataSource.initialize();
-    console.log('✅ DataSource has been initialized');
+    await prisma.$queryRaw`SELECT 1`;
+    return { ok: true };
+  } catch (e) {
+    reply.status(503);
+    return { ok: false };
+  }
+});
 
-    const app: Application = express();
+// Register routes
+app.register(routes, { prefix: '/api' });
 
-    // 2) Security & logging middleware
-    app.use(helmet());
-    app.use(cors());
-    app.use(morgan('combined'));
-    app.use(express.json());
+// Error handler
+app.setErrorHandler((error, _request, reply) => {
+  app.log.error(error);
+  reply.status(500).send({ error: 'Internal Server Error' });
+});
 
-    // 3) Health-check endpoint
-    app.get('/health', (_req: Request, res: Response) => {
-      res.sendStatus(200);
-    });
-
-    // --- Dynamic Swagger setup ---
-    const opts = {
-      ...swaggerOptions,
-      definition: {
-        ...swaggerOptions.definition,
-        servers: [
-          {
-            url: `http://localhost:${PORT}`,
-            description: 'Local dev server',
-          },
-        ],
-      },
-    };
-    const swaggerSpec = swaggerJSDoc(opts);
-
-    // Serve Swagger UI at /api-docs
-    const serveHandlers: RequestHandler[] = swaggerUiModule.serve;
-    const setupHandler: RequestHandler = swaggerUiModule.setup(swaggerSpec, { explorer: true });
-    app.use('/api-docs', ...serveHandlers, setupHandler);
-
-    // 5) Protected routes
-    app.use('/api', authenticateToken, routes);
-
-    // 6) Global error handler
-    app.use(errorHandler);
-
-    // 7) Start server
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
-      console.log(`📖 Swagger UI available at http://localhost:${PORT}/api-docs`);
-    });
-
-    // 8) Graceful shutdown
-    const shutdown = () => {
-      console.log('⚡️ Shutting down server...');
-      server.close(async () => {
-        await AppDataSource.destroy();
-        console.log('✅ DataSource has been destroyed');
-        process.exit(0);
-      });
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
-
+// Start server
+const start = async () => {
+  try {
+    await app.listen({ port: PORT, host: HOST });
+    console.log(`${SERVICE_NAME} is running on http://${HOST}:${PORT}`);
+    console.log(`Swagger UI available at http://${HOST}:${PORT}/docs`);
   } catch (err) {
-    console.error('❌ Error during DataSource initialization:', err);
+    app.log.error(err);
     process.exit(1);
   }
-}
+};
 
-startServer();
+start();

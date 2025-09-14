@@ -1,19 +1,12 @@
-// src/server.ts
+// src/server.ts (Fastify)
 import 'reflect-metadata';
-import express, { Application, Request, Response, RequestHandler } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
 
-// ใช้ require เพื่อเลี่ยง type clash ของ express typings
-const swaggerUi = require('swagger-ui-express') as {
-  serve: RequestHandler[];
-  setup: (swaggerDoc?: any, opts?: any) => RequestHandler;
-};
-
-import { AppDataSource } from './utils/dataSource';
 import routes from './routes';
-import { errorHandler } from './middleware/errorHandler';
 import { PORT } from './configs/config';
 import { ensureBuckets } from './utils/minio';
 import { initMqtt } from './utils/mqtt';
@@ -21,70 +14,28 @@ import { buildOpenApiSpec } from './utils/swagger';
 
 async function start() {
   try {
-    // 1) Init infra
-    await AppDataSource.initialize();
-    console.log('✅ DataSource initialized');
-
     const mqttClient = initMqtt();
     await ensureBuckets();
 
-    // 2) App & middlewares
-    const app: Application = express();
-    app.use(
-      helmet({
-        contentSecurityPolicy: false,       // ให้ Swagger UI โหลดสคริปต์ได้
-        crossOriginEmbedderPolicy: false,
-      })
-    );
-    app.use(cors());
-    app.use(morgan('combined'));
-    app.use(express.json());
+    const app = Fastify({ logger: false });
+    await app.register(cors, { origin: true });
+    await app.register(helmet, { contentSecurityPolicy: false, crossOriginEmbedderPolicy: false });
 
-    // 3) Health-check
-    app.get('/health', (_req: Request, res: Response) => res.sendStatus(200));
+    await app.register(swagger, {
+      openapi: buildOpenApiSpec(),
+    } as any);
+    await app.register(swaggerUi, { routePrefix: '/api-docs' });
 
-    // 4) Swagger (เสิร์ฟสเปคเป็นไฟล์ JSON)
-    const openApiSpec = buildOpenApiSpec();
-    app.get('/openapi.json', (_req, res) => {
-      res.type('application/json').status(200).send(openApiSpec);
-    });
-    app.use(
-      '/api-docs',
-      ...swaggerUi.serve,
-      swaggerUi.setup(undefined, {
-        explorer: true,
-        swaggerUrl: '/openapi.json',
-      })
-    );
+    await app.register(async (f) => routes(f), { prefix: '/api' });
 
-    // 5) Routes
-    app.use('/api', routes);
+    app.get('/health', async () => ({ ok: true }));
 
-    // 6) Error handler
-    app.use(errorHandler);
+    await app.listen({ port: PORT, host: '0.0.0.0' });
+    console.log(`🚀 image-ingestion-service on http://localhost:${PORT}`);
+    console.log(`📖 Swagger UI at        http://localhost:${PORT}/api-docs`);
 
-    // 7) Listen
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 image-ingestion-service on http://localhost:${PORT}`);
-      console.log(`📖 Swagger UI at        http://localhost:${PORT}/api-docs`);
-    });
-
-    // 8) Graceful shutdown
-    const shutdown = () => {
-      console.log('⚡ Shutting down...');
-      server.close(async () => {
-        try {
-          await AppDataSource.destroy();
-        } catch (e) {
-          console.error('Error closing DataSource:', e);
-        }
-        try {
-          mqttClient?.end(true);
-        } catch (e) {
-          console.error('Error closing MQTT:', e);
-        }
-        process.exit(0);
-      });
+    const shutdown = async () => {
+      try { await app.close(); } finally { mqttClient?.end(true); process.exit(0); }
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);

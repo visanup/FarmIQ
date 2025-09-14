@@ -9,7 +9,7 @@ import { Prisma } from '@prisma/client';
 
 export async function publishFinalizedMinuteFeatures() {
   const rows: any[] = await prisma.$queryRaw(Prisma.sql`
-    SELECT bucket, tenant_id, device_id, metric, value_count as count, value_sum as sum, value_min as min, value_max as max, value_sumsq as sumsq
+    SELECT bucket, tenant_id, device_id, metric, value_count as count, value_sum as sum, value_min as min, value_max as max, value_sumsq as sumsq, tags
     FROM analytics.minute_features
     WHERE bucket < date_trunc('minute', now())
       AND bucket >= now() - interval '2 hour'
@@ -24,9 +24,12 @@ export async function publishFinalizedMinuteFeatures() {
     const variance = Math.max(0, (count ? r.sumsq / count : 0) - avg * avg);
     const stddev = Math.sqrt(variance);
 
+    const tags = r.tags || {};
     const payload = {
       bucket: new Date(r.bucket).toISOString(),
       tenant_id: r.tenant_id,
+      farm_id: tags.farm_id || null,
+      house_id: tags.house_id || null,
       device_id: r.device_id,
       metric: r.metric,
       count,

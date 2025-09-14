@@ -1,13 +1,12 @@
-// src/routes/index.ts
-
-import { Router } from 'express';
+// Fastify routes aggregator
+import { FastifyInstance } from 'fastify';
 import associate from './associate.route';
 import associations from './associations.route';
 
-const r = Router();
-r.use(associate);
-r.use(associations);
-export default r;
+export default async function routes(fastify: FastifyInstance) {
+  await fastify.register(associate);
+  await fastify.register(associations);
+}
 
 
 

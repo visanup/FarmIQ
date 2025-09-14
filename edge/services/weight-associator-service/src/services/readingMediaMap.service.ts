@@ -1,7 +1,6 @@
 // src/services/readingMediaMap.service.ts
 
-import { AppDataSource } from '../utils/dataSource';
-import { ReadingMediaMap } from '../models/ReadingMediaMap';
+import { prisma } from '../utils/prisma';
 
 export async function createAssociation(
   mediaId: string | number,
@@ -10,30 +9,27 @@ export async function createAssociation(
   method: 'nearest' | 'window' | 'exact' = 'nearest',
   confidence?: number | null
 ) {
-  const repo = AppDataSource.getRepository(ReadingMediaMap);
-  const row = repo.create({
-    media_id: String(mediaId),
-    reading_id: String(readingId),
-    delta_ms: deltaMs,
-    method,
-    confidence: confidence ?? null,
-  });
-  return repo.save(row);
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO sensors.reading_media_map(media_id, reading_id, delta_ms, method, confidence)
+     VALUES ($1,$2,$3,$4,$5)`,
+    String(mediaId), String(readingId), deltaMs, method, confidence ?? null
+  );
+  return { media_id: String(mediaId), reading_id: String(readingId), delta_ms: deltaMs, method, confidence: confidence ?? null } as any;
 }
 
 export async function getAssociationByMediaId(mediaId: string | number) {
-  return AppDataSource.getRepository(ReadingMediaMap)
-    .createQueryBuilder('map')
-    .where('map.media_id = :mid', { mid: String(mediaId) })
-    .orderBy('map.created_at', 'DESC')
-    .getOne();
+  const rows = await (prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.reading_media_map WHERE media_id=$1 ORDER BY created_at DESC LIMIT 1`,
+    String(mediaId)
+  ) as Promise<any[]>);
+  return rows[0] ?? null;
 }
 
 export async function listRecentAssociations(limit = 20) {
-  return AppDataSource.getRepository(ReadingMediaMap)
-    .createQueryBuilder('map')
-    .orderBy('map.created_at', 'DESC')
-    .limit(Math.min(Math.max(limit, 1), 200))
-    .getMany();
+  const lim = Math.min(Math.max(limit, 1), 200);
+  return prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.reading_media_map ORDER BY created_at DESC LIMIT $1`,
+    lim
+  ) as Promise<any[]>;
 }
 

@@ -191,32 +191,32 @@ services:
       retries: 5
       start_period: 10s
 
-  # 6) customer-service
-  customer-service:
-    build:
-      context: ./services/customer-service
-      dockerfile: Dockerfile
-    container_name: customer-service
-    restart: unless-stopped
-    ports:
-      - "${CUSTOMER_SERVICE_PORT:-7301}:${CUSTOMER_SERVICE_PORT:-7301}"
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
-      NODE_ENV: "production"
-      ENV_PATH: /app/.env
-    networks: [farm_cloud]
-    depends_on:
-      timescaledb:
-        condition: service_healthy
-    healthcheck:
-      test:
-        ["CMD","node","-e","http=require('http');p=process.env.CUSTOMER_SERVICE_PORT||'7301';http.get(`http://localhost:${p}/health`,r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 10s
+  # 6) customer-service (disabled - service not found)
+  # customer-service:
+  #   build:
+  #     context: ./services/customer-service
+  #     dockerfile: Dockerfile
+  #   container_name: customer-service
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${CUSTOMER_SERVICE_PORT:-7301}:${CUSTOMER_SERVICE_PORT:-7301}"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+  #     NODE_ENV: "production"
+  #     ENV_PATH: /app/.env
+  #   networks: [farm_cloud]
+  #   depends_on:
+  #     timescaledb:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test:
+  #       ["CMD","node","-e","http=require('http');p=process.env.CUSTOMER_SERVICE_PORT||'7301';http.get(`http://localhost:${p}/health`,r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 10s
 
   # 7) sensor-streamer-service (ของใหม่)
   sensor-streamer:

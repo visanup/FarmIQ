@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  master-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: farmiq-master-service
+    ports:
+      - "7307:7307"
+    environment:
+      - NODE_ENV=production
+      - PORT=7307
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgresql://postgres:postgres1611@postgres:5432/farmiq_cloud?schema=master
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_SSL=false
+      - KAFKA_CLIENT_ID=master-service
+      - CORS_ALLOW_CREDENTIALS=true
+      - CORS_ALLOWED_ORIGINS=*
+      - CORS_ALLOW_METHODS=*
+      - CORS_ALLOW_HEADERS=*
+      - LOG_LEVEL=info
+      - ENABLE_PROMETHEUS=false
+      - ADMIN_API_KEY=admin-key
+      - SWAGGER_TITLE=Master Service API
+      - SWAGGER_DESCRIPTION=Master data management service for FarmIQ
+      - SWAGGER_VERSION=1.0.0
+      - SWAGGER_BASE_URL=http://localhost:7307
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - farmiq-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7307/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    container_name: farmiq-postgres-master
+    environment:
+      - POSTGRES_DB=farmiq_cloud
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres1611
+    ports:
+      - "25433:5432"
+    volumes:
+      - postgres_data_master:/var/lib/postgresql/data
+      - ./prisma/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - farmiq-network
+    restart: unless-stopped
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: farmiq-kafka-master
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - "9093:9092"
+    volumes:
+      - kafka_data_master:/bitnami/kafka
+    networks:
+      - farmiq-network
+    restart: unless-stopped
+
+  kafka-init-topics:
+    image: bitnami/kafka:3.7
+    container_name: farmiq-kafka-init-topics-master
+    depends_on:
+      - kafka
+    command: >
+      bash -c "
+        echo 'Waiting for Kafka to be ready...'
+        sleep 30
+        echo 'Creating Kafka topics...'
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.customer.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.farm.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.house.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.device.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.flock.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.animal-type.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --topic master.breed.snapshot.v1 --partitions 3 --replication-factor 1 || true
+        echo 'Kafka topics created successfully!'
+      "
+    networks:
+      - farmiq-network
+
+volumes:
+  postgres_data_master:
+  kafka_data_master:
+
+networks:
+  farmiq-network:
+    driver: bridge

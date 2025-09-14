@@ -61,7 +61,7 @@ export const DATABASE_URL =
 export const DB_SCHEMA = process.env.DB_SCHEMA || 'sensors';
 
 // ---------- Server ----------
-export const PORT = Number(process.env.IMAGE_INGESTION_SERVICE_PORT || process.env.PORT || 6313);
+export const PORT = Number(process.env.IMAGE_INGESTION_SERVICE_PORT || process.env.PORT || 6304);
 export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 

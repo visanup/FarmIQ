@@ -1,14 +1,14 @@
-// src/middleware/apiKey.ts
-
-import { Request, Response, NextFunction } from 'express';
+// src/middlewares/apiKey.ts (Fastify)
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { SERVICE_API_KEY, REQUIRE_API_KEY } from '../configs/config';
 
-export function apiKey(req: Request, res: Response, next: NextFunction) {
-  // dev: ถ้าไม่ enforce หรือไม่มี key → ปล่อยผ่าน
-  if (!REQUIRE_API_KEY || !SERVICE_API_KEY) return next();
-
-  const key = (req.header('x-api-key') || req.query.api_key) as string | undefined;
-  if (!key || key !== SERVICE_API_KEY) return res.status(401).json({ error: 'Unauthorized' });
-  return next();
+export async function apiKey(request: FastifyRequest, reply: FastifyReply) {
+  if (!REQUIRE_API_KEY || !SERVICE_API_KEY) return; // allow
+  const headerKey = request.headers['x-api-key'];
+  const queryKey = (request.query as any)?.api_key;
+  const key = (Array.isArray(headerKey) ? headerKey[0] : headerKey) || queryKey;
+  if (!key || key !== SERVICE_API_KEY) {
+    reply.code(401).send({ error: 'Unauthorized' });
+  }
 }
 

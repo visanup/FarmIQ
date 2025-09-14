@@ -2,7 +2,7 @@
 
 A high-performance sensor data streaming service built with Fastify, Prisma, and TimescaleDB for time-series data processing.
 
-## 🚀 Features
+## ๐€ Features
 
 - **Time-series Database**: Built on TimescaleDB for optimal sensor data storage
 - **Fastify Framework**: High-performance web framework with built-in validation
@@ -14,14 +14,14 @@ A high-performance sensor data streaming service built with Fastify, Prisma, and
 - **Retention Policies**: Configurable data retention and cleanup
 - **Continuous Aggregates**: Pre-computed time-series aggregations
 
-## 📋 Prerequisites
+## ๐“ Prerequisites
 
 - Node.js 18.18.0 or higher
 - Yarn package manager
 - PostgreSQL 13+ with TimescaleDB extension
 - Docker (optional, for containerized PostgreSQL)
 
-## 🛠️ Installation
+## ๐ ๏ธ Installation
 
 ### 1. Clone and Install Dependencies
 
@@ -141,13 +141,13 @@ yarn build
 yarn start
 ```
 
-## 📚 API Documentation
+## ๐“ API Documentation
 
 Once the service is running, visit:
 - **Swagger UI**: http://localhost:7302/api-docs
 - **Health Check**: http://localhost:7302/health
 
-## 🔧 Available Scripts
+## ๐”ง Available Scripts
 
 ```bash
 # Development
@@ -166,7 +166,7 @@ yarn typecheck        # Run TypeScript type checking
 yarn lint             # Run ESLint
 ```
 
-## 📊 Database Schema
+## ๐“ Database Schema
 
 ### Tables
 
@@ -192,7 +192,7 @@ Pre-computed aggregations for common queries:
 - **sensor_readings_hourly**: Hourly sensor data aggregations
 - **sensor_readings_daily**: Daily sensor data aggregations
 
-## 🔍 Time-series Queries
+## ๐” Time-series Queries
 
 ### Using Prisma + Raw SQL
 
@@ -228,7 +228,7 @@ const hourlyData = await prisma.$queryRaw`
 `;
 ```
 
-## 📈 Performance Optimization
+## ๐“ Performance Optimization
 
 ### Indexes
 
@@ -256,7 +256,7 @@ Data retention is automatically managed:
 - **Sweep data**: 1 year retention
 - **Lab data**: 1 year retention
 
-## 🔐 API Authentication
+## ๐” API Authentication
 
 The service uses API key authentication for sensitive endpoints:
 
@@ -268,7 +268,7 @@ curl -H "x-api-key: admin-key" \
      -d '[{"deviceId":"device_001","sensorType":"temperature","value":25.5,"unit":"celsius"}]'
 ```
 
-## 📝 Batch Data Ingestion
+## ๐“ Batch Data Ingestion
 
 ### Sensor Readings
 
@@ -337,7 +337,7 @@ curl -X POST http://localhost:7302/api/device-health/batch \
   ]'
 ```
 
-## 🔧 Maintenance
+## ๐”ง Maintenance
 
 ### Data Cleanup
 
@@ -365,7 +365,7 @@ SELECT
 FROM timescaledb_information.compression_settings;
 ```
 
-## 🐳 Docker Support
+## ๐ณ Docker Support
 
 ### Dockerfile
 
@@ -412,7 +412,7 @@ volumes:
   postgres_data:
 ```
 
-## 🚨 Troubleshooting
+## ๐จ Troubleshooting
 
 ### Common Issues
 
@@ -444,11 +444,11 @@ yarn dev 2>&1 | tee logs/sensor-streamer.log
 docker logs farmiq-postgres
 ```
 
-## 📄 License
+## ๐“ License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🤝 Contributing
+## ๐ค Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -456,7 +456,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 4. Add tests if applicable
 5. Submit a pull request
 
-## 📞 Support
+## ๐“ Support
 
 For support and questions:
 - Create an issue in the repository

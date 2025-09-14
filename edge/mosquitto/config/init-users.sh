@@ -16,6 +16,7 @@ echo ">> Creating/Updating mosquitto passwd at ${CONF_DIR}/passwd"
 run_passwd -c edge_admin
 run_passwd ""  edge_sensor_svc
 run_passwd ""  edge_agent
+run_passwd ""  edge_bridge
 
 # tenant (username=tenant) — เพิ่มตามต้องการ
 run_passwd ""  farm-001

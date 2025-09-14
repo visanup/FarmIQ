@@ -34,7 +34,7 @@ const RawEnv = z.object({
 
   // Kafka
   KAFKA_CLIENT_ID: str().default('analytics-stream'),
-  CONSUMER_GROUP: str().default('analytic-service.v1'),
+  CONSUMER_GROUP: str().default('analytic-service.v2'),
   KAFKA_BROKERS: str().default('kafka:9092'), // comma-separated
   // ทำ optional เพื่อให้เราสร้าง default จากรายการ TOPIC_* ได้อัตโนมัติ
   KAFKA_TOPICS_IN: str().optional(),
@@ -42,7 +42,7 @@ const RawEnv = z.object({
   KAFKA_TOPIC_DLQ: str().default('analytics.invalid-readings'),
 
   // --- TOPICS (ปรับ default ได้ตาม cluster ของคุณ) ---
-  TOPIC_SENSORS:          str().default('sensors.device.readings'),
+  TOPIC_SENSORS:          str().default('sensors.device.readings.v1'),
   TOPIC_DEVICE_HEALTH:    str().default('sensors.device.health.v1'),
   TOPIC_LAB_READINGS:     str().default('sensors.lab.readings.v1'),
   TOPIC_SWEEP_READINGS:   str().default('sensors.sweep.readings.v1'),
@@ -55,6 +55,23 @@ const RawEnv = z.object({
   TOPIC_FARM_SNAPSHOT:    str().default('farms.farm.snapshot.v1'),
   TOPIC_HOUSE_SNAPSHOT:   str().default('farms.house.snapshot.v1'),
   TOPIC_FLOCK_SNAPSHOT:   str().default('farms.flock.snapshot.v1'),
+  // Master Service Topics
+  TOPIC_MASTER_CUSTOMER:    str().default('master.customer.snapshot.v1'),
+  TOPIC_MASTER_DEVICE:      str().default('master.device.snapshot.v1'),
+  TOPIC_MASTER_FARM:        str().default('master.farm.snapshot.v1'),
+  TOPIC_MASTER_HOUSE:       str().default('master.house.snapshot.v1'),
+  TOPIC_MASTER_FLOCK:       str().default('master.flock.snapshot.v1'),
+  TOPIC_MASTER_ANIMAL_TYPE: str().default('master.animal-type.snapshot.v1'),
+  TOPIC_MASTER_BREED:       str().default('master.breed.snapshot.v1'),
+  
+  // Analytics Topics
+  TOPIC_ANALYTICS_FCR:         str().default('analytics.fcr.calculation.v1'),
+  TOPIC_ANALYTICS_HEALTH:      str().default('analytics.health.metrics.v1'),
+  TOPIC_ANALYTICS_PRODUCTION:  str().default('analytics.production.metrics.v1'),
+  TOPIC_ANALYTICS_ENVIRONMENTAL: str().default('analytics.environmental.metrics.v1'),
+  TOPIC_ANALYTICS_SIZE:        str().default('analytics.size.distribution.v1'),
+  TOPIC_ANALYTICS_PREDICTIONS: str().default('analytics.prediction.v1'),
+  TOPIC_ANALYTICS_ANOMALIES:   str().default('analytics.anomaly.v1'),
   // อนาคต (ถ้าจะใช้)
   TOPIC_FEATURES:         str().default('analytics.features.materialized.v1'),
   TOPIC_PREDICTIONS:      str().default('analytics.prediction.v1'),
@@ -115,6 +132,22 @@ const defaultInputTopics = [
   env.TOPIC_FARM_SNAPSHOT,
   env.TOPIC_HOUSE_SNAPSHOT,
   env.TOPIC_FLOCK_SNAPSHOT,
+  // Master Service Topics
+  env.TOPIC_MASTER_CUSTOMER,
+  env.TOPIC_MASTER_DEVICE,
+  env.TOPIC_MASTER_FARM,
+  env.TOPIC_MASTER_HOUSE,
+  env.TOPIC_MASTER_FLOCK,
+  env.TOPIC_MASTER_ANIMAL_TYPE,
+  env.TOPIC_MASTER_BREED,
+  // Analytics Topics
+  env.TOPIC_ANALYTICS_FCR,
+  env.TOPIC_ANALYTICS_HEALTH,
+  env.TOPIC_ANALYTICS_PRODUCTION,
+  env.TOPIC_ANALYTICS_ENVIRONMENTAL,
+  env.TOPIC_ANALYTICS_SIZE,
+  env.TOPIC_ANALYTICS_PREDICTIONS,
+  env.TOPIC_ANALYTICS_ANOMALIES,
 ];
 
 const topicsInCSV =
@@ -153,6 +186,14 @@ export const topics = {
   farmSnap: env.TOPIC_FARM_SNAPSHOT,
   houseSnap: env.TOPIC_HOUSE_SNAPSHOT,
   flockSnap: env.TOPIC_FLOCK_SNAPSHOT,
+  // Master Service Topics
+  masterCustomer: env.TOPIC_MASTER_CUSTOMER,
+  masterDevice: env.TOPIC_MASTER_DEVICE,
+  masterFarm: env.TOPIC_MASTER_FARM,
+  masterHouse: env.TOPIC_MASTER_HOUSE,
+  masterFlock: env.TOPIC_MASTER_FLOCK,
+  masterAnimalType: env.TOPIC_MASTER_ANIMAL_TYPE,
+  masterBreed: env.TOPIC_MASTER_BREED,
   features: env.TOPIC_FEATURES,
   predictions: env.TOPIC_PREDICTIONS,
   anomalies: env.TOPIC_ANOMALIES,

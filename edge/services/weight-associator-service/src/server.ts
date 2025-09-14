@@ -1,32 +1,31 @@
-// src/server.ts
+// src/server.ts (Fastify)
 import 'reflect-metadata';
-import express from 'express';
-import helmet from 'helmet'; import cors from 'cors'; import morgan from 'morgan';
-import { AppDataSource } from './utils/dataSource';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import { PORT, IMG_CREATED_RK, WEIGHT_ASSOCIATED_RK } from './configs/config';
-import { errorHandler } from './middleware/errorHandler';
 import routes from './routes';
 import { initMqtt, subscribe, publish } from './utils/mqtt';
 import { ImageCreatedEvent } from './schemas/ingestion.schemas';
 import { handleImageCreated } from './services/associate.service';
-
-const swaggerUi = require('swagger-ui-express');
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
 import { buildOpenApiSpec } from './utils/swagger';
 
 async function start() {
-  await AppDataSource.initialize();
   const mqtt = initMqtt();
 
-  // REST
-  const app = express();
-  app.use(helmet({ contentSecurityPolicy: false })); app.use(cors()); app.use(morgan('combined')); app.use(express.json());
-  app.get('/health', (_req, res) => res.sendStatus(200));
-  const spec = buildOpenApiSpec();
-  app.get('/openapi.json', (_req, res) => res.type('application/json').send(spec));
-  app.use('/api-docs', ...swaggerUi.serve, swaggerUi.setup(undefined, { explorer: true, swaggerUrl: '/openapi.json' }));
-  app.use('/api', routes);
-  app.use(errorHandler);
-  const server = app.listen(PORT, () => console.log(`🚀 weight-associator-service on :${PORT}`));
+  const app = Fastify({ logger: false });
+  await app.register(cors, { origin: true });
+  await app.register(helmet, { contentSecurityPolicy: false });
+
+  await app.register(swagger, { openapi: buildOpenApiSpec() } as any);
+  await app.register(swaggerUi, { routePrefix: '/api-docs' });
+  await app.register(async (f) => routes(f), { prefix: '/api' });
+  app.get('/health', async () => ({ ok: true }));
+
+  await app.listen({ port: PORT, host: '0.0.0.0' });
+  console.log(`🚀 weight-associator-service on :${PORT}`);
 
   // MQTT: image.created -> associate -> weight.associated
   subscribe(IMG_CREATED_RK, async (payload) => {
@@ -42,7 +41,7 @@ async function start() {
     });
   });
 
-  const shutdown = () => server.close(async () => { try { await AppDataSource.destroy(); } finally { process.exit(0); }});
+  const shutdown = async () => { try { await app.close(); } finally { process.exit(0); } };
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 }
 start().catch((e) => { console.error(e); process.exit(1); });

@@ -4,7 +4,7 @@ import { connectKafka, consumer, producer } from '../../utils/kafka';
 import { KAFKA_BROKERS } from '../../configs/config';
 import { handleAnalyticsFeature } from '../../pipelines/map/analyticsFeature';
 import { AlertService } from '../../services/alert.service';
-import { AppDataSource } from '../../database';
+import { AppDataSource } from '../../utils/dataSource';
 import { Alert } from '../../models/alert.model';
 import { getRepository } from 'typeorm';
 

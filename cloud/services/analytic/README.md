@@ -1,41 +1,41 @@
-# Analytics Platform (stream → worker → api → alerts)
+# Analytics Platform (stream โ’ worker โ’ api โ’ alerts)
 
-แพลตฟอร์ม analytics สำหรับงานโรงงาน/ฟาร์ม/ไลน์ผลิต ที่วิ่งแบบ real-time ผ่าน Kafka → ประมวลผล/รวมค่าใน TimescaleDB → เปิดอ่านผ่าน API → แจ้งเตือนผ่าน Alerts
+เนเธเธฅเธ•เธเธญเธฃเนเธก analytics เธชเธณเธซเธฃเธฑเธเธเธฒเธเนเธฃเธเธเธฒเธ/เธเธฒเธฃเนเธก/เนเธฅเธเนเธเธฅเธดเธ• เธ—เธตเนเธงเธดเนเธเนเธเธ real-time เธเนเธฒเธ Kafka โ’ เธเธฃเธฐเธกเธงเธฅเธเธฅ/เธฃเธงเธกเธเนเธฒเนเธ TimescaleDB โ’ เน€เธเธดเธ”เธญเนเธฒเธเธเนเธฒเธ API โ’ เนเธเนเธเน€เธ•เธทเธญเธเธเนเธฒเธ Alerts
 
 ```
-Edge/IoT/Lab → analytics-stream → Kafka topics
-                                   │
-                                   ▼
+Edge/IoT/Lab โ’ analytics-stream โ’ Kafka topics
+                                   โ”
+                                   โ–ผ
                             analytics-worker
                          (normalize/aggregate/
                          event rollup/anomaly)
-                                   │
+                                   โ”
                           TimescaleDB/Postgres
-                                   │
-                                   ├── analytics-api (REST)
-                                   └── analytics-alerts (notify)
+                                   โ”
+                                   โ”โ”€โ”€ analytics-api (REST)
+                                   โ””โ”€โ”€ analytics-alerts (notify)
 ```
 
 ---
 
-## TL;DR — อยากให้ติดตั้ง/ทดสอบเร็ว ๆ
+## TL;DR โ€” เธญเธขเธฒเธเนเธซเนเธ•เธดเธ”เธ•เธฑเนเธ/เธ—เธ”เธชเธญเธเน€เธฃเนเธง เน
 
-1. รัน TimescaleDB และ Kafka (ตาม compose ของคุณ)
-2. รัน **analytics-worker** และ **analytics-api**
-3. ส่งข้อความทดสอบเข้า Kafka (`sensors.device.readings`)
-4. เรียก **analytics-api** ดูผลรวม (agg) → จบ
+1. เธฃเธฑเธ TimescaleDB เนเธฅเธฐ Kafka (เธ•เธฒเธก compose เธเธญเธเธเธธเธ“)
+2. เธฃเธฑเธ **analytics-worker** เนเธฅเธฐ **analytics-api**
+3. เธชเนเธเธเนเธญเธเธงเธฒเธกเธ—เธ”เธชเธญเธเน€เธเนเธฒ Kafka (`sensors.device.readings`)
+4. เน€เธฃเธตเธขเธ **analytics-api** เธ”เธนเธเธฅเธฃเธงเธก (agg) โ’ เธเธ
 
-คำสั่งตัวอย่าง (ในเครื่องที่มี docker compose):
+เธเธณเธชเธฑเนเธเธ•เธฑเธงเธญเธขเนเธฒเธ (เนเธเน€เธเธฃเธทเนเธญเธเธ—เธตเนเธกเธต docker compose):
 
 ```bash
-# 1) DB schema (เฉพาะครั้งแรก)
+# 1) DB schema (เน€เธเธเธฒเธฐเธเธฃเธฑเนเธเนเธฃเธ)
 psql "postgresql://postgres:password@localhost:5432/sensor_cloud_db" -f services/analytic/sql/01_analytics_core.sql
-psql "postgresql://postgres:password@localhost:5432/sensor_cloud_db" -f services/analytic/sql/02_analytics_events.sql  # ถ้าใช้ event
+psql "postgresql://postgres:password@localhost:5432/sensor_cloud_db" -f services/analytic/sql/02_analytics_events.sql  # เธ–เนเธฒเนเธเน event
 
-# 2) Bring up worker & api (และ kafka, timescaledb)
+# 2) Bring up worker & api (เนเธฅเธฐ kafka, timescaledb)
 docker compose up -d timescaledb kafka analytics-worker analytics-api
 
-# 3) ส่ง message ทดสอบ (วิ่งในคอนเทนเนอร์ worker)
+# 3) เธชเนเธ message เธ—เธ”เธชเธญเธ (เธงเธดเนเธเนเธเธเธญเธเน€เธ—เธเน€เธเธญเธฃเน worker)
 docker exec -it analytics-worker python - <<'PY'
 from confluent_kafka import Producer; import json, datetime
 p=Producer({'bootstrap.servers':'kafka:9092'})
@@ -45,125 +45,125 @@ msg={"time":datetime.datetime.utcnow().replace(microsecond=0).isoformat()+"Z",
 p.produce("sensors.device.readings", json.dumps(msg).encode()); p.flush(); print("sent", msg)
 PY
 
-# 4) ดึงผลรวมจาก API
+# 4) เธ”เธถเธเธเธฅเธฃเธงเธกเธเธฒเธ API
 curl "http://localhost:7305/v1/agg?tenant_id=t1&factory_id=f1&machine_id=mc-01&metric=temp&window_s=60&start=2025-08-20T00:00:00Z&end=2025-08-21T00:00:00Z"
 ```
 
 ---
 
-## ส่วนประกอบของระบบ
+## เธชเนเธงเธเธเธฃเธฐเธเธญเธเธเธญเธเธฃเธฐเธเธ
 
 ### 1) analytics-stream
 
-**หน้าที่**: ตัวรวบรวม/คอนเนคเตอร์จาก Edge/Device/Lab เข้าสู่ Kafka
-**ตัวอย่างแหล่งข้อมูล**: Sensor telemetry, Device health, Sweep batch, Lab results
+**เธซเธเนเธฒเธ—เธตเน**: เธ•เธฑเธงเธฃเธงเธเธฃเธงเธก/เธเธญเธเน€เธเธเน€เธ•เธญเธฃเนเธเธฒเธ Edge/Device/Lab เน€เธเนเธฒเธชเธนเน Kafka
+**เธ•เธฑเธงเธญเธขเนเธฒเธเนเธซเธฅเนเธเธเนเธญเธกเธนเธฅ**: Sensor telemetry, Device health, Sweep batch, Lab results
 
-* ผลิตข้อความไปยัง topics (อย่างน้อย):
+* เธเธฅเธดเธ•เธเนเธญเธเธงเธฒเธกเนเธเธขเธฑเธ topics (เธญเธขเนเธฒเธเธเนเธญเธข):
 
-  * `sensors.device.readings` (measurement ต่อเนื่อง)
-  * `device.health` (online/offline หรือ health score)
+  * `sensors.device.readings` (measurement เธ•เนเธญเน€เธเธทเนเธญเธ)
+  * `device.health` (online/offline เธซเธฃเธทเธญ health score)
   * `sensors.sweep.readings` (batch readings)
   * `lab.results` (QC/QA per analyte)
-* **Partitioning/Key (แนะนำ)**: `${tenant_id}-${factory_id}-${machine_id}`
-  เพื่อให้ record ที่เกี่ยวข้องไปลงพาร์ติชันเดียวกัน
+* **Partitioning/Key (เนเธเธฐเธเธณ)**: `${tenant_id}-${factory_id}-${machine_id}`
+  เน€เธเธทเนเธญเนเธซเน record เธ—เธตเนเน€เธเธตเนเธขเธงเธเนเธญเธเนเธเธฅเธเธเธฒเธฃเนเธ•เธดเธเธฑเธเน€เธ”เธตเธขเธงเธเธฑเธ
 
-> หมายเหตุ: ในสภาพจริง `analytics-stream` อาจเป็น set ของ micro-connectors หลายตัว (modbus/mqtt/http/webhook) — หลักคือ “แปลงให้เป็น payload กลางที่ worker เข้าใจ”
+> เธซเธกเธฒเธขเน€เธซเธ•เธธ: เนเธเธชเธ เธฒเธเธเธฃเธดเธ `analytics-stream` เธญเธฒเธเน€เธเนเธ set เธเธญเธ micro-connectors เธซเธฅเธฒเธขเธ•เธฑเธง (modbus/mqtt/http/webhook) โ€” เธซเธฅเธฑเธเธเธทเธญ โ€เนเธเธฅเธเนเธซเนเน€เธเนเธ payload เธเธฅเธฒเธเธ—เธตเน worker เน€เธเนเธฒเนเธโ€
 
 ---
 
 ### 2) analytics-worker
 
-**หน้าที่**: Consumer หลายโดเมน → Normalize → Aggregate/Anomaly → เขียน TimescaleDB
-**จุดเด่น**: ปลั๊กอินได้ (registry), เปิด/ปิดโดเมนด้วย ENV, idempotent upsert
+**เธซเธเนเธฒเธ—เธตเน**: Consumer เธซเธฅเธฒเธขเนเธ”เน€เธกเธ โ’ Normalize โ’ Aggregate/Anomaly โ’ เน€เธเธตเธขเธ TimescaleDB
+**เธเธธเธ”เน€เธ”เนเธ**: เธเธฅเธฑเนเธเธญเธดเธเนเธ”เน (registry), เน€เธเธดเธ”/เธเธดเธ”เนเธ”เน€เธกเธเธ”เนเธงเธข ENV, idempotent upsert
 
-* **Kafka topics → handlers** (เริ่มต้น):
+* **Kafka topics โ’ handlers** (เน€เธฃเธดเนเธกเธ•เนเธ):
 
-  | Topic                     | Handler                 | Kind         | ลงตาราง                                |
+  | Topic                     | Handler                 | Kind         | เธฅเธเธ•เธฒเธฃเธฒเธ                                |
   | ------------------------- | ----------------------- | ------------ | -------------------------------------- |
   | `sensors.device.readings` | `handle_sensor_reading` | measurement  | `analytics.analytics_agg`              |
-  | `device.health`           | `handle_device_health`  | event/metric | `analytics_event` หรือ `analytics_agg` |
+  | `device.health`           | `handle_device_health`  | event/metric | `analytics_event` เธซเธฃเธทเธญ `analytics_agg` |
   | `sensors.sweep.readings`  | `handle_sweep_reading`  | event        | `analytics_event` + rollup             |
   | `lab.results`             | `handle_lab_record`     | measurement  | `analytics.analytics_agg`              |
 
-* **Windows** (ค่าเริ่มต้น): `[60, 300, 3600]` วินาที
+* **Windows** (เธเนเธฒเน€เธฃเธดเนเธกเธ•เนเธ): `[60, 300, 3600]` เธงเธดเธเธฒเธ—เธต
 
 * **FastAPI (port 7304)**: `/v1/health`, `/v1/metrics`
 
-> ดู README ของ analytics-worker สำหรับรายละเอียด internals (เราใส่ไว้ให้แล้ว)
+> เธ”เธน README เธเธญเธ analytics-worker เธชเธณเธซเธฃเธฑเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ” internals (เน€เธฃเธฒเนเธชเนเนเธงเนเนเธซเนเนเธฅเนเธง)
 
 ---
 
 ### 3) analytics-api
 
-**หน้าที่**: REST API อ่านข้อมูล analytics จาก DB (บาง เบา เร็ว)
+**เธซเธเนเธฒเธ—เธตเน**: REST API เธญเนเธฒเธเธเนเธญเธกเธนเธฅ analytics เธเธฒเธ DB (เธเธฒเธ เน€เธเธฒ เน€เธฃเนเธง)
 **FastAPI (port 7305)**:
 
 * `GET /v1/health`
 * `GET /v1/metrics` (Prometheus)
-* `GET /v1/agg` — ดึง aggregate (ต้องระบุ key + metric + window + ช่วงเวลา)
-* (ถ้าใช้ events) `GET /v1/event-rollup`
+* `GET /v1/agg` โ€” เธ”เธถเธ aggregate (เธ•เนเธญเธเธฃเธฐเธเธธ key + metric + window + เธเนเธงเธเน€เธงเธฅเธฒ)
+* (เธ–เนเธฒเนเธเน events) `GET /v1/event-rollup`
 
-> ดู README ของ analytics-api สำหรับวิธีเรียกละเอียดและกรณีใช้งาน
+> เธ”เธน README เธเธญเธ analytics-api เธชเธณเธซเธฃเธฑเธเธงเธดเธเธตเน€เธฃเธตเธขเธเธฅเธฐเน€เธญเธตเธขเธ”เนเธฅเธฐเธเธฃเธ“เธตเนเธเนเธเธฒเธ
 
 ---
 
 ### 4) analytics-alerts
 
-**หน้าที่**: สร้าง “สัญญาณเตือน” เมื่อมีเหตุผิดปกติ/เหตุการณ์สำคัญ
-**แหล่ง trigger (เลือกอย่างน้อยหนึ่ง)**
+**เธซเธเนเธฒเธ—เธตเน**: เธชเธฃเนเธฒเธ โ€เธชเธฑเธเธเธฒเธ“เน€เธ•เธทเธญเธโ€ เน€เธกเธทเนเธญเธกเธตเน€เธซเธ•เธธเธเธดเธ”เธเธเธ•เธด/เน€เธซเธ•เธธเธเธฒเธฃเธ“เนเธชเธณเธเธฑเธ
+**เนเธซเธฅเนเธ trigger (เน€เธฅเธทเธญเธเธญเธขเนเธฒเธเธเนเธญเธขเธซเธเธถเนเธ)**
 
 * Query DB: `analytics.analytics_anomaly`, `analytics.analytics_event_rollup` (cron/interval)
-* หรือ Consume Kafka topic เช่น `analytics.alerts` (ถ้าให้ worker publish)
+* เธซเธฃเธทเธญ Consume Kafka topic เน€เธเนเธ `analytics.alerts` (เธ–เนเธฒเนเธซเน worker publish)
 
-**ช่องทางการแจ้ง**
+**เธเนเธญเธเธ—เธฒเธเธเธฒเธฃเนเธเนเธ**
 
 * Slack (Incoming Webhook)
-* LINE Notify / Email / Webhook อื่น ๆ
+* LINE Notify / Email / Webhook เธญเธทเนเธ เน
 
-**ตัวอย่าง Rule (เบื้องต้น)**
+**เธ•เธฑเธงเธญเธขเนเธฒเธ Rule (เน€เธเธทเนเธญเธเธ•เนเธ)**
 
-* Anomaly severity ≥ 3 → แจ้งทันที
-* Device offline ต่อเนื่อง > 10 นาที → แจ้ง
-* Sweep/Batch fail rate > threshold → แจ้ง
-* Lab analyte เกิน spec → แจ้ง
+* Anomaly severity โฅ 3 โ’ เนเธเนเธเธ—เธฑเธเธ—เธต
+* Device offline เธ•เนเธญเน€เธเธทเนเธญเธ > 10 เธเธฒเธ—เธต โ’ เนเธเนเธ
+* Sweep/Batch fail rate > threshold โ’ เนเธเนเธ
+* Lab analyte เน€เธเธดเธ spec โ’ เนเธเนเธ
 
-**ENV ที่มักใช้**
+**ENV เธ—เธตเนเธกเธฑเธเนเธเน**
 
 ```
 ALERT_BACKEND=slack
 SLACK_WEBHOOK_URL=...
 LINE_NOTIFY_TOKEN=...
 POLL_INTERVAL_SECONDS=60
-# ถ้า query DB
+# เธ–เนเธฒ query DB
 DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=...
 ```
 
 ---
 
-## สคีมา/ตาราง (DB)
+## เธชเธเธตเธกเธฒ/เธ•เธฒเธฃเธฒเธ (DB)
 
-จำเป็นต้องมีอย่างน้อย:
+เธเธณเน€เธเนเธเธ•เนเธญเธเธกเธตเธญเธขเนเธฒเธเธเนเธญเธข:
 
 * `01_analytics_core.sql`
 
-  * `analytics.analytics_agg` (hypertable, aggregate ต่อ window)
+  * `analytics.analytics_agg` (hypertable, aggregate เธ•เนเธญ window)
   * `analytics.analytics_anomaly`
   * `analytics.analytics_kpi`
   * `analytics.analytics_spec_limits`
   * `analytics.worker_checkpoints`
-* (ถ้าใช้ event) `02_analytics_events.sql`
+* (เธ–เนเธฒเนเธเน event) `02_analytics_events.sql`
 
   * `analytics.analytics_event`
   * `analytics.analytics_event_rollup`
-* (สะดวกใช้) `10_analytics_views.sql`
+* (เธชเธฐเธ”เธงเธเนเธเน) `10_analytics_views.sql`
 
   * `v_agg_latest`, `v_anomaly_recent`, `v_kpi_latest`, `v_event_daily`
 
-> สคริปต์ตั้ง compression/retention ให้โดยอัตโนมัติ (idempotent)
+> เธชเธเธฃเธดเธเธ•เนเธ•เธฑเนเธ compression/retention เนเธซเนเนเธ”เธขเธญเธฑเธ•เนเธเธกเธฑเธ•เธด (idempotent)
 
 ---
 
-## รูปแบบข้อมูล (payloads) ที่รองรับ
+## เธฃเธนเธเนเธเธเธเนเธญเธกเธนเธฅ (payloads) เธ—เธตเนเธฃเธญเธเธฃเธฑเธ
 
 ### sensors.device.readings (measurement)
 
@@ -176,7 +176,7 @@ DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=...
 }
 ```
 
-### device.health (event หรือ metric)
+### device.health (event เธซเธฃเธทเธญ metric)
 
 ```json
 { "time":"2025-08-20T03:12:00Z",
@@ -184,7 +184,7 @@ DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=...
   "status":"online","level":"ok" }
 ```
 
-หรือ
+เธซเธฃเธทเธญ
 
 ```json
 { "time":"2025-08-20T03:12:00Z",
@@ -209,28 +209,28 @@ DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=...
   "analyte":"Moisture","value":12.4,"unit":"%" }
 ```
 
-> เวลา (time) ใช้ ISO-8601 + `Z` (UTC) เท่านั้น
+> เน€เธงเธฅเธฒ (time) เนเธเน ISO-8601 + `Z` (UTC) เน€เธ—เนเธฒเธเธฑเนเธ
 
 ---
 
-## ค่าคอนฟิกหลัก (ENV)
+## เธเนเธฒเธเธญเธเธเธดเธเธซเธฅเธฑเธ (ENV)
 
-ค่ารวมที่มักใช้ซ้ำในหลายบริการ:
+เธเนเธฒเธฃเธงเธกเธ—เธตเนเธกเธฑเธเนเธเนเธเนเธณเนเธเธซเธฅเธฒเธขเธเธฃเธดเธเธฒเธฃ:
 
-| Key                                      | Example                            | หมายเหตุ                                                                   |
+| Key                                      | Example                            | เธซเธกเธฒเธขเน€เธซเธ•เธธ                                                                   |
 | ---------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
-| `KAFKA_BROKERS`                          | `kafka:9092`                       | ใน Docker network เดียวกันใช้ชื่อ service ได้เลย; นอกนั้นใช้ hostname จริง |
-| `KAFKA_TOPICS`                           | `["sensors.device.readings", ...]` | analytics-stream ส่งเข้ามา; worker subscribe                               |
-| `DOMAINS_ENABLED`                        | `sensor,device,lab,sweep`          | worker ใช้กรอง domain ใน registry                                          |
-| `WINDOWS`                                | `[60,300,3600]`                    | worker รวมค่าเป็น window                                                   |
-| `DB_HOST/PORT/NAME/USER/PASSWORD/SCHEMA` | —                                  | ทุกบริการที่คุย DB ต้องตั้งให้ถูก                                          |
-| `API_HOST/API_PORT`                      | —                                  | แต่ละบริการ API                                                            |
+| `KAFKA_BROKERS`                          | `kafka:9092`                       | เนเธ Docker network เน€เธ”เธตเธขเธงเธเธฑเธเนเธเนเธเธทเนเธญ service เนเธ”เนเน€เธฅเธข; เธเธญเธเธเธฑเนเธเนเธเน hostname เธเธฃเธดเธ |
+| `KAFKA_TOPICS`                           | `["sensors.device.readings", ...]` | analytics-stream เธชเนเธเน€เธเนเธฒเธกเธฒ; worker subscribe                               |
+| `DOMAINS_ENABLED`                        | `sensor,device,lab,sweep`          | worker เนเธเนเธเธฃเธญเธ domain เนเธ registry                                          |
+| `WINDOWS`                                | `[60,300,3600]`                    | worker เธฃเธงเธกเธเนเธฒเน€เธเนเธ window                                                   |
+| `DB_HOST/PORT/NAME/USER/PASSWORD/SCHEMA` | โ€”                                  | เธ—เธธเธเธเธฃเธดเธเธฒเธฃเธ—เธตเนเธเธธเธข DB เธ•เนเธญเธเธ•เธฑเนเธเนเธซเนเธ–เธนเธ                                          |
+| `API_HOST/API_PORT`                      | โ€”                                  | เนเธ•เนเธฅเธฐเธเธฃเธดเธเธฒเธฃ API                                                            |
 
 ---
 
-## การดีพลอย (Compose แนะนำ)
+## เธเธฒเธฃเธ”เธตเธเธฅเธญเธข (Compose เนเธเธฐเธเธณ)
 
-ตัวอย่างบริการหลัก (โครง):
+เธ•เธฑเธงเธญเธขเนเธฒเธเธเธฃเธดเธเธฒเธฃเธซเธฅเธฑเธ (เนเธเธฃเธ):
 
 ```yaml
 services:
@@ -276,7 +276,7 @@ services:
     depends_on: { timescaledb: { condition: service_started } }
 ```
 
-> `analytics-stream` อาจรันที่ edge/เกตเวย์คนละ compose ก็ได้ ขอให้เข้าถึง broker ได้
+> `analytics-stream` เธญเธฒเธเธฃเธฑเธเธ—เธตเน edge/เน€เธเธ•เน€เธงเธขเนเธเธเธฅเธฐ compose เธเนเนเธ”เน เธเธญเนเธซเนเน€เธเนเธฒเธ–เธถเธ broker เนเธ”เน
 
 ---
 
@@ -286,99 +286,99 @@ services:
 
   * worker: `GET http://<host>:7304/v1/metrics`
   * api:    `GET http://<host>:7305/v1/metrics`
-* **Logs:** stdout ทั้งหมด (รวบด้วย Docker/Cloud logging)
-* **Dashboards (แนะนำ):** Grafana + Prometheus + PostgreSQL/TimescaleDB datasource
+* **Logs:** stdout เธ—เธฑเนเธเธซเธกเธ” (เธฃเธงเธเธ”เนเธงเธข Docker/Cloud logging)
+* **Dashboards (เนเธเธฐเธเธณ):** Grafana + Prometheus + PostgreSQL/TimescaleDB datasource
 
-  * กราฟยอดนิยม: Avg(temp) by window, Count events/hour, Device uptime %, ADG trend, Lab pass rate
+  * เธเธฃเธฒเธเธขเธญเธ”เธเธดเธขเธก: Avg(temp) by window, Count events/hour, Device uptime %, ADG trend, Lab pass rate
 
 ---
 
-## ความปลอดภัย
+## เธเธงเธฒเธกเธเธฅเธญเธ”เธ เธฑเธข
 
-* แยก DB user:
+* เนเธขเธ DB user:
 
-  * **worker** = RW (INSERT/UPDATE) บน schema `analytics`
+  * **worker** = RW (INSERT/UPDATE) เธเธ schema `analytics`
   * **api/alerts** = RO (SELECT)
-* เฉพาะ production:
+* เน€เธเธเธฒเธฐ production:
 
-  * เปิด TLS/Authentication สำหรับ Kafka (SASL) ถ้าจำเป็น
-  * จำกัด CORS/API auth (JWT/RBAC) ใน analytics-api
-  * สำรองข้อมูล TimescaleDB ตามรอบ
+  * เน€เธเธดเธ” TLS/Authentication เธชเธณเธซเธฃเธฑเธ Kafka (SASL) เธ–เนเธฒเธเธณเน€เธเนเธ
+  * เธเธณเธเธฑเธ” CORS/API auth (JWT/RBAC) เนเธ analytics-api
+  * เธชเธณเธฃเธญเธเธเนเธญเธกเธนเธฅ TimescaleDB เธ•เธฒเธกเธฃเธญเธ
 
 ---
 
-## Runbook (เมื่อเกิดปัญหา)
+## Runbook (เน€เธกเธทเนเธญเน€เธเธดเธ”เธเธฑเธเธซเธฒ)
 
-1. **API 200 แต่ข้อมูลว่าง (`[]`)**
+1. **API 200 เนเธ•เนเธเนเธญเธกเธนเธฅเธงเนเธฒเธ (`[]`)**
 
-   * เช็ค `analytics-worker` log มี `[boot] stream worker started` ไหม
-   * เช็คว่า **ส่ง message** ไปที่ topic ตรงกับที่ worker subscribe
-   * เช็คว่า **registry** ลงทะเบียน handler ของ topic นั้นแล้ว (`init_registry()`)
-   * SQL เช็คใน DB:
+   * เน€เธเนเธ `analytics-worker` log เธกเธต `[boot] stream worker started` เนเธซเธก
+   * เน€เธเนเธเธงเนเธฒ **เธชเนเธ message** เนเธเธ—เธตเน topic เธ•เธฃเธเธเธฑเธเธ—เธตเน worker subscribe
+   * เน€เธเนเธเธงเนเธฒ **registry** เธฅเธเธ—เธฐเน€เธเธตเธขเธ handler เธเธญเธ topic เธเธฑเนเธเนเธฅเนเธง (`init_registry()`)
+   * SQL เน€เธเนเธเนเธ DB:
 
      ```sql
      SELECT * FROM analytics.analytics_agg ORDER BY bucket_start DESC LIMIT 20;
      SELECT * FROM analytics.analytics_event ORDER BY time DESC LIMIT 20;
      ```
 
-2. **worker หา Kafka ไม่เจอ**
+2. **worker เธซเธฒ Kafka เนเธกเนเน€เธเธญ**
 
-   * ถ้า worker รัน “นอก Docker”: ตั้ง `KAFKA_BROKERS=localhost:9092` หรือ broker จริง (อย่าใช้ `kafka:9092`)
-   * ถ้าใน Docker: โอเคใช้ `kafka:9092`
+   * เธ–เนเธฒ worker เธฃเธฑเธ โ€เธเธญเธ Dockerโ€: เธ•เธฑเนเธ `KAFKA_BROKERS=localhost:9092` เธซเธฃเธทเธญ broker เธเธฃเธดเธ (เธญเธขเนเธฒเนเธเน `kafka:9092`)
+   * เธ–เนเธฒเนเธ Docker: เนเธญเน€เธเนเธเน `kafka:9092`
 
-3. **confluent-kafka ไม่ติดตั้ง**
+3. **confluent-kafka เนเธกเนเธ•เธดเธ”เธ•เธฑเนเธ**
 
-   * ใน Docker เราใส่ `librdkafka1` แล้ว
-   * นอก Docker (Windows): `conda install -c conda-forge librdkafka confluent-kafka`
+   * เนเธ Docker เน€เธฃเธฒเนเธชเน `librdkafka1` เนเธฅเนเธง
+   * เธเธญเธ Docker (Windows): `conda install -c conda-forge librdkafka confluent-kafka`
 
-4. **alerts ไม่เด้ง**
+4. **alerts เนเธกเนเน€เธ”เนเธ**
 
-   * ทดสอบ webhook (Slack/LINE) ด้วย curl ก่อน
-   * ถ้า alerts query DB: รัน SQL ที่ใช้ trigger ด้วยมือดูว่ามีผลลัพธ์ไหม
+   * เธ—เธ”เธชเธญเธ webhook (Slack/LINE) เธ”เนเธงเธข curl เธเนเธญเธ
+   * เธ–เนเธฒ alerts query DB: เธฃเธฑเธ SQL เธ—เธตเนเนเธเน trigger เธ”เนเธงเธขเธกเธทเธญเธ”เธนเธงเนเธฒเธกเธตเธเธฅเธฅเธฑเธเธเนเนเธซเธก
 
 ---
 
-## การเพิ่มโดเมนใหม่ (เร็วและไม่พังของเดิม)
+## เธเธฒเธฃเน€เธเธดเนเธกเนเธ”เน€เธกเธเนเธซเธกเน (เน€เธฃเนเธงเนเธฅเธฐเนเธกเนเธเธฑเธเธเธญเธเน€เธ”เธดเธก)
 
-1. เขียน `app/pipelines/map/<domain>.py` (ใน worker) ให้คืน `("measurement" | "event", payload)`
-2. `register("my.topic", handle_my_domain, domain="<domain>")` ใน `init_registry()`
-3. ตั้ง ENV:
+1. เน€เธเธตเธขเธ `app/pipelines/map/<domain>.py` (เนเธ worker) เนเธซเนเธเธทเธ `("measurement" | "event", payload)`
+2. `register("my.topic", handle_my_domain, domain="<domain>")` เนเธ `init_registry()`
+3. เธ•เธฑเนเธ ENV:
 
    ```
    DOMAINS_ENABLED=sensor,<domain>
    KAFKA_TOPICS=["sensors.device.readings","my.topic"]
    ```
-4. (ถ้าเป็น event) แน่ใจว่ารัน `02_analytics_events.sql` แล้ว
+4. (เธ–เนเธฒเน€เธเนเธ event) เนเธเนเนเธเธงเนเธฒเธฃเธฑเธ `02_analytics_events.sql` เนเธฅเนเธง
 
 ---
 
-## Testing เชิงระบบ (Smoke/Contract)
+## Testing เน€เธเธดเธเธฃเธฐเธเธ (Smoke/Contract)
 
-* **Stream → Worker (schema contract)**: ใช้ชุด JSON example + pytest schema validation
-* **Worker aggregate**: ป้อน message 10 ชุดที่ค่า known → ควรได้ avg/sum/min/max ตรง
-* **Event rollup**: ยิง event 5 ครั้ง → ควรนับ `count_n=5`
-* **API contract**: `openapi.json` ถูกต้อง + 200/422/500 ตามกรณี
-* **Alerts**: mock DB ด้วยแถว anomaly severity 4 → ควรยิง webhook 1 ครั้ง
+* **Stream โ’ Worker (schema contract)**: เนเธเนเธเธธเธ” JSON example + pytest schema validation
+* **Worker aggregate**: เธเนเธญเธ message 10 เธเธธเธ”เธ—เธตเนเธเนเธฒ known โ’ เธเธงเธฃเนเธ”เน avg/sum/min/max เธ•เธฃเธ
+* **Event rollup**: เธขเธดเธ event 5 เธเธฃเธฑเนเธ โ’ เธเธงเธฃเธเธฑเธ `count_n=5`
+* **API contract**: `openapi.json` เธ–เธนเธเธ•เนเธญเธ + 200/422/500 เธ•เธฒเธกเธเธฃเธ“เธต
+* **Alerts**: mock DB เธ”เนเธงเธขเนเธ–เธง anomaly severity 4 โ’ เธเธงเธฃเธขเธดเธ webhook 1 เธเธฃเธฑเนเธ
 
 ---
 
 ## Versioning & Migration
 
-* เวลาจะ “เปลี่ยน schema payload” ให้ bump `schema_version` ใน message (ถ้าจำเป็น) และเพิ่ม backward mapping ใน handler
-* DB migration: เพิ่มไฟล์ SQL ใหม่ (ไม่แก้ของเดิม), ใช้ DO $…$ ตรวจ job/policy ซ้ำซ้อนได้
-* API version: อยู่ใน path `/v1/*` — ถ้ามี breaking change ให้เพิ่ม `/v2`
+* เน€เธงเธฅเธฒเธเธฐ โ€เน€เธเธฅเธตเนเธขเธ schema payloadโ€ เนเธซเน bump `schema_version` เนเธ message (เธ–เนเธฒเธเธณเน€เธเนเธ) เนเธฅเธฐเน€เธเธดเนเธก backward mapping เนเธ handler
+* DB migration: เน€เธเธดเนเธกเนเธเธฅเน SQL เนเธซเธกเน (เนเธกเนเนเธเนเธเธญเธเน€เธ”เธดเธก), เนเธเน DO $โ€ฆ$ เธ•เธฃเธงเธ job/policy เธเนเธณเธเนเธญเธเนเธ”เน
+* API version: เธญเธขเธนเนเนเธ path `/v1/*` โ€” เธ–เนเธฒเธกเธต breaking change เนเธซเนเน€เธเธดเนเธก `/v2`
 
 ---
 
-## Roadmap (ให้ทีมเห็นภาพ)
+## Roadmap (เนเธซเนเธ—เธตเธกเน€เธซเนเธเธ เธฒเธ)
 
-* Continuous Aggregates บาง metric หนัก ๆ เพื่อลด compute runtime
-* KPI/Anomaly rules configurable จาก API + RBAC
-* Alerts enrichment (แนบกราฟ/บริบท) และ mute windows
-* BFF/GraphQL + realtime subscriptions สำหรับแดชบอร์ด
+* Continuous Aggregates เธเธฒเธ metric เธซเธเธฑเธ เน เน€เธเธทเนเธญเธฅเธ” compute runtime
+* KPI/Anomaly rules configurable เธเธฒเธ API + RBAC
+* Alerts enrichment (เนเธเธเธเธฃเธฒเธ/เธเธฃเธดเธเธ—) เนเธฅเธฐ mute windows
+* BFF/GraphQL + realtime subscriptions เธชเธณเธซเธฃเธฑเธเนเธ”เธเธเธญเธฃเนเธ”
 
 ---
 
-## ใบอนุญาต
+## เนเธเธญเธเธธเธเธฒเธ•
 
-ภายในองค์กร / ตามนโยบายทีม
+เธ เธฒเธขเนเธเธญเธเธเนเธเธฃ / เธ•เธฒเธกเธเนเธขเธเธฒเธขเธ—เธตเธก

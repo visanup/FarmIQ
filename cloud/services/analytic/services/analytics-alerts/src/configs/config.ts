@@ -13,6 +13,8 @@ const envSchema = z.object({
   DB_PASSWORD: z.string().default('password'),
   DB_SCHEMA: z.string().default('analytics'),
   KAFKA_BROKERS: z.string().default('kafka:9092'),
+  KAFKA_CLIENT_ID: z.string().default('analytics-alerts'),
+  CONSUMER_GROUP: z.string().default('analytics-alerts-group'),
   DATA_SERVICE_PORT: z.string().default('7306'),
   JWT_SECRET_KEY: z.string().min(16),
   ALGORITHM: z.enum(['HS256', 'HS384', 'HS512']).default('HS256'),
@@ -20,7 +22,12 @@ const envSchema = z.object({
   SLACK_WEBHOOK_URL: z.string().optional(),
   LINE_NOTIFY_TOKEN: z.string().optional(),
   ALERT_BACKEND: z.string().optional(),
-  ENV: z.string().default('dev')
+  ENV: z.string().default('dev'),
+  // Kafka Topics
+  TOPIC_ANALYTICS_FEATURES: z.string().default('analytics.features'),
+  TOPIC_ANALYTICS_PREDICTIONS: z.string().default('analytics.prediction.v1'),
+  TOPIC_ANALYTICS_ANOMALIES: z.string().default('analytics.anomaly.v1'),
+  TOPIC_ANALYTICS_DLQ: z.string().default('analytics.invalid-readings'),
 });
 
 // Find .env file
@@ -61,6 +68,8 @@ export const {
   DB_PASSWORD,
   DB_SCHEMA,
   KAFKA_BROKERS,
+  KAFKA_CLIENT_ID,
+  CONSUMER_GROUP,
   DATA_SERVICE_PORT,
   JWT_SECRET_KEY,
   ALGORITHM,
@@ -68,7 +77,11 @@ export const {
   SLACK_WEBHOOK_URL,
   LINE_NOTIFY_TOKEN,
   ALERT_BACKEND,
-  ENV
+  ENV,
+  TOPIC_ANALYTICS_FEATURES,
+  TOPIC_ANALYTICS_PREDICTIONS,
+  TOPIC_ANALYTICS_ANOMALIES,
+  TOPIC_ANALYTICS_DLQ,
 } = envResult.data;
 
 // Create database URL

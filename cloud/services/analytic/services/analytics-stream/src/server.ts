@@ -7,7 +7,7 @@ import { runConsumers } from './consumers';
 import { every } from './utils/scheduler';
 import { publishFinalizedMinuteFeatures } from './services/featurePublisher';
 import { redis } from './stores/redis';
-import { consumer } from './utils/kafka';
+import { consumer, producer } from './utils/kafka';
 import { prisma } from './lib/prisma';
 import { Prisma } from '@prisma/client';
 
@@ -47,6 +47,7 @@ fastify.get('/metrics', async (_req: FastifyRequest, reply: FastifyReply) => {
   reply.send(await reg.metrics());
 });
 
+
 async function start() {
   try {
     // Start Kafka consumers first
@@ -65,6 +66,7 @@ async function start() {
       try { await fastify.close(); } catch {}
       try { await prisma.$disconnect(); } catch {}
       try { await consumer.disconnect(); } catch {}
+      try { await producer.disconnect(); } catch {}
       try { await redis.quit(); } catch {}
       process.exit(0);
     };

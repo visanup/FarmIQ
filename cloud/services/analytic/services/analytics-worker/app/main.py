@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Config
 from app.api.v1.endpoint import router
 from app.workers.scheduler import start_scheduler, shutdown_scheduler
+from app.pipelines import init_registry
 
 try:
     from app.workers.stream_worker import run_worker
@@ -25,6 +26,9 @@ def _enabled(key: str, default: str = "1") -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize pipeline registry
+    init_registry()
+    
     if _enabled("ENABLE_SCHEDULER", "1"):
         start_scheduler()
 

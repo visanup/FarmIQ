@@ -1,6 +1,7 @@
 // src/utils/syncJob.ts
 import { edgeDataSource } from "./dataSource";
 import apiClient from "./apiClient";
+import { SYNC_MAX_RETRIES, SYNC_BACKOFF_MS } from "../configs/config";
 import { SweepReading } from "../models/SweepReading";
 import { LabReading } from "../models/LabReading";
 import { DeviceReading } from "../models/DeviceReading";
@@ -163,13 +164,29 @@ async function syncOne(p: Plan) {
         }));
       }
 
-      // Send batch to the cloud service
+      // Send batch to the cloud service with retry & backoff
       const url = `${p.endpoint}/batch`;
-      const res = await apiClient.post(url, payload);
-      const inserted = res.data?.inserted ?? res.data?.upserted ?? payload.length;
-      total += inserted;
+      let attempt = 0;
+      let lastError: any = null;
+      for (; attempt <= SYNC_MAX_RETRIES; attempt++) {
+        try {
+          const res = await apiClient.post(url, payload);
+          const inserted = res.data?.inserted ?? res.data?.upserted ?? payload.length;
+          total += inserted;
+          console.log(`➡️  POST ${url} inserted=${inserted} batch=${payload.length} attempt=${attempt+1}`);
+          break;
+        } catch (e: any) {
+          lastError = e;
+          const wait = SYNC_BACKOFF_MS * Math.pow(2, attempt);
+          console.warn(`⚠️  POST ${url} failed attempt=${attempt+1}/${SYNC_MAX_RETRIES+1} waiting=${wait}ms:`, e?.message || e);
+          await new Promise(r => setTimeout(r, wait));
+        }
+      }
+      if (attempt > SYNC_MAX_RETRIES) {
+        throw lastError || new Error(`Failed to POST ${url}`);
+      }
     } catch (error) {
-      console.error(`❌ [${p.name}] failed to post data:`, error);
+      console.error(`❌ [${p.name}] failed to post data after retries:`, error);
       break;
     }
 
@@ -185,9 +202,17 @@ export async function runSync() {
   try {
     if (!edgeDataSource.isInitialized) await edgeDataSource.initialize();
     
+    const summary: { name: string; start: Date; end?: Date }[] = [];
     for (const plan of plans.sort((a, b) => a.order - b.order)) {
+      const start = new Date();
+      console.log(`🚚 [${plan.name}] syncing → endpoint ${plan.endpoint}`);
       await syncOne(plan);
+      const end = new Date();
+      summary.push({ name: plan.name, start, end });
     }
+    // print summary line
+    console.log("📊 sync summary:");
+    summary.forEach(s => console.log(` - ${s.name} took ${(s.end!.getTime()-s.start.getTime())} ms`));
   } catch (err) {
     console.error("❌ Sync error:", err);
   } finally {

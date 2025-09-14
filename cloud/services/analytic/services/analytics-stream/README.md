@@ -1,8 +1,8 @@
 # Analytics Stream Service
 
-Analytics stream service for FarmIQ - processes real-time sensor data from Kafka and generates analytics features.
+Analytics stream service for FarmIQ - data ingestion from sensors to Kafka topics.
 
-## 🏗️ Architecture
+## ๐—๏ธ Architecture
 
 - **Framework**: Fastify + Prisma + TypeScript
 - **Database**: PostgreSQL with TimescaleDB (analytics schema)
@@ -10,7 +10,7 @@ Analytics stream service for FarmIQ - processes real-time sensor data from Kafka
 - **Cache**: Redis
 - **Port**: 7303
 
-## 📋 Prerequisites
+## ๐“ Prerequisites
 
 - Node.js 18+
 - Docker & Docker Compose
@@ -18,7 +18,7 @@ Analytics stream service for FarmIQ - processes real-time sensor data from Kafka
 - Kafka
 - Redis
 
-## 🚀 Quick Start
+## ๐€ Quick Start
 
 ### 1. Database Setup
 
@@ -32,13 +32,13 @@ psql -h localhost -U postgres -d farmiq_cloud -f ../../../db/11_analytics_ultima
 ```
 
 This will create:
-- ✅ Complete analytics schema with all tables
-- ✅ TimescaleDB hypertables with compression and retention policies
-- ✅ Continuous aggregates (5m, 1h, 1d)
-- ✅ Dimension tables (device, farm, house, flock)
-- ✅ Analytics tables (agg, events, kpi, anomaly, alerts)
-- ✅ Views and functions
-- ✅ Proper indexes and permissions
+- โ… Complete analytics schema with all tables
+- โ… TimescaleDB hypertables with compression and retention policies
+- โ… Continuous aggregates (5m, 1h, 1d)
+- โ… Dimension tables (device, farm, house, flock)
+- โ… Analytics tables (agg, events, kpi, anomaly, alerts)
+- โ… Views and functions
+- โ… Proper indexes and permissions
 
 #### Option B: Manual Database Setup
 
@@ -176,7 +176,7 @@ docker build -t analytics-stream .
 docker run -p 7303:7303 --env-file .env analytics-stream
 ```
 
-## 🧪 Testing
+## ๐งช Testing
 
 ### Health Checks
 
@@ -264,7 +264,7 @@ docker exec -it farmiq-kafka kafka-console-producer \
 # device1:{"device_id":"device1","sensor_type":"temperature","value":25.5,"timestamp":"2024-01-01T00:00:00Z","tenant_id":"tenant1"}
 ```
 
-## 📊 Monitoring
+## ๐“ Monitoring
 
 ### Prometheus Metrics
 
@@ -283,7 +283,7 @@ docker logs farmiq-analytics-stream -f
 docker logs farmiq-analytics-stream | grep ERROR
 ```
 
-## 🔧 Configuration
+## ๐”ง Configuration
 
 ### Environment Variables
 
@@ -312,7 +312,7 @@ The service consumes from these topics:
 - `farms.house.snapshot.v1` - House snapshots
 - `farms.flock.snapshot.v1` - Flock snapshots
 
-## 🚨 Troubleshooting
+## ๐จ Troubleshooting
 
 ### Common Issues
 
@@ -371,51 +371,51 @@ LOG_LEVEL=debug yarn dev
 DEBUG=prisma:* yarn dev
 ```
 
-## 📁 Project Structure
+## ๐“ Project Structure
 
 ```
 src/
-├── configs/
-│   └── config.ts          # Configuration management
-├── consumers/
-│   ├── index.ts           # Consumer orchestration
-│   ├── router.ts          # Message routing
-│   └── sensorReadings.consumer.ts
-├── lib/
-│   └── prisma.ts          # Prisma client
-├── models/
-│   ├── analyticsMinuteFeature.entity.ts  # TypeORM entity (legacy)
-│   └── analyticsAggregates.views.ts      # View definitions
-├── pipelines/
-│   ├── dimUpserts.ts      # Dimension upserts
-│   └── map/               # Data mapping functions
-├── services/
-│   └── featurePublisher.ts # Feature publishing
-├── stores/
-│   ├── analyticsFeature.repo.ts  # Repository layer
-│   └── redis.ts           # Redis client
-├── types/
-│   ├── events.ts          # Event type definitions
-│   └── measurement.ts     # Measurement types
-├── utils/
-│   ├── dataSource.ts      # TypeORM data source (legacy)
-│   ├── kafka.ts           # Kafka utilities
-│   ├── logger.ts          # Logging utilities
-│   └── scheduler.ts       # Background job scheduler
-└── server.ts              # Fastify server
+โ”โ”€โ”€ configs/
+โ”   โ””โ”€โ”€ config.ts          # Configuration management
+โ”โ”€โ”€ consumers/
+โ”   โ”โ”€โ”€ index.ts           # Consumer orchestration
+โ”   โ”โ”€โ”€ router.ts          # Message routing
+โ”   โ””โ”€โ”€ sensorReadings.consumer.ts
+โ”โ”€โ”€ lib/
+โ”   โ””โ”€โ”€ prisma.ts          # Prisma client
+โ”โ”€โ”€ models/
+โ”   โ”โ”€โ”€ analyticsMinuteFeature.entity.ts  # TypeORM entity (legacy)
+โ”   โ””โ”€โ”€ analyticsAggregates.views.ts      # View definitions
+โ”โ”€โ”€ pipelines/
+โ”   โ”โ”€โ”€ dimUpserts.ts      # Dimension upserts
+โ”   โ””โ”€โ”€ map/               # Data mapping functions
+โ”โ”€โ”€ services/
+โ”   โ””โ”€โ”€ featurePublisher.ts # Feature publishing
+โ”โ”€โ”€ stores/
+โ”   โ”โ”€โ”€ analyticsFeature.repo.ts  # Repository layer
+โ”   โ””โ”€โ”€ redis.ts           # Redis client
+โ”โ”€โ”€ types/
+โ”   โ”โ”€โ”€ events.ts          # Event type definitions
+โ”   โ””โ”€โ”€ measurement.ts     # Measurement types
+โ”โ”€โ”€ utils/
+โ”   โ”โ”€โ”€ dataSource.ts      # TypeORM data source (legacy)
+โ”   โ”โ”€โ”€ kafka.ts           # Kafka utilities
+โ”   โ”โ”€โ”€ logger.ts          # Logging utilities
+โ”   โ””โ”€โ”€ scheduler.ts       # Background job scheduler
+โ””โ”€โ”€ server.ts              # Fastify server
 ```
 
-## 🔄 Migration from TypeORM
+## ๐” Migration from TypeORM
 
 This service has been migrated from TypeORM to Prisma:
 
-- ✅ Fastify server implementation
-- ✅ Prisma client setup with complete schema mapping
-- ✅ Database schema aligned with `11_analytics_ultimate_schema.sql`
-- ✅ Type-safe database operations
-- ✅ TimescaleDB integration
-- ⏳ Repository layer migration (in progress)
-- ⏳ Remove legacy TypeORM dependencies
+- โ… Fastify server implementation
+- โ… Prisma client setup with complete schema mapping
+- โ… Database schema aligned with `11_analytics_ultimate_schema.sql`
+- โ… Type-safe database operations
+- โ… TimescaleDB integration
+- โณ Repository layer migration (in progress)
+- โณ Remove legacy TypeORM dependencies
 
 ### Prisma Schema Features
 
@@ -426,7 +426,7 @@ This service has been migrated from TypeORM to Prisma:
 - **JSONB support**: Proper mapping for `tags` and `metadata` fields
 - **Composite keys**: Correct primary key definitions
 
-## 📝 API Endpoints
+## ๐“ API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -434,7 +434,7 @@ This service has been migrated from TypeORM to Prisma:
 | GET | `/ready` | Readiness check |
 | GET | `/metrics` | Prometheus metrics |
 
-## 🤝 Contributing
+## ๐ค Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -442,6 +442,6 @@ This service has been migrated from TypeORM to Prisma:
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## ๐“ License
 
 This project is part of the FarmIQ platform.

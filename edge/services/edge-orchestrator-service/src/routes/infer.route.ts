@@ -1,21 +1,14 @@
-// src/routes/infer.route.ts
-import { Router } from 'express';
+import { FastifyInstance } from 'fastify';
 import { apiKey } from '../middleware/apiKey';
 import { backfillInfer } from '../services/infer.service';
 import { BackfillRequestSchema } from '../schemas/orchestrator.schemas';
 
-const r = Router();
-
-r.post('/backfill', apiKey, async (req, res, next) => {
-  try {
-    const parsed = BackfillRequestSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+export default async function infer(fastify: FastifyInstance) {
+  fastify.post('/backfill', { preHandler: [apiKey] }, async (req, reply) => {
+    const parsed = BackfillRequestSchema.safeParse((req as any).body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const out = await backfillInfer(parsed.data.object_keys);
-    res.json(out);
-  } catch (e) { next(e); }
-});
-
-export default r;
+    return out;
+  });
+}
 

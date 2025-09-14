@@ -1,0 +1,436 @@
+# Kafka Topics Configuration for FarmIQ Cloud
+# ไฟล์นี้ใช้สำหรับจัดการ Kafka topics ทั้งหมดในระบบ FarmIQ
+# เวลาแก้ไข topics ให้แก้ไขที่ไฟล์นี้แล้ว restart Kafka
+
+version: '1.0'
+description: 'FarmIQ Cloud Kafka Topics Configuration'
+
+# กลุ่ม Topics ตาม Domain
+topics:
+  # ===========================================
+  # MASTER SERVICE TOPICS
+  # ===========================================
+  master:
+    customer:
+      - name: "master.customer.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Customer master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"  # 7 days
+          segment.ms: "86400000"     # 1 day
+    
+    farm:
+      - name: "master.farm.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Farm master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"
+          segment.ms: "86400000"
+    
+    house:
+      - name: "master.house.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "House master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"
+          segment.ms: "86400000"
+    
+    device:
+      - name: "master.device.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Device master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"
+          segment.ms: "86400000"
+    
+    flock:
+      - name: "master.flock.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Flock master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"
+          segment.ms: "86400000"
+    
+    animal_type:
+      - name: "master.animal-type.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Animal type master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"
+          segment.ms: "86400000"
+    
+    breed:
+      - name: "master.breed.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Breed master data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"
+          segment.ms: "86400000"
+
+  # ===========================================
+  # SENSOR DATA TOPICS
+  # ===========================================
+  sensors:
+    device_readings:
+      - name: "sensors.device.readings.v1"
+        partitions: 6
+        replication_factor: 1
+        description: "Real-time sensor readings from devices"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "2592000000"  # 30 days
+          segment.ms: "3600000"       # 1 hour
+    
+    device_health:
+      - name: "sensors.device.health.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Device health status and metrics"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "3600000"       # 1 hour
+    
+    lab_readings:
+      - name: "sensors.lab.readings.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Laboratory test readings and results"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "7776000000"  # 90 days
+          segment.ms: "3600000"       # 1 hour
+    
+    sweep_readings:
+      - name: "sensors.sweep.readings.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Sweep/scan readings from mobile devices"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "2592000000"  # 30 days
+          segment.ms: "3600000"       # 1 hour
+
+  # ===========================================
+  # FARM OPERATIONAL TOPICS
+  # ===========================================
+  farms:
+    operational_events:
+      - name: "farms.operational.event.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Farm operational events and activities"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "7776000000"  # 90 days
+          segment.ms: "3600000"       # 1 hour
+    
+    farm_snapshots:
+      - name: "farms.farm.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Farm data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "86400000"      # 1 day
+    
+    house_snapshots:
+      - name: "farms.house.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "House data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "86400000"      # 1 day
+    
+    flock_snapshots:
+      - name: "farms.flock.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Flock data snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "86400000"      # 1 day
+
+  # ===========================================
+  # FEED MANAGEMENT TOPICS
+  # ===========================================
+  feed:
+    batch_created:
+      - name: "feed.batch.created.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Feed batch creation events"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "7776000000"  # 90 days
+          segment.ms: "3600000"       # 1 hour
+    
+    quality_results:
+      - name: "feed.quality.result.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Feed quality test results"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "7776000000"  # 90 days
+          segment.ms: "3600000"       # 1 hour
+
+  # ===========================================
+  # ECONOMICS TOPICS
+  # ===========================================
+  economics:
+    cost_transactions:
+      - name: "economics.cost.txn.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Economic cost transactions and financial data"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "31536000000" # 1 year
+          segment.ms: "3600000"       # 1 hour
+
+  # ===========================================
+  # EXTERNAL DATA TOPICS
+  # ===========================================
+  external:
+    weather_observations:
+      - name: "external.weather.observation.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "External weather data and observations"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "2592000000"  # 30 days
+          segment.ms: "3600000"       # 1 hour
+
+  # ===========================================
+  # ANALYTICS TOPICS
+  # ===========================================
+  analytics:
+    features:
+      - name: "analytics.features"
+        partitions: 6
+        replication_factor: 1
+        description: "Analytics features and processed data"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "2592000000"  # 30 days
+          segment.ms: "3600000"       # 1 hour
+    
+    features_materialized:
+      - name: "analytics.features.materialized.v1"
+        partitions: 6
+        replication_factor: 1
+        description: "Materialized analytics features"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "7776000000"  # 90 days
+          segment.ms: "3600000"       # 1 hour
+    
+    predictions:
+      - name: "analytics.prediction.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "ML predictions and forecasts"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "2592000000"  # 30 days
+          segment.ms: "3600000"       # 1 hour
+    
+    anomalies:
+      - name: "analytics.anomaly.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Anomaly detection results"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "2592000000"  # 30 days
+          segment.ms: "3600000"       # 1 hour
+    
+    invalid_readings:
+      - name: "analytics.invalid-readings"
+        partitions: 3
+        replication_factor: 1
+        description: "Dead letter queue for invalid sensor readings"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "3600000"       # 1 hour
+
+  # ===========================================
+  # MONITORING TOPICS
+  # ===========================================
+  monitoring:
+    alerts:
+      - name: "monitoring.alerts.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Monitoring alerts and notifications"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "604800000"  # 7 days
+          segment.ms: "3600000"      # 1 hour
+    
+    health:
+      - name: "monitoring.health.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Monitoring health status updates"
+        config:
+          cleanup.policy: "delete"
+          retention.ms: "604800000"  # 7 days
+          segment.ms: "3600000"      # 1 hour
+
+  # ===========================================
+  # DEVICE MANAGEMENT TOPICS
+  # ===========================================
+  devices:
+    device_snapshots:
+      - name: "devices.device.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Device configuration and status snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "86400000"      # 1 day
+
+  # ===========================================
+  # FORMULA MANAGEMENT TOPICS
+  # ===========================================
+  formula:
+    recipe_snapshots:
+      - name: "formula.recipe.snapshot.v1"
+        partitions: 3
+        replication_factor: 1
+        description: "Feed formula and recipe snapshots"
+        config:
+          cleanup.policy: "compact"
+          retention.ms: "604800000"   # 7 days
+          segment.ms: "86400000"      # 1 day
+
+# ===========================================
+# TOPIC CREATION ORDER
+# ===========================================
+# Topics จะถูกสร้างตามลำดับนี้เพื่อให้ dependencies ถูกต้อง
+creation_order:
+  - "master.customer.snapshot.v1"
+  - "master.animal-type.snapshot.v1"
+  - "master.breed.snapshot.v1"
+  - "master.farm.snapshot.v1"
+  - "master.house.snapshot.v1"
+  - "master.device.snapshot.v1"
+  - "master.flock.snapshot.v1"
+  - "devices.device.snapshot.v1"
+  - "farms.farm.snapshot.v1"
+  - "farms.house.snapshot.v1"
+  - "farms.flock.snapshot.v1"
+  - "formula.recipe.snapshot.v1"
+  - "sensors.device.readings.v1"
+  - "sensors.device.health.v1"
+  - "sensors.lab.readings.v1"
+  - "sensors.sweep.readings.v1"
+  - "farms.operational.event.v1"
+  - "feed.batch.created.v1"
+  - "feed.quality.result.v1"
+  - "economics.cost.txn.v1"
+  - "external.weather.observation.v1"
+  - "analytics.features"
+  - "analytics.features.materialized.v1"
+  - "analytics.prediction.v1"
+  - "analytics.anomaly.v1"
+  - "analytics.invalid-readings"
+
+# ===========================================
+# CONSUMER GROUPS
+# ===========================================
+consumer_groups:
+  - name: "master-service"
+    topics:
+      - "master.customer.snapshot.v1"
+      - "master.farm.snapshot.v1"
+      - "master.house.snapshot.v1"
+      - "master.device.snapshot.v1"
+      - "master.flock.snapshot.v1"
+      - "master.animal-type.snapshot.v1"
+      - "master.breed.snapshot.v1"
+  
+  - name: "sensor-streamer-service"
+    topics:
+      - "sensors.device.readings.v1"
+      - "sensors.device.health.v1"
+      - "sensors.lab.readings.v1"
+      - "sensors.sweep.readings.v1"
+  
+  - name: "analytic-service.v2"
+    topics:
+      - "sensors.device.readings.v1"
+      - "sensors.device.health.v1"
+      - "sensors.lab.readings.v1"
+      - "sensors.sweep.readings.v1"
+      - "external.weather.observation.v1"
+      - "farms.operational.event.v1"
+      - "feed.batch.created.v1"
+      - "feed.quality.result.v1"
+      - "economics.cost.txn.v1"
+      - "devices.device.snapshot.v1"
+      - "farms.farm.snapshot.v1"
+      - "farms.house.snapshot.v1"
+      - "farms.flock.snapshot.v1"
+      - "master.customer.snapshot.v1"
+      - "master.device.snapshot.v1"
+      - "master.farm.snapshot.v1"
+      - "master.house.snapshot.v1"
+      - "master.flock.snapshot.v1"
+      - "master.animal-type.snapshot.v1"
+      - "master.breed.snapshot.v1"
+  
+  - name: "analytic-service.v1"
+    topics:
+      - "sensors.device.readings"
+      - "sensors.lab.readings"
+
+# ===========================================
+# MONITORING & ALERTS
+# ===========================================
+monitoring:
+  # Topics ที่ต้อง monitor สำหรับ health checks
+  critical_topics:
+    - "master.customer.snapshot.v1"
+    - "sensors.device.readings.v1"
+    - "analytics.features"
+  
+  # Topics ที่ต้อง alert ถ้าไม่มี message นานเกินไป
+  alert_thresholds:
+    "sensors.device.readings.v1": "300s"  # 5 minutes
+    "master.customer.snapshot.v1": "3600s"  # 1 hour
+    "analytics.features": "1800s"  # 30 minutes
+
+# ===========================================
+# SCHEMA REGISTRY (ถ้าใช้)
+# ===========================================
+schema_registry:
+  enabled: false
+  url: "http://schema-registry:8081"
+  subjects:
+    - "master.customer.snapshot.v1-value"
+    - "sensors.device.readings.v1-value"
+    - "analytics.features-value"

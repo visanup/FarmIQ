@@ -2,7 +2,7 @@
 import request from 'supertest';
 import { app } from '../../src/server';
 import { AlertService } from '../../src/services/alert.service';
-import { AppDataSource } from '../../src/database';
+import { AppDataSource } from '../../src/utils/dataSource';
 import { Alert } from '../../src/models/alert.model';
 import { getRepository } from 'typeorm';
 

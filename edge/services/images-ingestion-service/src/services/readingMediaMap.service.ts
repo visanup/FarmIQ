@@ -1,8 +1,8 @@
 // src/services/readingMediaMap.service.ts
 
-import { AppDataSource } from '../utils/dataSource';
-import { ReadingMediaMap } from '../models/ReadingMediaMap';
-import { Repository, QueryRunner } from 'typeorm';
+import { prisma } from '../utils/prisma';
+// removed typeorm remnants
+type QueryRunner = any; type Repository<T> = any;
 import { z } from 'zod';
 
 /** ---------- Zod schema + input types ---------- */
@@ -23,14 +23,18 @@ export type ReadingLinkInput = z.infer<typeof ReadingLinkSchema>;
 
 type EnsureRepoOpts = { qr?: QueryRunner };
 
-/** Get repository, optionally from provided QueryRunner (for transactions) */
-function repo({ qr }: EnsureRepoOpts = {}): Repository<ReadingMediaMap> {
-  const manager = qr?.manager ?? AppDataSource.manager;
-  return manager.getRepository(ReadingMediaMap);
+// After Prisma migration, provide minimal replacements using raw SQL
+async function insertIfNotExists(n: any) {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO sensors.reading_media_map (time, tenant_id, robot_id, run_id, station_id, sensor_id, metric, media_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT ON CONSTRAINT uq_reading_media_map_norm DO NOTHING`,
+    n.time, n.tenant_id, n.robot_id ?? null, n.run_id ?? null, n.station_id ?? null, n.sensor_id ?? null, n.metric, n.media_id
+  );
 }
 
 /** Normalize Zod-validated input into entity fields */
-function normalize(input: ReadingLinkInput): Partial<ReadingMediaMap> {
+function normalize(input: ReadingLinkInput): any {
   return {
     time: input.time,
     tenant_id: input.tenant_id,
@@ -44,92 +48,77 @@ function normalize(input: ReadingLinkInput): Partial<ReadingMediaMap> {
 }
 
 /** Build WHERE clause to match the same “unique key” (coalesce-null behavior) */
-function whereExact(q: ReturnType<Repository<ReadingMediaMap>['createQueryBuilder']>, alias: string, n: Partial<ReadingMediaMap>) {
-  q.where(`${alias}.time = :time`, { time: n.time })
-    .andWhere(`${alias}.tenant_id = :tenant_id`, { tenant_id: n.tenant_id })
-    .andWhere(n.robot_id == null ? `${alias}.robot_id IS NULL` : `${alias}.robot_id = :robot_id`, { robot_id: n.robot_id ?? undefined })
-    .andWhere(n.station_id == null ? `${alias}.station_id IS NULL` : `${alias}.station_id = :station_id`, { station_id: n.station_id ?? undefined })
-    .andWhere(n.sensor_id == null ? `${alias}.sensor_id IS NULL` : `${alias}.sensor_id = :sensor_id`, { sensor_id: n.sensor_id ?? undefined })
-    .andWhere(`${alias}.metric = :metric`, { metric: n.metric })
-    .andWhere(`${alias}.media_id = :media_id`, { media_id: n.media_id });
-  return q;
+function whereExact(_q: any, _alias: string, _n: any) {
+  return _q;
 }
 
 /** Upsert (INSERT … ON CONFLICT DO NOTHING by unique constraint), then return the row */
-export async function upsertReadingLink(input: ReadingLinkInput, opts: EnsureRepoOpts = {}): Promise<ReadingMediaMap> {
+export async function upsertReadingLink(input: ReadingLinkInput, _opts: EnsureRepoOpts = {}): Promise<any> {
   const parsed = ReadingLinkSchema.parse(input);
   const n = normalize(parsed);
-
-  const r = repo(opts);
-
-  // Try insert with ON CONFLICT DO NOTHING (Postgres)
-  await r
-    .createQueryBuilder()
-    .insert()
-    .into(ReadingMediaMap)
-    .values(n)
-    .onConflict('ON CONSTRAINT uq_reading_media_map_norm DO NOTHING')
-    .execute();
-
-  // Select the row (either newly inserted or existing)
-  const q = r.createQueryBuilder('m');
-  whereExact(q, 'm', n);
-  const found = await q.getOne();
-  if (!found) {
-    // This shouldn't happen; throw to expose logical errors if any.
-    throw new Error('Failed to upsert/fetch ReadingMediaMap row');
-  }
-  return found;
+  await insertIfNotExists(n);
+  const rows = await (prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.reading_media_map
+     WHERE time=$1 AND tenant_id=$2 AND COALESCE(robot_id,'-') = COALESCE($3,'-')
+       AND COALESCE(station_id,'-') = COALESCE($4,'-')
+       AND COALESCE(sensor_id,'-') = COALESCE($5,'-')
+       AND metric=$6 AND media_id=$7
+     ORDER BY time DESC LIMIT 1`,
+    n.time, n.tenant_id, n.robot_id ?? null, n.station_id ?? null, n.sensor_id ?? null, n.metric, n.media_id
+  ) as Promise<any[]>);
+  if (!rows[0]) throw new Error('Failed to upsert/fetch ReadingMediaMap row');
+  return rows[0];
 }
 
 /** Create (fail if duplicate). Use this if you expect no conflict and want error on dup. */
-export async function createReadingLink(input: ReadingLinkInput, opts: EnsureRepoOpts = {}) {
+export async function createReadingLink(input: ReadingLinkInput) {
   const parsed = ReadingLinkSchema.parse(input);
   const n = normalize(parsed);
-  return await repo(opts).save(repo(opts).create(n));
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO sensors.reading_media_map (time, tenant_id, robot_id, run_id, station_id, sensor_id, metric, media_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    n.time, n.tenant_id, n.robot_id ?? null, n.run_id ?? null, n.station_id ?? null, n.sensor_id ?? null, n.metric, n.media_id
+  );
+  return n;
 }
 
 /** Bulk upsert with optional transaction (default true) */
-export async function bulkUpsertReadingLinks(inputs: ReadingLinkInput[], useTransaction = true): Promise<ReadingMediaMap[]> {
+export async function bulkUpsertReadingLinks(inputs: ReadingLinkInput[], useTransaction = true): Promise<any[]> {
   if (!useTransaction) {
-    const out: ReadingMediaMap[] = [];
+    const out: any[] = [];
     for (const i of inputs) out.push(await upsertReadingLink(i));
     return out;
   }
-
-  const qr = AppDataSource.createQueryRunner();
-  await qr.connect();
-  await qr.startTransaction();
-  try {
-    const out: ReadingMediaMap[] = [];
-    for (const i of inputs) out.push(await upsertReadingLink(i, { qr }));
-    await qr.commitTransaction();
+  return await prisma.$transaction(async (tx: any) => {
+    const out: any[] = [];
+    for (const i of inputs) {
+      const n = normalize(ReadingLinkSchema.parse(i));
+      await tx.$executeRawUnsafe(
+        `INSERT INTO sensors.reading_media_map (time, tenant_id, robot_id, run_id, station_id, sensor_id, metric, media_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT ON CONSTRAINT uq_reading_media_map_norm DO NOTHING`,
+        n.time, n.tenant_id, n.robot_id ?? null, n.run_id ?? null, n.station_id ?? null, n.sensor_id ?? null, n.metric, n.media_id
+      );
+      out.push(n);
+    }
     return out;
-  } catch (e) {
-    await qr.rollbackTransaction();
-    throw e;
-  } finally {
-    await qr.release();
-  }
+  });
 }
 
 /** Query: recent by tenant (default limit 50) */
 export async function findRecentByTenant(tenant_id: string, limit = 50) {
-  return await repo()
-    .createQueryBuilder('m')
-    .where('m.tenant_id = :tenant_id', { tenant_id })
-    .orderBy('m.time', 'DESC')
-    .limit(limit)
-    .getMany();
+  return await (prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.reading_media_map WHERE tenant_id=$1 ORDER BY time DESC LIMIT $2`,
+    tenant_id, limit
+  ) as Promise<any[]>);
 }
 
 /** Query: by media_id */
 export async function findByMediaId(media_id: string) {
-  return await repo()
-    .createQueryBuilder('m')
-    .where('m.media_id = :media_id', { media_id: String(media_id) })
-    .orderBy('m.time', 'DESC')
-    .getMany();
+  return await (prisma.$queryRawUnsafe(
+    `SELECT * FROM sensors.reading_media_map WHERE media_id=$1 ORDER BY time DESC`,
+    String(media_id)
+  ) as Promise<any[]>);
 }
 
 /** Flexible filter: by tenant + optional station/sensor/metric + time range */
@@ -142,34 +131,24 @@ export async function listByFilter(params: {
   to?: Date | string;
   limit?: number;
 }) {
-  const qb = repo().createQueryBuilder('m').where('m.tenant_id = :tenant_id', { tenant_id: params.tenant_id });
-
-  if (params.station_id !== undefined) {
-    params.station_id == null ? qb.andWhere('m.station_id IS NULL') : qb.andWhere('m.station_id = :station_id', { station_id: params.station_id });
-  }
-  if (params.sensor_id !== undefined) {
-    params.sensor_id == null ? qb.andWhere('m.sensor_id IS NULL') : qb.andWhere('m.sensor_id = :sensor_id', { sensor_id: params.sensor_id });
-  }
-  if (params.metric) qb.andWhere('m.metric = :metric', { metric: params.metric });
-  if (params.from) qb.andWhere('m.time >= :from', { from: typeof params.from === 'string' ? new Date(params.from) : params.from });
-  if (params.to) qb.andWhere('m.time <= :to', { to: typeof params.to === 'string' ? new Date(params.to) : params.to });
-
-  qb.orderBy('m.time', 'DESC').limit(params.limit ?? 100);
-
-  return await qb.getMany();
+  const conds: string[] = ["tenant_id = $1"]; const args: any[] = [params.tenant_id];
+  let i = 2;
+  if (params.station_id !== undefined) { conds.push(params.station_id == null ? 'station_id IS NULL' : `station_id = $${i++}`); if (params.station_id != null) args.push(params.station_id); }
+  if (params.sensor_id !== undefined) { conds.push(params.sensor_id == null ? 'sensor_id IS NULL' : `sensor_id = $${i++}`); if (params.sensor_id != null) args.push(params.sensor_id); }
+  if (params.metric) { conds.push(`metric = $${i++}`); args.push(params.metric); }
+  if (params.from) { conds.push(`time >= $${i++}`); args.push(typeof params.from === 'string' ? new Date(params.from) : params.from); }
+  if (params.to) { conds.push(`time <= $${i++}`); args.push(typeof params.to === 'string' ? new Date(params.to) : params.to); }
+  const limit = params.limit ?? 100; args.push(limit);
+  const sql = `SELECT * FROM sensors.reading_media_map WHERE ${conds.join(' AND ')} ORDER BY time DESC LIMIT $${i}`;
+  return await (prisma.$queryRawUnsafe(sql, ...args) as Promise<any[]>);
 }
 
 /** Delete by map_id */
-export async function deleteByMapId(map_id: string, opts: EnsureRepoOpts = {}) {
-  await repo(opts).delete({ map_id: String(map_id) } as any);
+export async function deleteByMapId(map_id: string) {
+  await prisma.$executeRawUnsafe(`DELETE FROM sensors.reading_media_map WHERE map_id=$1`, String(map_id));
 }
 
 /** Delete all links for a media_id (when a media is removed) */
-export async function deleteByMediaId(media_id: string, opts: EnsureRepoOpts = {}) {
-  await repo(opts)
-    .createQueryBuilder()
-    .delete()
-    .from(ReadingMediaMap)
-    .where('media_id = :media_id', { media_id: String(media_id) })
-    .execute();
+export async function deleteByMediaId(media_id: string) {
+  await prisma.$executeRawUnsafe(`DELETE FROM sensors.reading_media_map WHERE media_id=$1`, String(media_id));
 }

@@ -3,11 +3,13 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth"]
 }
 
 model User {
@@ -22,7 +24,8 @@ model User {
 
   // Relations
   refreshTokens RefreshToken[]
-  customers     Customer[]
+  verificationTokens VerificationToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
   @@schema("auth")
@@ -43,27 +46,41 @@ model RefreshToken {
   @@schema("auth")
 }
 
-model Customer {
-  id          String   @id @default(cuid())
-  name        String
-  email       String   @unique
-  phone       String?
-  address     String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdById String
-
-  // Relations
-  createdBy User @relation(fields: [createdById], references: [id])
-
-  @@map("customers")
-  @@schema("auth")
-}
+// Customer model moved to master-service
 
 enum UserRole {
   ADMIN
   USER
   VIEWER
+
+  @@schema("auth")
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verification_tokens")
+  @@schema("auth")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+  @@schema("auth")
 }
 

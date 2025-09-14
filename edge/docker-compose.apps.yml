@@ -1,0 +1,151 @@
+name: farmiq-edge
+
+networks:
+  farm_edge:
+    external: true
+    name: farmiq-edge_farm_edge
+
+services:
+  # sensor-service
+  sensor-service:
+    build:
+      context: ./services/sensor-service
+      dockerfile: Dockerfile
+    container_name: sensor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      ENV_PATH: /app/.env
+      MQTT_BROKER_URL: mqtt://edge-mqtt:1883
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:6300/sensor/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6300"
+
+  # edge-orchestrator
+  edge-orchestrator:
+    build:
+      context: ./services/edge-orchestrator-service
+      dockerfile: Dockerfile
+    container_name: edge-orchestrator
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      MQTT_BROKER_URL: mqtt://edge-mqtt:1883
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6301/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6301"
+
+  # sync-service
+  sync-service:
+    build:
+      context: ./services/sync-service
+      dockerfile: Dockerfile
+    container_name: sync-service
+    restart: unless-stopped
+    environment:
+      SYNC_PORT: ${SYNC_PORT:-6302}
+      CLOUD_API_URL: http://host.docker.internal:7302/api
+      CLOUD_API_KEY: ${CLOUD_API_KEY:-admin-key}
+    env_file:
+      - .env
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD", "node", "-e", "http=require('http');http.get('http://localhost:'+ (process.env.SYNC_PORT||'6302') +'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    init: true
+    expose:
+      - "6302"
+
+  # weight-associator-service
+  weight-associator:
+    build:
+      context: ./services/weight-associator-service
+      dockerfile: Dockerfile
+    container_name: weight-associator
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      MQTT_BROKER_URL: mqtt://edge-mqtt:1883
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6303/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6303"
+
+  # image-ingestion-service
+  image-ingestion:
+    build:
+      context: ./services/images-ingestion-service
+      dockerfile: Dockerfile
+    container_name: image-ingestion
+    restart: unless-stopped
+    ports:
+      - "${IMAGE_INGESTION_SERVICE_PORT:-6304}:6304"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@timescaledb:5432/${DB_NAME}"
+      DB_SCHEMA: sensors
+      MQTT_BROKER_URL: mqtt://edge-mqtt:1883
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6304/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6304"
+
+  # edge-topic-bridge (translate sensor.* / dm/* to edge/* and optional Kafka)
+  edge-topic-bridge:
+    build:
+      context: ./services/edge-topic-bridge
+      dockerfile: Dockerfile
+    container_name: edge-topic-bridge
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://edge-mqtt:1883}
+      TOPIC_PREFIX: edge
+      ENABLE_KAFKA: ${ENABLE_KAFKA:-false}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-}
+    networks: [farm_edge]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6305/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6305"
+

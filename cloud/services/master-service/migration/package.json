@@ -1,0 +1,38 @@
+{
+  "name": "master-service-migration",
+  "version": "1.0.0",
+  "description": "Migration scripts for moving data from legacy services to master-service",
+  "main": "migrate-all.js",
+  "scripts": {
+    "migrate:all": "node migrate-all.js",
+    "migrate:customers": "node migrate-customers.js",
+    "migrate:farms": "node migrate-farms.js",
+    "migrate:devices": "node migrate-devices.js",
+    "migrate:feeds": "node migrate-feeds.js",
+    "migrate:formulas": "node migrate-formulas.js",
+    "migrate:economic": "node migrate-economic.js",
+    "migrate:external-factors": "node migrate-external-factors.js",
+    "validate": "node validate-migration.js",
+    "rollback:customers": "node rollback-customers.js",
+    "rollback:farms": "node rollback-farms.js",
+    "rollback:devices": "node rollback-devices.js",
+    "rollback:all": "node rollback-all.js",
+    "test": "node test-migration.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "migration",
+    "database",
+    "prisma",
+    "postgresql",
+    "microservices"
+  ],
+  "author": "FarmIQ Team",
+  "license": "MIT"
+}
+
