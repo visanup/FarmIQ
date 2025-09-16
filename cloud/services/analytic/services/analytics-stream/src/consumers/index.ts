@@ -1,10 +1,22 @@
-// src/consumers/index.ts
+// ================================
+// File: src/consumers/index.ts
+// ================================
+
 
 import { consumer, producer } from '../utils/kafka';
 import { routes, dispatch } from './router';
 import { logger } from '../utils/logger';
+import { env } from '../configs/config';
+
 
 export async function runConsumers() {
+  // --- DIAGNOSTIC: print key env + routes at boot ---
+  try {
+    console.log('[CFG] env.TOPIC_MASTER_BREED =', env.TOPIC_MASTER_BREED);
+    console.log('[CFG] routes =', Object.keys(routes));
+  } catch { }
+
+
   // Connect producer & consumer first
   try {
     await producer.connect();
@@ -14,6 +26,7 @@ export async function runConsumers() {
     throw err;
   }
 
+
   try {
     await consumer.connect();
     logger.info('kafka-consumer-connected');
@@ -22,12 +35,14 @@ export async function runConsumers() {
     throw err;
   }
 
+
   // Compute topics from router keys
   const topics = Object.keys(routes).filter((t) => t && t !== 'undefined');
   if (topics.length === 0) {
     logger.warn('no topics to subscribe (routes empty or env.TOPIC_* missing)');
     return;
   }
+
 
   // Subscribe to topics
   for (const topic of topics) {
@@ -39,6 +54,7 @@ export async function runConsumers() {
     }
   }
 
+
   // Handle consumer events
   consumer.on('consumer.group_join', (event: any) => {
     logger.info({ groupId: event.payload?.groupId }, 'consumer group joined');
@@ -46,6 +62,7 @@ export async function runConsumers() {
   consumer.on('consumer.crash', (event: any) => {
     logger.error({ error: event.payload?.error }, 'consumer crashed');
   });
+
 
   // Start the consumer loop (do not block startup)
   consumer

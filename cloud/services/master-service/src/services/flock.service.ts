@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { publishToKafka } from '../utils/kafka';
+import { publishToKafka, kafkaPublisher } from '../utils/kafka';
 
 const prisma = new PrismaClient();
 
@@ -64,22 +64,8 @@ export class FlockService {
         }
       });
 
-      // Publish to Kafka
-      await publishToKafka('flock.snapshot.created', {
-        id: flock.id,
-        flockId: flock.flockId,
-        farmId: flock.farmId,
-        houseId: flock.houseId,
-        animalTypeId: flock.animalTypeId,
-        breedId: flock.breedId,
-        name: flock.name,
-        startDate: flock.startDate,
-        endDate: flock.endDate,
-        population: flock.population,
-        meta: flock.meta,
-        createdAt: flock.createdAt,
-        updatedAt: flock.updatedAt
-      });
+      // Publish to Kafka with correct payload shape
+      await kafkaPublisher.publishFlockSnapshot('flock.snapshot.created', flock);
 
       return {
         success: true,
@@ -94,19 +80,19 @@ export class FlockService {
   async getAllFlocks(filters: FlockFilters = {}) {
     try {
       const where: any = {};
-      
+
       if (filters.farmId) {
         where.farmId = filters.farmId;
       }
-      
+
       if (filters.houseId) {
         where.houseId = filters.houseId;
       }
-      
+
       if (filters.animalTypeId) {
         where.animalTypeId = filters.animalTypeId;
       }
-      
+
       if (filters.breedId) {
         where.breedId = filters.breedId;
       }
@@ -176,22 +162,8 @@ export class FlockService {
         }
       });
 
-      // Publish to Kafka
-      await publishToKafka('flock.snapshot.updated', {
-        id: flock.id,
-        flockId: flock.flockId,
-        farmId: flock.farmId,
-        houseId: flock.houseId,
-        animalTypeId: flock.animalTypeId,
-        breedId: flock.breedId,
-        name: flock.name,
-        startDate: flock.startDate,
-        endDate: flock.endDate,
-        population: flock.population,
-        meta: flock.meta,
-        createdAt: flock.createdAt,
-        updatedAt: flock.updatedAt
-      });
+      // Publish to Kafka with correct payload shape
+      await kafkaPublisher.publishFlockSnapshot('flock.snapshot.updated', flock);
 
       return {
         success: true,
@@ -209,22 +181,8 @@ export class FlockService {
         where: { id }
       });
 
-      // Publish to Kafka
-      await publishToKafka('flock.snapshot.deleted', {
-        id: flock.id,
-        flockId: flock.flockId,
-        farmId: flock.farmId,
-        houseId: flock.houseId,
-        animalTypeId: flock.animalTypeId,
-        breedId: flock.breedId,
-        name: flock.name,
-        startDate: flock.startDate,
-        endDate: flock.endDate,
-        population: flock.population,
-        meta: flock.meta,
-        createdAt: flock.createdAt,
-        updatedAt: flock.updatedAt
-      });
+      // Publish a final snapshot payload (use updated event) so consumers receive required fields
+      await kafkaPublisher.publishFlockSnapshot('flock.snapshot.updated', flock);
 
       return {
         success: true,

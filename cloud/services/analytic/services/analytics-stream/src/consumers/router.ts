@@ -1,5 +1,3 @@
-// src/consumers/router.ts
-
 import { KafkaMessage } from 'kafkajs';
 import { producer } from '../utils/kafka';
 import { logger } from '../utils/logger';
@@ -7,11 +5,11 @@ import { env, dlqTopic } from '../configs/config';
 
 import { upsertMinuteFeature } from '../stores/analyticsFeature.repo';
 
-// ใช้ type & schema กลาง
+// measurement types
 import { MeasurementSchema, Measurement, MeasurementList } from '../types/measurement';
 import type { BaseReading } from '../types/events';
 
-// --- mappers ---
+// mappers
 import { toMeasurementFromSensor }   from '../pipelines/map/sensors';
 import { toMeasurementFromHealth }   from '../pipelines/map/deviceHealth';
 import { toMeasurementFromWeather }  from '../pipelines/map/weather';
@@ -21,7 +19,7 @@ import { toMeasurementsFromEconTxn } from '../pipelines/map/econ';
 import { toMeasurementFromLab }      from '../pipelines/map/lab';
 import { toMeasurementFromSweep }    from '../pipelines/map/sweep';
 
-// --- dimension upserts (snapshots) ---
+// dimension upserts
 import {
   handleDeviceSnapshot,
   handleFarmSnapshot,
@@ -32,42 +30,53 @@ import {
   handleBreedSnapshot,
 } from '../pipelines/dimUpserts';
 
-// --- analytics mappers ---
+// analytics mappers
 import {
   toMeasurementsFromFcrCalculation,
   toMeasurementsFromHealthMetrics,
   toMeasurementsFromProductionMetrics,
   toMeasurementsFromEnvironmentalMetrics,
-  toMeasurementsFromSizeDistribution
+  toMeasurementsFromSizeDistribution,
 } from '../pipelines/map/analytics';
 
 type Handler = (topic: string, message: KafkaMessage) => Promise<void>;
 
-/**
- * รับ mapper ใด ๆ -> คืนค่า Measurement[] (validate + normalize)
- * - ถ้า JSON พัง / mapper พัง / validation พัง -> ส่งเข้า DLQ พร้อมเหตุผล
- */
-async function handleAsMeasurement(mapper: (o: any) => MeasurementList | any, raw: string) {
-  console.log('🔍 [ANALYTICS-STREAM] Received raw data:', raw.substring(0, 200) + '...');
-  
-  // 1) parse JSON
-  let obj: any;
+/** util: safe JSON.parse with small log */
+function safeJson(raw: string): any {
   try {
-    obj = JSON.parse(raw);
-    console.log('✅ [ANALYTICS-STREAM] JSON parsed successfully:', Object.keys(obj));
+    const obj = JSON.parse(raw);
+    const keys = obj && typeof obj === 'object' ? Object.keys(obj) : [];
+    console.log('✅ [ANALYTICS-STREAM] JSON parsed keys:', keys.slice(0, 10));
+    if (obj && typeof obj === 'object' && 'data' in obj) {
+      const inner = (obj as any).data;
+      const innerKeys = inner && typeof inner === 'object' ? Object.keys(inner) : [];
+      console.log('ℹ️  [ANALYTICS-STREAM] Envelope detected (.data), inner keys:', innerKeys.slice(0, 10));
+    }
+    return obj;
   } catch (e) {
     console.log('❌ [ANALYTICS-STREAM] JSON parse error:', e);
+    throw e;
+  }
+}
+
+/** generic measurement pipeline */
+async function handleAsMeasurement(mapper: (o: any) => MeasurementList | any, raw: string) {
+  console.log('🔍 [ANALYTICS-STREAM] Received raw data:', raw.substring(0, 200) + '...');
+
+  let obj: any;
+  try {
+    obj = safeJson(raw);
+  } catch (e) {
     logger.warn({ err: e, raw }, 'invalid-json -> DLQ');
     await producer.send({ topic: dlqTopic, messages: [{ value: raw }] });
     return;
   }
 
-  // 2) map → measurement(s)
   let mapped: any;
   try {
     console.log('🔄 [ANALYTICS-STREAM] Applying mapper to object...');
     mapped = mapper(obj);
-    console.log('✅ [ANALYTICS-STREAM] Mapper result:', Array.isArray(mapped) ? `Array with ${mapped.length} items` : 'Single object');
+    console.log('✅ [ANALYTICS-STREAM] Mapper result:', Array.isArray(mapped) ? `Array(${mapped.length})` : 'Object');
   } catch (e) {
     console.log('❌ [ANALYTICS-STREAM] Mapper error:', e);
     logger.warn({ err: e, raw }, 'mapper-throw -> DLQ');
@@ -84,16 +93,12 @@ async function handleAsMeasurement(mapper: (o: any) => MeasurementList | any, ra
     }
     return;
   }
-  if (!mapped) return;
 
   const list: any[] = Array.isArray(mapped) ? mapped : [mapped];
 
-  // 3) validate + แปลงให้ตรงกับ BaseReading ที่ upsert ใช้
   for (const it of list) {
     try {
       const m: Measurement = MeasurementSchema.parse(it);
-
-      // BaseReading ที่ repo ต้องการ (รองรับ sensor_id optional)
       const br: BaseReading = {
         tenant_id: m.tenant_id,
         device_id: m.device_id,
@@ -104,16 +109,16 @@ async function handleAsMeasurement(mapper: (o: any) => MeasurementList | any, ra
         tags: m.tags ?? undefined,
       };
 
-      console.log('💾 [ANALYTICS-STREAM] Saving to database:', {
+      console.log('💾 [ANALYTICS-STREAM] Saving:', {
         tenant_id: br.tenant_id,
         device_id: br.device_id,
         sensor_id: br.sensor_id,
         metric: br.metric,
         value: br.value,
-        time: br.time
+        time: br.time,
       });
       await upsertMinuteFeature(br);
-      console.log('✅ [ANALYTICS-STREAM] Successfully saved to database');
+      console.log('✅ [ANALYTICS-STREAM] Saved');
     } catch (e: any) {
       console.log('❌ [ANALYTICS-STREAM] Validation error:', e);
       logger.error({ err: e, raw: JSON.stringify(it) }, 'invalid-measurement -> DLQ');
@@ -121,33 +126,25 @@ async function handleAsMeasurement(mapper: (o: any) => MeasurementList | any, ra
         await producer.send({
           topic: dlqTopic,
           messages: [{
-            value: JSON.stringify({
-              reason: 'invalid-measurement',
-              error: e?.issues ?? String(e),
-              payload: it,
-            }),
+            value: JSON.stringify({ reason: 'invalid-measurement', error: e?.issues ?? String(e), payload: it }),
             headers: { 'content-type': 'application/json' },
           }],
         });
       } catch (producerError) {
-        console.error('❌ Failed to send to DLQ, producer may be disconnected:', producerError instanceof Error ? producerError.message : String(producerError));
-        // Try to reconnect producer
-        try {
-          await producer.connect();
-          console.log('✅ Producer reconnected successfully');
-        } catch (reconnectError) {
-          console.error('❌ Failed to reconnect producer:', reconnectError instanceof Error ? reconnectError.message : String(reconnectError));
-        }
+        console.error('❌ Failed to send to DLQ:', producerError instanceof Error ? producerError.message : String(producerError));
+        try { await producer.connect(); } catch {}
       }
     }
   }
 }
 
-/** ตารางเส้นทาง topic → handler */
+/**
+ * Routes: pass the FULL parsed event object to snapshot handlers.
+ * Handlers will unwrap `.data` internally if present (see dimUpserts.unwrap).
+ */
 export const routes: Record<string, Handler> = {
-  // --- Sensors/Health/Weather (single measurement) ---
+  // Measurements
   [env.TOPIC_SENSORS]: async (_t, msg) => {
-    console.log('📡 [ANALYTICS-STREAM] Processing SENSORS topic message');
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementFromSensor, raw);
   },
@@ -159,8 +156,6 @@ export const routes: Record<string, Handler> = {
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementFromWeather, raw);
   },
-
-  // --- Edge (lab/sweep) ---
   [env.TOPIC_LAB_READINGS]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementFromLab, raw);
@@ -169,8 +164,6 @@ export const routes: Record<string, Handler> = {
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementFromSweep, raw);
   },
-
-  // --- Multi-measurement mappers ---
   [env.TOPIC_OPS]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementsFromOps, raw);
@@ -188,97 +181,79 @@ export const routes: Record<string, Handler> = {
     await handleAsMeasurement(toMeasurementsFromEconTxn, raw);
   },
 
-  // --- Snapshots / Dimensions (ไม่เขียน minute features) ---
+  // Snapshots / Dimensions (pass FULL object — handlers unwrap .data themselves)
   [env.TOPIC_DEVICE_SNAPSHOT]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    await handleDeviceSnapshot(JSON.parse(raw));
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleDeviceSnapshot(obj);
   },
   [env.TOPIC_FARM_SNAPSHOT]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    await handleFarmSnapshot(JSON.parse(raw));
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleFarmSnapshot(obj);
   },
   [env.TOPIC_HOUSE_SNAPSHOT]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    await handleHouseSnapshot(JSON.parse(raw));
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleHouseSnapshot(obj);
   },
   [env.TOPIC_FLOCK_SNAPSHOT]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    await handleFlockSnapshot(JSON.parse(raw));
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleFlockSnapshot(obj);
   },
-  
-  // --- Master Service Snapshots ---
+
+  // Master Service Snapshots — SAME handling (pass full event)
   [env.TOPIC_MASTER_CUSTOMER]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleCustomerSnapshot(data.data); // Master service wraps data in .data
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleCustomerSnapshot(obj);
   },
   [env.TOPIC_MASTER_DEVICE]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleDeviceSnapshot(data.data); // Master service wraps data in .data
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleDeviceSnapshot(obj);
   },
   [env.TOPIC_MASTER_FARM]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleFarmSnapshot(data.data); // Master service wraps data in .data
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleFarmSnapshot(obj);
   },
   [env.TOPIC_MASTER_HOUSE]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleHouseSnapshot(data.data); // Master service wraps data in .data
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleHouseSnapshot(obj);
   },
   [env.TOPIC_MASTER_FLOCK]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleFlockSnapshot(data.data); // Master service wraps data in .data
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleFlockSnapshot(obj);
   },
   [env.TOPIC_MASTER_ANIMAL_TYPE]: async (_t, msg) => {
-    const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleAnimalTypeSnapshot(data.data); // Master service wraps data in .data
+    const obj = safeJson(msg.value?.toString('utf8') ?? '{}');
+    await handleAnimalTypeSnapshot(obj);
   },
   [env.TOPIC_MASTER_BREED]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
-    const data = JSON.parse(raw);
-    await handleBreedSnapshot(data.data); // Master service wraps data in .data
-  },
+    console.log('📦 [BREED] raw:', raw.slice(0, 300));
+    const obj = safeJson(raw);
+    await handleBreedSnapshot(obj); // pass FULL event; handler unwraps .data
+    },
 
-  // --- Analytics Topics ---
+  // Analytics calculated topics
   [env.TOPIC_ANALYTICS_FCR]: async (_t, msg) => {
-    console.log('🐄 [ANALYTICS-STREAM] Processing FCR calculation message');
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementsFromFcrCalculation, raw);
   },
-  
   [env.TOPIC_ANALYTICS_HEALTH]: async (_t, msg) => {
-    console.log('🏥 [ANALYTICS-STREAM] Processing Health metrics message');
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementsFromHealthMetrics, raw);
   },
-  
   [env.TOPIC_ANALYTICS_PRODUCTION]: async (_t, msg) => {
-    console.log('🥚 [ANALYTICS-STREAM] Processing Production metrics message');
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementsFromProductionMetrics, raw);
   },
-  
   [env.TOPIC_ANALYTICS_ENVIRONMENTAL]: async (_t, msg) => {
-    console.log('🌡️ [ANALYTICS-STREAM] Processing Environmental metrics message');
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementsFromEnvironmentalMetrics, raw);
   },
-  
   [env.TOPIC_ANALYTICS_SIZE]: async (_t, msg) => {
-    console.log('📏 [ANALYTICS-STREAM] Processing Size distribution message');
     const raw = msg.value?.toString('utf8') ?? '{}';
     await handleAsMeasurement(toMeasurementsFromSizeDistribution, raw);
   },
-
-  // Note: PREDICTIONS and ANOMALIES topics will be handled by dedicated services
-  // as they require more complex processing than simple measurements
 };
 
-/** dispatcher กลาง */
 export async function dispatch(topic: string, message: KafkaMessage) {
   const h = routes[topic];
   if (!h) {

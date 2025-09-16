@@ -42,44 +42,17 @@ const stationService = new StationService();
 const deviceHealthService = new DeviceHealthService();
 const masterEventService = new MasterEventService();
 
-// Kafka configuration - DISABLED for mockup generation
-// const kafka = new Kafka({
-//   clientId: 'master-service-mockup',
-//   brokers: ['localhost:9092'],
-//   retry: {
-//     initialRetryTime: 100,
-//     retries: 3
-//   },
-//   connectionTimeout: 3000,
-//   requestTimeout: 3000
-// });
-
-// const producer = kafka.producer({
-//   maxInFlightRequests: 1,
-//   idempotent: true,
-//   transactionTimeout: 30000
-// });
-
-// =====================================================
-// HELPER FUNCTIONS
-// =====================================================
-
-// Services will handle Kafka publishing automatically
-
-// =====================================================
-// COMPLETE MOCKUP GENERATION FOR ALL TABLES
-// =====================================================
 
 async function generateCompleteMockup() {
   console.log('🚀 Starting complete master data mockup generation for all tables...');
-  
+
   try {
     // Initialize Kafka connection for publishing events
     console.log('📤 Initializing Kafka connection for event publishing...');
-    
+
     // Clear all tables first
     await clearAllTables();
-    
+
     // Generate data in dependency order
     const customers = await generateCustomers();
     const animalTypes = await generateAnimalTypes();
@@ -88,7 +61,7 @@ async function generateCompleteMockup() {
     const houses = await generateHouses(farms);
     const devices = await generateDevices(houses);
     const flocks = await generateFlocks(farms, houses, animalTypes, breeds);
-    
+
     // Reference data
     const deviceTypes = await generateDeviceTypes();
     const sensorTypes = await generateSensorTypes();
@@ -96,13 +69,13 @@ async function generateCompleteMockup() {
     const formulas = await generateFormulas();
     const economicData = await generateEconomicData();
     const externalDataSources = await generateExternalDataSources();
-    
+
     // Extended features
     const zones = await generateZones(farms, houses);
     const stations = await generateStations(farms, houses);
     const deviceHealth = await generateDeviceHealth(devices);
     const masterEvents = await generateMasterEvents(customers, farms, houses, devices, flocks);
-    
+
     console.log('\n🎉 Complete mockup generation completed!');
     console.log(`📊 Summary:`);
     console.log(`   👥 Customers: ${customers.length}`);
@@ -114,7 +87,7 @@ async function generateCompleteMockup() {
     console.log(`   🐓 Flocks: ${flocks.length}`);
     console.log(`   📚 Reference Data: ${deviceTypes.length + sensorTypes.length + feedTypes.length + formulas.length + economicData.length + externalDataSources.length}`);
     console.log(`   🔧 Extended Features: ${zones.length + stations.length + deviceHealth.length + masterEvents.length}`);
-    
+
   } catch (error) {
     console.error('❌ Mockup generation failed:', error.message);
     throw error;
@@ -128,7 +101,7 @@ async function generateCompleteMockup() {
     } catch (error) {
       console.log('📤 Kafka disconnect skipped (not connected)');
     }
-    
+
     console.log('✅ Mockup generation completed');
     await prisma.$disconnect();
   }
@@ -137,7 +110,7 @@ async function generateCompleteMockup() {
 // Clear all tables
 async function clearAllTables() {
   console.log('🧹 Clearing all tables...');
-  
+
   const clearOrder = [
     'MasterEvent',
     'DeviceHealth',
@@ -157,7 +130,7 @@ async function clearAllTables() {
     'SensorType',
     'DeviceType'
   ];
-  
+
   // Map Prisma model names to delegate names on PrismaClient
   const prismaDelegateMap = {
     MasterEvent: 'masterEvent',
@@ -197,7 +170,7 @@ async function clearAllTables() {
 async function generateCustomers() {
   console.log('👥 Generating customers...');
   const customers = [];
-  
+
   for (let i = 0; i < 5; i++) {
     const customerData = {
       tenantId: `tenant_${String(i + 1).padStart(3, '0')}`,
@@ -220,14 +193,14 @@ async function generateCustomers() {
         revenue: faker.number.int({ min: 1000000, max: 50000000 })
       }
     };
-    
+
     // Use service layer for proper business logic and Kafka publishing
     const result = await customerService.createCustomer(customerData);
     const customer = result.data;
     customers.push(customer);
     console.log(`✅ Created customer: ${customer.name} (${result.message})`);
   }
-  
+
   return customers;
 }
 
@@ -235,7 +208,7 @@ async function generateCustomers() {
 async function generateAnimalTypes() {
   console.log('🐔 Generating animal types...');
   const animalTypes = [];
-  
+
   const types = [
     { name: 'Chicken', category: 'Poultry', description: 'Domestic fowl kept for meat and eggs' },
     { name: 'Pig', category: 'Livestock', description: 'Domestic pig raised for meat production' },
@@ -244,7 +217,7 @@ async function generateAnimalTypes() {
     { name: 'Goat', category: 'Livestock', description: 'Domestic goat for meat and milk production' },
     { name: 'Sheep', category: 'Livestock', description: 'Domestic sheep for meat and wool production' }
   ];
-  
+
   for (const type of types) {
     const animalTypeData = {
       ...type,
@@ -254,22 +227,23 @@ async function generateAnimalTypes() {
         breeding_cycle: faker.helpers.arrayElement(['21 days', '114 days', '280 days'])
       }
     };
-    
+
     // Use service layer for proper business logic and Kafka publishing
     const result = await animalTypeService.createAnimalType(animalTypeData);
     const animalType = result.data;
     animalTypes.push(animalType);
     console.log(`✅ Created animal type: ${animalType.name} (${result.message})`);
   }
-  
+
   return animalTypes;
 }
 
-// Generate Breeds
 async function generateBreeds(animalTypes) {
   console.log('🧬 Generating breeds...');
   const breeds = [];
-  
+
+
+  // catalog to seed
   const breedData = [
     { animalType: 'Chicken', name: 'Ross 308', code: 'R308', description: 'Fast-growing broiler chicken breed' },
     { animalType: 'Chicken', name: 'Cobb 500', code: 'C500', description: 'High-performance broiler breed' },
@@ -283,42 +257,52 @@ async function generateBreeds(animalTypes) {
     { animalType: 'Cattle', name: 'Brahman', code: 'BR', description: 'Heat-tolerant beef breed' },
     { animalType: 'Duck', name: 'Pekin', code: 'PEK', description: 'Fast-growing duck breed' },
     { animalType: 'Duck', name: 'Khaki Campbell', code: 'KC', description: 'High egg-producing duck breed' },
-    // Added Goat breeds
     { animalType: 'Goat', name: 'Boer', code: 'GO-BO', description: 'Meat-type goat with rapid growth' },
     { animalType: 'Goat', name: 'Saanen', code: 'GO-SA', description: 'High milk production dairy goat' },
-    // Added Sheep breeds
     { animalType: 'Sheep', name: 'Merino', code: 'SH-ME', description: 'Fine-wool sheep breed' },
     { animalType: 'Sheep', name: 'Dorper', code: 'SH-DO', description: 'Hair sheep known for hardiness' }
   ];
-  
-  for (const breed of breedData) {
-    const animalType = animalTypes.find(at => at.name === breed.animalType);
-    if (!animalType) continue;
-    
-    const breedRecord = await prisma.breed.create({
-      data: {
-        animalTypeId: animalType.id,
-        name: breed.name,
-        code: breed.code,
-        description: breed.description,
-        characteristics: {
-          growth_rate: faker.helpers.arrayElement(['fast', 'medium', 'slow']),
-          feed_conversion: faker.number.float({ min: 1.5, max: 3.0, fractionDigits: 1 }),
-          market_weight: faker.helpers.arrayElement(['2.5 kg', '100 kg', '500 kg']),
-          days_to_market: faker.number.int({ min: 40, max: 200 })
-        },
-        meta: {
-          origin: faker.helpers.arrayElement(['USA', 'UK', 'Germany', 'France', 'China']),
-          company: faker.company.name(),
-          market_share: faker.number.int({ min: 10, max: 50 }),
-          price_per_chick: faker.number.float({ min: 10, max: 20, fractionDigits: 2 })
-        }
+
+
+  for (const b of breedData) {
+    // find AnimalType object that was created earlier
+    const at = animalTypes.find((x) => x.name === b.animalType);
+    if (!at) {
+      console.log(`⚠️ Skip breed ${b.name}: animal type '${b.animalType}' not found`);
+      continue;
+    }
+
+
+    // ✅ IMPORTANT: go through service (NOT prisma directly)
+    // so it will publish Kafka 'master.breed.snapshot.v1'
+    const result = await breedService.createBreed({
+      animalTypeId: at.id,
+      name: b.name,
+      code: b.code,
+      description: b.description,
+      characteristics: {
+        growth_rate: faker.helpers.arrayElement(['fast', 'medium', 'slow']),
+        feed_conversion: faker.number.float({ min: 1.5, max: 3.0, fractionDigits: 1 }),
+        market_weight: faker.helpers.arrayElement(['2.5 kg', '100 kg', '500 kg']),
+        days_to_market: faker.number.int({ min: 40, max: 200 })
+      },
+      meta: {
+        origin: faker.helpers.arrayElement(['USA', 'UK', 'Germany', 'France', 'China']),
+        company: faker.company.name(),
+        market_share: faker.number.int({ min: 10, max: 50 }),
+        price_per_chick: faker.number.float({ min: 10, max: 20, fractionDigits: 2 })
       }
     });
-    breeds.push(breedRecord);
-    console.log(`✅ Created breed: ${breedRecord.name}`);
+    const created = result.data;
+    breeds.push(created);
+    console.log(
+      `✅ Created breed: ${created.name} (animalType=${b.animalType}) — ${result.message}`
+    );
   }
-  
+  // little summary
+  console.log(`📦 Total breeds created: ${breeds.length}`);
+  // optional: short delay to let Kafka flush on small setups
+  await new Promise((r) => setTimeout(r, 250));
   return breeds;
 }
 
@@ -326,7 +310,7 @@ async function generateBreeds(animalTypes) {
 async function generateFarms(customers) {
   console.log('🏡 Generating farms...');
   const farms = [];
-  
+
   for (const customer of customers) {
     for (let i = 0; i < 2; i++) {
       const farmData = {
@@ -350,7 +334,7 @@ async function generateFarms(customers) {
           capacity: faker.number.int({ min: 10000, max: 100000 })
         }
       };
-      
+
       // Use service layer for proper business logic and Kafka publishing
       const result = await farmService.createFarm(farmData);
       const farm = result.data;
@@ -358,7 +342,7 @@ async function generateFarms(customers) {
       console.log(`✅ Created farm: ${farm.name} (${result.message})`);
     }
   }
-  
+
   return farms;
 }
 
@@ -366,7 +350,7 @@ async function generateFarms(customers) {
 async function generateHouses(farms) {
   console.log('🏠 Generating houses...');
   const houses = [];
-  
+
   for (const farm of farms) {
     for (let i = 0; i < 2; i++) {
       const houseData = {
@@ -393,7 +377,7 @@ async function generateHouses(farms) {
           animals_per_zone: 20
         }
       };
-      
+
       // Use service layer for proper business logic and Kafka publishing
       const result = await houseService.createHouse(houseData);
       const house = result.data;
@@ -401,7 +385,7 @@ async function generateHouses(farms) {
       console.log(`✅ Created house: ${house.name} in ${farm.name} (${result.message})`);
     }
   }
-  
+
   return houses;
 }
 
@@ -409,7 +393,7 @@ async function generateHouses(farms) {
 async function generateDevices(houses) {
   console.log('📱 Generating devices...');
   const devices = [];
-  
+
   const SENSOR_TYPES = [
     { type: 'temperature', unit: '°C', model: 'TempSensor Pro', vendor: 'IoT Solutions' },
     { type: 'humidity', unit: '%', model: 'HumidityMaster', vendor: 'ClimateTech' },
@@ -424,7 +408,7 @@ async function generateDevices(houses) {
     { type: 'photoperiod', unit: 'hours', model: 'PhotoTimer', vendor: 'LightTech' },
     { type: 'VOCs', unit: 'ppb', model: 'VOCDetector', vendor: 'AirQuality Inc' }
   ];
-  
+
   for (const house of houses) {
     for (let i = 0; i < 12; i++) {
       const sensorType = SENSOR_TYPES[i % SENSOR_TYPES.length];
@@ -454,7 +438,7 @@ async function generateDevices(houses) {
           signal_strength: faker.number.int({ min: -100, max: -30 })
         }
       };
-      
+
       // Use service layer for proper business logic and Kafka publishing
       const result = await deviceService.createDevice(deviceData);
       const device = result.data;
@@ -462,7 +446,7 @@ async function generateDevices(houses) {
       console.log(`✅ Created device: ${device.name} in ${house.name} (${result.message})`);
     }
   }
-  
+
   return devices;
 }
 
@@ -470,20 +454,20 @@ async function generateDevices(houses) {
 async function generateFlocks(farms, houses, animalTypes, breeds) {
   console.log('🐓 Generating flocks...');
   const flocks = [];
-  
+
   for (const farm of farms) {
     const farmHouses = houses.filter(h => h.farmId === farm.id);
-    
+
     for (const house of farmHouses) {
-      const chickenBreeds = breeds.filter(b => 
+      const chickenBreeds = breeds.filter(b =>
         animalTypes.find(at => at.id === b.animalTypeId)?.name === 'Chicken'
       );
-      
+
       if (chickenBreeds.length === 0) continue;
-      
+
       const selectedBreed = faker.helpers.arrayElement(chickenBreeds);
       const selectedAnimalType = animalTypes.find(at => at.id === selectedBreed.animalTypeId);
-      
+
       const flockData = {
         flockId: `flock_${house.houseId}_001`,
         tenantId: farm.tenantId,
@@ -517,7 +501,7 @@ async function generateFlocks(farms, houses, animalTypes, breeds) {
           mortality_rate: faker.number.float({ min: 0.5, max: 3.0, fractionDigits: 2 })
         }
       };
-      
+
       // Use service layer for proper business logic and Kafka publishing
       const result = await flockService.createFlock(flockData);
       const flock = result.data;
@@ -525,7 +509,7 @@ async function generateFlocks(farms, houses, animalTypes, breeds) {
       console.log(`✅ Created flock: ${flock.name} in ${farm.name} (${result.message})`);
     }
   }
-  
+
   return flocks;
 }
 
@@ -533,7 +517,7 @@ async function generateFlocks(farms, houses, animalTypes, breeds) {
 async function generateDeviceTypes() {
   console.log('📱 Generating device types...');
   const deviceTypes = [];
-  
+
   const types = [
     { name: 'Temperature Sensor', category: 'Sensor', description: 'Digital temperature sensor for environmental monitoring' },
     { name: 'Humidity Sensor', category: 'Sensor', description: 'Digital humidity sensor for air moisture monitoring' },
@@ -545,7 +529,7 @@ async function generateDeviceTypes() {
     { name: 'Fan Controller', category: 'Controller', description: 'Variable speed fan controller for ventilation' },
     { name: 'Gateway', category: 'Controller', description: 'IoT gateway for device communication and data aggregation' }
   ];
-  
+
   for (const type of types) {
     const deviceType = await prisma.deviceType.create({
       data: {
@@ -569,7 +553,7 @@ async function generateDeviceTypes() {
     deviceTypes.push(deviceType);
     console.log(`✅ Created device type: ${deviceType.name}`);
   }
-  
+
   return deviceTypes;
 }
 
@@ -577,7 +561,7 @@ async function generateDeviceTypes() {
 async function generateSensorTypes() {
   console.log('🔍 Generating sensor types...');
   const sensorTypes = [];
-  
+
   const types = [
     { name: 'Temperature', unit: '°C', dataType: 'numeric', range: { min: -40, max: 85 } },
     { name: 'Humidity', unit: '%', dataType: 'numeric', range: { min: 0, max: 100 } },
@@ -590,7 +574,7 @@ async function generateSensorTypes() {
     { name: 'Illuminance', unit: 'lux', dataType: 'numeric', range: { min: 0, max: 100000 } },
     { name: 'Motion', unit: 'boolean', dataType: 'boolean', range: { min: 0, max: 1 } }
   ];
-  
+
   for (const type of types) {
     const sensorType = await prisma.sensorType.create({
       data: {
@@ -607,7 +591,7 @@ async function generateSensorTypes() {
     sensorTypes.push(sensorType);
     console.log(`✅ Created sensor type: ${sensorType.name}`);
   }
-  
+
   return sensorTypes;
 }
 
@@ -615,14 +599,14 @@ async function generateSensorTypes() {
 async function generateFeedTypes() {
   console.log('🌾 Generating feed types...');
   const feedTypes = [];
-  
+
   const types = [
     { name: 'Starter Feed', category: 'Starter', description: 'High protein feed for young animals (0-3 weeks)' },
     { name: 'Grower Feed', category: 'Grower', description: 'Balanced feed for growing animals (3-6 weeks)' },
     { name: 'Finisher Feed', category: 'Finisher', description: 'High energy feed for finishing animals (6+ weeks)' },
     { name: 'Layer Feed', category: 'Layer', description: 'High calcium feed for laying hens' }
   ];
-  
+
   for (const type of types) {
     const feedType = await prisma.feedType.create({
       data: {
@@ -649,7 +633,7 @@ async function generateFeedTypes() {
     feedTypes.push(feedType);
     console.log(`✅ Created feed type: ${feedType.name}`);
   }
-  
+
   return feedTypes;
 }
 
@@ -657,14 +641,14 @@ async function generateFeedTypes() {
 async function generateFormulas() {
   console.log('🧪 Generating formulas...');
   const formulas = [];
-  
+
   const formulaData = [
     { name: 'Premium Broiler Formula', description: 'High-performance formula for commercial broiler production' },
     { name: 'Organic Layer Formula', description: 'Organic certified formula for free-range laying hens' },
     { name: 'Pig Starter Formula', description: 'High-quality starter formula for piglets' },
     { name: 'Cattle Growing Formula', description: 'Balanced formula for growing cattle' }
   ];
-  
+
   for (const formula of formulaData) {
     const formulaRecord = await prisma.formula.create({
       data: {
@@ -694,7 +678,7 @@ async function generateFormulas() {
     formulas.push(formulaRecord);
     console.log(`✅ Created formula: ${formulaRecord.name}`);
   }
-  
+
   return formulas;
 }
 
@@ -702,7 +686,7 @@ async function generateFormulas() {
 async function generateEconomicData() {
   console.log('💰 Generating economic data...');
   const economicData = [];
-  
+
   const regions = ['Central', 'North', 'Northeast', 'South'];
   const dataTypes = [
     { type: 'FeedCost', unit: 'THB/kg', baseValue: 25 },
@@ -712,21 +696,21 @@ async function generateEconomicData() {
     { type: 'WaterCost', unit: 'THB/m3', baseValue: 15 },
     { type: 'TransportCost', unit: 'THB/km', baseValue: 8 }
   ];
-  
+
   for (const region of regions) {
     for (const dataType of dataTypes) {
       for (let i = 0; i < 12; i++) {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
-        
+
         const economicDataPoint = await prisma.economicData.create({
           data: {
             dataType: dataType.type,
             region: region,
-            value: faker.number.float({ 
-              min: dataType.baseValue * 0.8, 
-              max: dataType.baseValue * 1.2, 
-              fractionDigits: 2 
+            value: faker.number.float({
+              min: dataType.baseValue * 0.8,
+              max: dataType.baseValue * 1.2,
+              fractionDigits: 2
             }),
             unit: dataType.unit,
             currency: 'THB',
@@ -743,7 +727,7 @@ async function generateEconomicData() {
       }
     }
   }
-  
+
   console.log(`✅ Created ${economicData.length} economic data points`);
   return economicData;
 }
@@ -752,14 +736,14 @@ async function generateEconomicData() {
 async function generateExternalDataSources() {
   console.log('🌐 Generating external data sources...');
   const externalDataSources = [];
-  
+
   const sources = [
     { name: 'กรมอุตุนิยมวิทยา', type: 'Weather', apiUrl: 'https://api.tmd.go.th/api/weather', apiKey: 'tmd_api_key_12345' },
     { name: 'MarketPriceAPI', type: 'Market', apiUrl: 'https://api.marketprice.com/v1/prices', apiKey: 'market_api_key_67890' },
     { name: 'กรมปศุสัตว์', type: 'Government', apiUrl: 'https://api.dld.go.th/api/livestock', apiKey: 'dld_api_key_11111' },
     { name: 'IoT Sensor Network', type: 'Sensor', apiUrl: 'https://api.iot-sensors.com/v1/data', apiKey: 'iot_api_key_22222' }
   ];
-  
+
   for (const source of sources) {
     const externalDataSource = await prisma.externalDataSource.create({
       data: {
@@ -778,7 +762,7 @@ async function generateExternalDataSources() {
     externalDataSources.push(externalDataSource);
     console.log(`✅ Created external data source: ${externalDataSource.name}`);
   }
-  
+
   return externalDataSources;
 }
 
@@ -786,10 +770,10 @@ async function generateExternalDataSources() {
 async function generateZones(farms, houses) {
   console.log('🗺️  Generating zones...');
   const zones = [];
-  
+
   for (const farm of farms) {
     const farmHouses = houses.filter(h => h.farmId === farm.id);
-    
+
     for (const house of farmHouses) {
       for (let i = 0; i < 20; i++) {
         const zone = await prisma.zone.create({
@@ -823,7 +807,7 @@ async function generateZones(farms, houses) {
       }
     }
   }
-  
+
   console.log(`✅ Created ${zones.length} zones`);
   return zones;
 }
@@ -832,13 +816,13 @@ async function generateZones(farms, houses) {
 async function generateStations(farms, houses) {
   console.log('🏭 Generating stations...');
   const stations = [];
-  
+
   for (const farm of farms) {
     const farmHouses = houses.filter(h => h.farmId === farm.id);
-    
+
     for (const house of farmHouses) {
       const stationTypes = ['Lab', 'FeedingStation', 'WaterStation', 'ControlRoom', 'Storage'];
-      
+
       for (const stationType of stationTypes) {
         const station = await prisma.station.create({
           data: {
@@ -868,7 +852,7 @@ async function generateStations(farms, houses) {
       }
     }
   }
-  
+
   console.log(`✅ Created ${stations.length} stations`);
   return stations;
 }
@@ -877,7 +861,7 @@ async function generateStations(farms, houses) {
 async function generateDeviceHealth(devices) {
   console.log('🏥 Generating device health records...');
   const deviceHealthRecords = [];
-  
+
   for (const device of devices) {
     const deviceHealth = await prisma.deviceHealth.create({
       data: {
@@ -900,7 +884,7 @@ async function generateDeviceHealth(devices) {
     });
     deviceHealthRecords.push(deviceHealth);
   }
-  
+
   console.log(`✅ Created ${deviceHealthRecords.length} device health records`);
   return deviceHealthRecords;
 }
@@ -909,7 +893,7 @@ async function generateDeviceHealth(devices) {
 async function generateMasterEvents(customers, farms, houses, devices, flocks) {
   console.log('📝 Generating master events...');
   const masterEvents = [];
-  
+
   // Generate events for customers
   for (const customer of customers) {
     const event = await prisma.masterEvent.create({
@@ -935,7 +919,7 @@ async function generateMasterEvents(customers, farms, houses, devices, flocks) {
     });
     masterEvents.push(event);
   }
-  
+
   // Generate events for farms
   for (const farm of farms) {
     const event = await prisma.masterEvent.create({
@@ -961,7 +945,7 @@ async function generateMasterEvents(customers, farms, houses, devices, flocks) {
     });
     masterEvents.push(event);
   }
-  
+
   console.log(`✅ Created ${masterEvents.length} master events`);
   return masterEvents;
 }

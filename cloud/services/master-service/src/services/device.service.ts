@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { publishToKafka } from '../utils/kafka';
+import { publishToKafka, kafkaPublisher } from '../utils/kafka';
 
 const prisma = new PrismaClient();
 
@@ -45,18 +45,8 @@ export class DeviceService {
         }
       });
 
-      // Publish to Kafka
-      await publishToKafka('device.snapshot.created', {
-        id: device.id,
-        deviceId: device.deviceId,
-        houseId: device.houseId,
-        name: device.name,
-        type: device.type,
-        status: device.status,
-        meta: device.meta,
-        createdAt: device.createdAt,
-        updatedAt: device.updatedAt
-      });
+      // Publish to Kafka with correct payload
+      await kafkaPublisher.publishDeviceSnapshot('device.snapshot.created', device);
 
       return {
         success: true,
@@ -138,18 +128,8 @@ export class DeviceService {
         }
       });
 
-      // Publish to Kafka
-      await publishToKafka('device.snapshot.updated', {
-        id: device.id,
-        deviceId: device.deviceId,
-        houseId: device.houseId,
-        name: device.name,
-        type: device.type,
-        status: device.status,
-        meta: device.meta,
-        createdAt: device.createdAt,
-        updatedAt: device.updatedAt
-      });
+      // Publish to Kafka with correct payload
+      await kafkaPublisher.publishDeviceSnapshot('device.snapshot.updated', device);
 
       return {
         success: true,
@@ -167,18 +147,8 @@ export class DeviceService {
         where: { id }
       });
 
-      // Publish to Kafka
-      await publishToKafka('device.snapshot.deleted', {
-        id: device.id,
-        deviceId: device.deviceId,
-        houseId: device.houseId,
-        name: device.name,
-        type: device.type,
-        status: device.status,
-        meta: device.meta,
-        createdAt: device.createdAt,
-        updatedAt: device.updatedAt
-      });
+      // Publish a final snapshot payload using the correct schema (snake_case)
+      await kafkaPublisher.publishDeviceSnapshot('device.snapshot.updated', device);
 
       return {
         success: true,
