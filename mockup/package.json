@@ -1,0 +1,23 @@
+{
+  "name": "farm-ecosystem-mockup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mock services to publish sensor readings to MQTT broker for dev testing",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}
+

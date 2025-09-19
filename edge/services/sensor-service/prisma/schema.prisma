@@ -15,5 +15,3 @@ generator client {
 model Placeholder {
   id Int @id
 }
-
-

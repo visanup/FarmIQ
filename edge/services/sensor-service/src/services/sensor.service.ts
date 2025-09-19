@@ -42,7 +42,16 @@ export async function ingestDeviceReadingSQL(r: {
   payload?: any;
 }) {
   await prisma.$executeRawUnsafe(
-    `SELECT sensors.fn_ingest_device_reading($1,$2,$3,$4,$5,$6,$7,$8)`,
+    `SELECT sensors.fn_ingest_device_reading(
+       $1::text,
+       $2::text,
+       $3::timestamptz,
+       $4::text,
+       $5::text,
+       $6::double precision,
+       $7::sensors.quality_enum,
+       $8::jsonb
+    )`,
     r.tenantId, r.deviceId, r.time, r.sensorId ?? null, r.metric, r.value, r.quality, r.payload ?? {}
   );
 }
