@@ -69,6 +69,7 @@ class Config:
     KAFKA_BROKERS: str = _env("KAFKA_BROKERS", "kafka:9092")
     CONSUMER_GROUP: str = _env("CONSUMER_GROUP", "analytic-service.v1")
     KAFKA_CLIENT_ID: str = _env("KAFKA_CLIENT_ID", f"analytics-worker-{socket.gethostname()}")
+    KAFKA_TOPIC_DLQ: str = _env("KAFKA_TOPIC_DLQ", "analytics.worker.dlq")
 
     # topics ที่จะ consume
     KAFKA_TOPICS: List[str] = _get_list(

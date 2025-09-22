@@ -12,31 +12,38 @@ def _slug(s: str) -> str:
 
 def handle_lab_record(o: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """
+    Handle envelope format from analytics-stream
     Lab QC/QA result (1 analyte per record) — map เป็น measurement
     Examples:
     {
-      "time":"2025-08-20T01:45:00Z",
-      "tenant_id":"t1","factory_id":"f1",
-      "station_id":"lab-01",             # หรือ lab_id
-      "sample_id":"S-8892",              # จะเก็บใน sensor_id
-      "analyte":"Moisture",
-      "value": 12.4,
-      "unit":"%",
-      "lot":"L-1001"
+      "data": {
+        "timestamp":"2025-08-20T01:45:00Z",
+        "tenant_id":"t1","farmId":"f1",
+        "stationId":"lab-01",
+        "sampleId":"S-8892",
+        "testType":"Moisture",
+        "value": 12.4,
+        "unit":"%"
+      }
     }
-    metric = f"lab.{slug(analyte)}"
+    metric = f"lab.{slug(testType)}"
     """
-    t = _ts(o["time"])
-    tenant = o["tenant_id"]; factory = o["factory_id"]
-    machine = o.get("station_id") or o.get("lab_id") or "lab"
-    sensor = o.get("sample_id")
-    analyte = _slug(o.get("analyte") or "value")
+    # Handle envelope format
+    data = o.get("data", o)
+    
+    t = _ts(data.get("timestamp") or data.get("time"))
+    tenant = data["tenant_id"] if "tenant_id" in data else "unknown"
+    farm_id = data.get("farmId") or data.get("farm_id")
+    station_id = data.get("stationId") or data.get("station_id") or "lab"
+    sample_id = data.get("sampleId") or data.get("sample_id")
+    test_type = data.get("testType") or data.get("analyte") or "value"
+    analyte = _slug(test_type)
 
     return "measurement", {
-        "tenant_id": tenant, "factory_id": factory, "machine_id": machine,
-        "sensor_id": sensor,
+        "tenant_id": tenant, "farm_id": farm_id, "device_id": station_id,
+        "sensor_id": sample_id,
         "metric": f"lab.{analyte}",
-        "value": float(o["value"]),
+        "value": float(data["value"]),
         "time": t,
-        "payload": {k:v for k,v in o.items() if k not in ("tenant_id","factory_id","time")}
+        "payload": {k:v for k,v in data.items() if k not in ("tenant_id","farmId","farm_id","timestamp","time")}
     }

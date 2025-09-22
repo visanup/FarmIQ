@@ -7,7 +7,7 @@ export function buildOpenApiSpec() {
     info: {
       title: 'Image Ingestion Service',
       version: '1.0.0',
-      description: 'Receive images, store to MinIO, persist metadata, publish MQTT event',
+      description: 'Receive images, store to MinIO, persist metadata, publish MQTT event. Auth: send API key via header x-api-key (preferred). Also accepts apikey or Authorization: ApiKey <key>.',
     },
     servers: [{ url: `http://localhost:${PORT}`, description: 'Local dev' }],
     tags: [{ name: 'ingestion' }],

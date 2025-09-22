@@ -22,6 +22,9 @@ FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Copy .env file if it exists
+COPY .env* ./
+
 # ไม่จำเป็นต้องลง yarn ใน runtime ก็ได้ แต่ลงไว้ก็ไม่เสียหาย
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
@@ -34,4 +37,5 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/yarn.lock ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
 CMD ["node", "dist/server.js"]

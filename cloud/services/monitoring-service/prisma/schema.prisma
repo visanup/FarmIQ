@@ -45,7 +45,7 @@ model alert_rules {
 
 model device_health_log {
   tenant_id  String   @db.Text
-  id         BigInt   @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   device_id  String   @db.Text
   status     String   @db.Text
   time       DateTime @db.Timestamptz
@@ -53,4 +53,5 @@ model device_health_log {
   created_at DateTime @default(now()) @db.Timestamptz
 
   @@index([tenant_id, device_id, time], name: "ix_health_time")
+  @@index([tenant_id, status, time], name: "ix_health_status")
 }

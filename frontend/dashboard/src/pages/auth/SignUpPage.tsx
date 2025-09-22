@@ -21,10 +21,14 @@ import {
   Checkbox,
   FormControlLabel,
   Link as MuiLink,
+  Fade,
+  Zoom,
+  Avatar,
+  Divider,
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import { Visibility, VisibilityOff, Agriculture, Email, Lock, Person } from '@mui/icons-material';
+import { Visibility, VisibilityOff, Agriculture, Email, Lock, Person, CheckCircle, Security, Speed } from '@mui/icons-material';
 
 const SignUpPage: React.FC = () => {
   const theme = useTheme();
@@ -106,255 +110,545 @@ const SignUpPage: React.FC = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
-          : 'linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%)',
+        background: 'linear-gradient(135deg, #e8f5e8 0%, #f0fdf4 50%, #ecfeff 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         p: 2,
         position: 'relative',
         overflow: 'hidden',
+        '@keyframes float': {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-20px)' },
+        },
+        '@keyframes pulse': {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.05)' },
+        },
       }}
     >
-      {/* Decorative gradients */}
-      <Box sx={{ position: 'absolute', width: 340, height: 340, top: -90, left: -90, background: 'radial-gradient(circle, rgba(76,175,80,0.35) 0%, rgba(76,175,80,0) 70%)', filter: 'blur(6px)', pointerEvents: 'none' }} />
-      <Box sx={{ position: 'absolute', width: 380, height: 380, bottom: -110, right: -110, background: 'radial-gradient(circle, rgba(33,150,243,0.25) 0%, rgba(33,150,243,0) 70%)', filter: 'blur(6px)', pointerEvents: 'none' }} />
+      {/* Enhanced decorative gradients */}
+      <Box sx={{ 
+        position: 'absolute', 
+        width: 400, 
+        height: 400, 
+        top: -100, 
+        left: -100, 
+        background: 'radial-gradient(circle, rgba(76,175,80,0.4) 0%, rgba(76,175,80,0.1) 50%, rgba(76,175,80,0) 70%)', 
+        filter: 'blur(8px)', 
+        pointerEvents: 'none',
+        animation: 'float 6s ease-in-out infinite'
+      }} />
+      <Box sx={{ 
+        position: 'absolute', 
+        width: 450, 
+        height: 450, 
+        bottom: -120, 
+        right: -120, 
+        background: 'radial-gradient(circle, rgba(33,150,243,0.3) 0%, rgba(33,150,243,0.1) 50%, rgba(33,150,243,0) 70%)', 
+        filter: 'blur(8px)', 
+        pointerEvents: 'none',
+        animation: 'float 8s ease-in-out infinite reverse'
+      }} />
+      
+      {/* Floating particles */}
+      <Box sx={{ 
+        position: 'absolute', 
+        width: 8, 
+        height: 8, 
+        top: '20%', 
+        left: '10%', 
+        background: 'rgba(76,175,80,0.6)', 
+        borderRadius: '50%',
+        animation: 'float 4s ease-in-out infinite'
+      }} />
+      <Box sx={{ 
+        position: 'absolute', 
+        width: 6, 
+        height: 6, 
+        top: '60%', 
+        right: '15%', 
+        background: 'rgba(33,150,243,0.6)', 
+        borderRadius: '50%',
+        animation: 'float 5s ease-in-out infinite reverse'
+      }} />
 
-      <Container maxWidth="md">
-        <Paper elevation={16} sx={{ borderRadius: 4, overflow: 'hidden', backdropFilter: 'blur(10px)', backgroundColor: 'rgba(255,255,255,0.82)', boxShadow: '0 30px 80px rgba(0,0,0,0.12)' }}>
-          <Grid container>
-            <Grid item xs={12} md={6}
-              sx={{
-                display: { xs: 'none', md: 'flex' },
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(135deg, #2E7D32 0%, #43A047 50%, #66BB6A 100%)',
-                color: 'white',
-                p: 5,
-                position: 'relative',
-              }}
-            >
-              <Box sx={{
-                position: 'absolute', inset: 0, pointerEvents: 'none',
-                background: 'radial-gradient(1000px 300px at -10% -10%, rgba(255,255,255,0.15), transparent), radial-gradient(1000px 300px at 110% 110%, rgba(255,255,255,0.15), transparent)'
-              }} />
-              <Box sx={{ textAlign: 'center', maxWidth: 400 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
-                  <Agriculture sx={{ fontSize: 44, mr: 1 }} />
-                  <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                    FarmIQ™
-                  </Typography>
-                </Box>
-                <Typography variant="h6" sx={{ opacity: 0.95, mb: 1, fontWeight: 600 }}>
-                  สร้างบัญชีของคุณวันนี้
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9, mb: 2 }}>
-                  เพื่อเริ่มต้นบริหารจัดการฟาร์มอย่างมืออาชีพด้วยข้อมูลเชิงลึกแบบเรียลไทม์
-                </Typography>
-                <Box sx={{ textAlign: 'left', display: 'inline-block' }}>
-                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                    ✅ วิเคราะห์ KPI และแนวโน้มสำคัญ
-                  </Typography>
-                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                    ✅ แจ้งเตือนอัจฉริยะจากอุปกรณ์
-                  </Typography>
-                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    ✅ พร้อมใช้งานบนทุกอุปกรณ์
-                  </Typography>
-                </Box>
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Card elevation={0} sx={{ height: '100%', borderRadius: 0 }}>
-                <CardContent sx={{ p: 5 }}>
-                  <Typography variant="h5" sx={{ textAlign: 'center', fontWeight: 700, mb: 1 }}>
-                    สมัครสมาชิก
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 3 }}>
-                    เริ่มต้นใช้งานในไม่กี่ขั้นตอน ✨
-                  </Typography>
-
-                  <Snackbar open={!!error} onClose={clearError} autoHideDuration={4000} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-                    <Alert onClose={clearError} severity="error" sx={{ width: '100%' }}>
-                      {error}
-                    </Alert>
-                  </Snackbar>
-
-                  <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-                    <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' }, mb: 2 }}>
-                      <TextField
-                        fullWidth
-                        name="firstName"
-                        label="ชื่อจริง"
-                        value={formData.firstName}
-                        onChange={handleInputChange}
-                        disabled={isLoading}
-                        error={!!formErrors.firstName}
-                        helperText={formErrors.firstName}
-                        InputProps={{ startAdornment: (
-                          <InputAdornment position="start">
-                            <Person color="action" />
-                          </InputAdornment>
-                        )}}
-                      />
-                      <TextField
-                        fullWidth
-                        name="lastName"
-                        label="นามสกุล"
-                        value={formData.lastName}
-                        onChange={handleInputChange}
-                        disabled={isLoading}
-                        error={!!formErrors.lastName}
-                        helperText={formErrors.lastName}
-                        InputProps={{ startAdornment: (
-                          <InputAdornment position="start">
-                            <Person color="action" />
-                          </InputAdornment>
-                        )}}
-                      />
-                    </Box>
-
-                    <TextField
-                      fullWidth
-                      name="email"
-                      label="อีเมล"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      required
-                      disabled={isLoading}
-                      error={!!formErrors.email}
-                      helperText={formErrors.email}
-                      InputProps={{ startAdornment: (
-                        <InputAdornment position="start">
-                          <Email color="action" />
-                        </InputAdornment>
-                      )}}
-                      sx={{ mb: 2 }}
-                    />
-
-                    <TextField
-                      fullWidth
-                      name="password"
-                      label="รหัสผ่าน"
-                      type={showPassword ? 'text' : 'password'}
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      required
-                      disabled={isLoading}
-                      error={!!formErrors.password}
-                      helperText={formErrors.password}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Lock color="action" />
-                          </InputAdornment>
-                        ),
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton aria-label="toggle password visibility" onClick={() => setShowPassword(v => !v)} edge="end">
-                              {showPassword ? <VisibilityOff /> : <Visibility />}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      }}
-                      sx={{ mb: 1 }}
-                    />
-
-                    <Box sx={{ mb: 2 }}>
-                      <LinearProgress variant="determinate" value={passwordStrength} sx={{ height: 8, borderRadius: 6 }} />
-                      <Typography variant="caption" color="text.secondary">
-                        ความแข็งแรงรหัสผ่าน: {passwordStrength <= 25 ? 'อ่อน' : passwordStrength <= 50 ? 'พอใช้' : passwordStrength <= 75 ? 'ดี' : 'แข็งแรง'}
+      <Container maxWidth="xl">
+        <Fade in timeout={800}>
+          <Paper 
+            elevation={24} 
+            sx={{ 
+              borderRadius: 4, 
+              overflow: 'hidden', 
+              backdropFilter: 'blur(20px)', 
+              backgroundColor: 'rgba(255,255,255,0.95)', 
+              boxShadow: '0 40px 100px rgba(0,0,0,0.15)',
+              border: '1px solid rgba(255,255,255,0.2)'
+            }}
+          >
+            <Grid container>
+              <Grid item xs={12} md={5}
+                sx={{
+                  display: { xs: 'none', md: 'flex' },
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #2E7D32 0%, #43A047 50%, #66BB6A 100%)',
+                  color: 'white',
+                  p: 6,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  minHeight: '600px',
+                }}
+              >
+                {/* Enhanced background effects */}
+                <Box sx={{
+                  position: 'absolute', 
+                  inset: 0, 
+                  pointerEvents: 'none',
+                  background: 'radial-gradient(1200px 400px at -20% -20%, rgba(255,255,255,0.2), transparent), radial-gradient(1200px 400px at 120% 120%, rgba(255,255,255,0.15), transparent)'
+                }} />
+                <Box sx={{
+                  position: 'absolute',
+                  top: -50,
+                  right: -50,
+                  width: 200,
+                  height: 200,
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%',
+                  filter: 'blur(20px)'
+                }} />
+                
+                <Zoom in timeout={1000}>
+                  <Box sx={{ textAlign: 'center', maxWidth: 420, position: 'relative', zIndex: 1 }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      mb: 3,
+                      animation: 'pulse 2s ease-in-out infinite'
+                    }}>
+                      <Avatar sx={{ 
+                        bgcolor: 'rgba(255,255,255,0.2)', 
+                        width: 64, 
+                        height: 64, 
+                        mr: 2,
+                        backdropFilter: 'blur(10px)',
+                        border: '2px solid rgba(255,255,255,0.3)'
+                      }}>
+                        <Agriculture sx={{ fontSize: 32 }} />
+                      </Avatar>
+                      <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
+                        FarmIQ
                       </Typography>
                     </Box>
-
-                    <TextField
-                      fullWidth
-                      name="confirmPassword"
-                      label="ยืนยันรหัสผ่าน"
-                      type={showConfirm ? 'text' : 'password'}
-                      value={formData.confirmPassword}
-                      onChange={handleInputChange}
-                      required
-                      disabled={isLoading}
-                      error={!!formErrors.confirmPassword}
-                      helperText={formErrors.confirmPassword}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Lock color="action" />
-                          </InputAdornment>
-                        ),
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton aria-label="toggle confirm visibility" onClick={() => setShowConfirm(v => !v)} edge="end">
-                              {showConfirm ? <VisibilityOff /> : <Visibility />}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      }}
-                      sx={{ mb: 2 }}
-                    />
-
-                    <FormControlLabel
-                      control={<Checkbox checked={agree} onChange={(e) => setAgree(e.target.checked)} />}
-                      label={
-                        <Typography variant="body2" color="text.secondary">
-                          ฉันยอมรับ{' '}
-                          <MuiLink href="#" underline="hover">เงื่อนไขการใช้งาน</MuiLink>{' '}และ{' '}
-                          <MuiLink href="#" underline="hover">นโยบายความเป็นส่วนตัว</MuiLink>
+                    <Typography variant="h5" sx={{ opacity: 0.95, mb: 2, fontWeight: 600 }}>
+                      สร้างบัญชีของคุณวันนี้
+                    </Typography>
+                    <Typography variant="body1" sx={{ opacity: 0.9, mb: 4, lineHeight: 1.6 }}>
+                      เพื่อเริ่มต้นบริหารจัดการฟาร์มอย่างมืออาชีพด้วยข้อมูลเชิงลึกแบบเรียลไทม์
+                    </Typography>
+                    
+                    <Box sx={{ textAlign: 'left', display: 'inline-block' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, p: 2, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 2, backdropFilter: 'blur(10px)' }}>
+                        <CheckCircle sx={{ fontSize: 20, color: 'rgba(255,255,255,0.9)' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          วิเคราะห์ KPI และแนวโน้มสำคัญ
                         </Typography>
-                      }
-                      sx={{ mb: 1 }}
-                    />
-                    {formErrors.agree && (
-                      <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
-                        {formErrors.agree}
-                      </Typography>
-                    )}
-
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: formData.password.length >= 8 ? 'success.main' : 'grey.400' }} />
-                      <Typography variant="caption">อย่างน้อย 8 ตัวอักษร</Typography>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: /[A-Z]/.test(formData.password) ? 'success.main' : 'grey.400' }} />
-                      <Typography variant="caption">มีตัวพิมพ์ใหญ่</Typography>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: /[0-9]/.test(formData.password) ? 'success.main' : 'grey.400' }} />
-                      <Typography variant="caption">มีตัวเลข</Typography>
-                    </Box>
-
-                    <Button
-                      type="submit"
-                      fullWidth
-                      variant="contained"
-                      size="large"
-                      disabled={isLoading || !agree}
-                      sx={{
-                        py: 1.4,
-                        borderRadius: 2,
-                        boxShadow: '0 6px 18px rgba(76, 175, 80, 0.3)',
-                        background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
-                        '&:hover': { background: 'linear-gradient(135deg, #45a049 0%, #4CAF50 100%)' },
-                      }}
-                    >
-                      {isLoading ? <CircularProgress size={24} color="inherit" /> : 'สมัครสมาชิก'}
-                    </Button>
-
-                    <Box sx={{ textAlign: 'center', mt: 3 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        มีบัญชีอยู่แล้ว?
-                        {' '}
-                        <Link component={RouterLink} to="/signin" sx={{ color: theme.palette.primary.main, textDecoration: 'none', fontWeight: 600 }}>
-                          เข้าสู่ระบบ
-                        </Link>
-                      </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, p: 2, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 2, backdropFilter: 'blur(10px)' }}>
+                        <Security sx={{ fontSize: 20, color: 'rgba(255,255,255,0.9)' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          แจ้งเตือนอัจฉริยะจากอุปกรณ์
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 2, backdropFilter: 'blur(10px)' }}>
+                        <Speed sx={{ fontSize: 20, color: 'rgba(255,255,255,0.9)' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          พร้อมใช้งานบนทุกอุปกรณ์
+                        </Typography>
+                      </Box>
                     </Box>
                   </Box>
-                </CardContent>
-              </Card>
+                </Zoom>
+              </Grid>
+            <Grid item xs={12} md={7}>
+              <Card elevation={0} sx={{ height: '100%', borderRadius: 0 }}>
+                <CardContent sx={{ p: 6 }}>
+                  <Fade in timeout={1200}>
+                    <Box>
+                      <Box sx={{ textAlign: 'center', mb: 4 }}>
+                        <Typography variant="h4" sx={{ fontWeight: 800, mb: 1, background: 'linear-gradient(135deg, #2E7D32 0%, #43A047 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                          สมัครสมาชิก
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.1rem' }}>
+                          เริ่มต้นใช้งานในไม่กี่ขั้นตอน ✨
+                        </Typography>
+                      </Box>
+
+                      <Snackbar open={!!error} onClose={clearError} autoHideDuration={4000} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+                        <Alert onClose={clearError} severity="error" sx={{ width: '100%', borderRadius: 2 }}>
+                          {error}
+                        </Alert>
+                      </Snackbar>
+
+                      <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' }, mb: 3 }}>
+                          <Zoom in timeout={1400}>
+                            <TextField
+                              fullWidth
+                              name="firstName"
+                              label="ชื่อจริง"
+                              value={formData.firstName}
+                              onChange={handleInputChange}
+                              disabled={isLoading}
+                              error={!!formErrors.firstName}
+                              helperText={formErrors.firstName}
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  borderRadius: 2,
+                                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#4CAF50',
+                                  },
+                                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#4CAF50',
+                                    borderWidth: 2,
+                                  },
+                                },
+                              }}
+                              InputProps={{ 
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <Person sx={{ color: '#4CAF50' }} />
+                                  </InputAdornment>
+                                )
+                              }}
+                            />
+                          </Zoom>
+                          <Zoom in timeout={1600}>
+                            <TextField
+                              fullWidth
+                              name="lastName"
+                              label="นามสกุล"
+                              value={formData.lastName}
+                              onChange={handleInputChange}
+                              disabled={isLoading}
+                              error={!!formErrors.lastName}
+                              helperText={formErrors.lastName}
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  borderRadius: 2,
+                                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#4CAF50',
+                                  },
+                                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#4CAF50',
+                                    borderWidth: 2,
+                                  },
+                                },
+                              }}
+                              InputProps={{ 
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <Person sx={{ color: '#4CAF50' }} />
+                                  </InputAdornment>
+                                )
+                              }}
+                            />
+                          </Zoom>
+                        </Box>
+
+                        <Zoom in timeout={1800}>
+                          <TextField
+                            fullWidth
+                            name="email"
+                            label="อีเมล"
+                            type="email"
+                            value={formData.email}
+                            onChange={handleInputChange}
+                            required
+                            disabled={isLoading}
+                            error={!!formErrors.email}
+                            helperText={formErrors.email}
+                            sx={{ 
+                              mb: 3,
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 2,
+                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: '#4CAF50',
+                                },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: '#4CAF50',
+                                  borderWidth: 2,
+                                },
+                              },
+                            }}
+                            InputProps={{ 
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <Email sx={{ color: '#4CAF50' }} />
+                                </InputAdornment>
+                              )
+                            }}
+                          />
+                        </Zoom>
+
+                        <Zoom in timeout={2000}>
+                          <TextField
+                            fullWidth
+                            name="password"
+                            label="รหัสผ่าน"
+                            type={showPassword ? 'text' : 'password'}
+                            value={formData.password}
+                            onChange={handleInputChange}
+                            required
+                            disabled={isLoading}
+                            error={!!formErrors.password}
+                            helperText={formErrors.password}
+                            sx={{ 
+                              mb: 2,
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 2,
+                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: '#4CAF50',
+                                },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: '#4CAF50',
+                                  borderWidth: 2,
+                                },
+                              },
+                            }}
+                            InputProps={{
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <Lock sx={{ color: '#4CAF50' }} />
+                                </InputAdornment>
+                              ),
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton 
+                                    aria-label="toggle password visibility" 
+                                    onClick={() => setShowPassword(v => !v)} 
+                                    edge="end"
+                                    sx={{ color: '#4CAF50' }}
+                                  >
+                                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                                  </IconButton>
+                                </InputAdornment>
+                              ),
+                            }}
+                          />
+                        </Zoom>
+
+                        <Zoom in timeout={2200}>
+                          <Box sx={{ mb: 3 }}>
+                            <LinearProgress 
+                              variant="determinate" 
+                              value={passwordStrength} 
+                              sx={{ 
+                                height: 8, 
+                                borderRadius: 6,
+                                backgroundColor: 'rgba(0,0,0,0.1)',
+                                '& .MuiLinearProgress-bar': {
+                                  backgroundColor: passwordStrength <= 25 ? '#f44336' : passwordStrength <= 50 ? '#ff9800' : passwordStrength <= 75 ? '#2196f3' : '#4caf50',
+                                }
+                              }} 
+                            />
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                              ความแข็งแรงรหัสผ่าน: {passwordStrength <= 25 ? 'อ่อน' : passwordStrength <= 50 ? 'พอใช้' : passwordStrength <= 75 ? 'ดี' : 'แข็งแรง'}
+                            </Typography>
+                          </Box>
+                        </Zoom>
+
+                        <Zoom in timeout={2400}>
+                          <TextField
+                            fullWidth
+                            name="confirmPassword"
+                            label="ยืนยันรหัสผ่าน"
+                            type={showConfirm ? 'text' : 'password'}
+                            value={formData.confirmPassword}
+                            onChange={handleInputChange}
+                            required
+                            disabled={isLoading}
+                            error={!!formErrors.confirmPassword}
+                            helperText={formErrors.confirmPassword}
+                            sx={{ 
+                              mb: 3,
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 2,
+                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: '#4CAF50',
+                                },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                  borderColor: '#4CAF50',
+                                  borderWidth: 2,
+                                },
+                              },
+                            }}
+                            InputProps={{
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <Lock sx={{ color: '#4CAF50' }} />
+                                </InputAdornment>
+                              ),
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton 
+                                    aria-label="toggle confirm visibility" 
+                                    onClick={() => setShowConfirm(v => !v)} 
+                                    edge="end"
+                                    sx={{ color: '#4CAF50' }}
+                                  >
+                                    {showConfirm ? <VisibilityOff /> : <Visibility />}
+                                  </IconButton>
+                                </InputAdornment>
+                              ),
+                            }}
+                          />
+                        </Zoom>
+
+                        <Zoom in timeout={2600}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox 
+                                checked={agree} 
+                                onChange={(e) => setAgree(e.target.checked)}
+                                sx={{
+                                  color: '#4CAF50',
+                                  '&.Mui-checked': {
+                                    color: '#4CAF50',
+                                  },
+                                }}
+                              />
+                            }
+                            label={
+                              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
+                                ฉันยอมรับ{' '}
+                                <MuiLink href="#" underline="hover" sx={{ color: '#4CAF50', fontWeight: 600 }}>เงื่อนไขการใช้งาน</MuiLink>{' '}และ{' '}
+                                <MuiLink href="#" underline="hover" sx={{ color: '#4CAF50', fontWeight: 600 }}>นโยบายความเป็นส่วนตัว</MuiLink>
+                              </Typography>
+                            }
+                            sx={{ mb: 2 }}
+                          />
+                        </Zoom>
+                        {formErrors.agree && (
+                          <Typography variant="caption" color="error" sx={{ display: 'block', mb: 2, fontWeight: 500 }}>
+                            {formErrors.agree}
+                          </Typography>
+                        )}
+
+                        <Zoom in timeout={2800}>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 2, 
+                            mb: 3, 
+                            p: 2, 
+                            bgcolor: 'rgba(76,175,80,0.05)', 
+                            borderRadius: 2,
+                            border: '1px solid rgba(76,175,80,0.1)'
+                          }}>
+                            <Box sx={{ 
+                              width: 10, 
+                              height: 10, 
+                              borderRadius: '50%', 
+                              bgcolor: formData.password.length >= 8 ? '#4caf50' : '#e0e0e0',
+                              transition: 'all 0.3s ease'
+                            }} />
+                            <Typography variant="caption" sx={{ fontWeight: 500 }}>อย่างน้อย 8 ตัวอักษร</Typography>
+                            <Box sx={{ 
+                              width: 10, 
+                              height: 10, 
+                              borderRadius: '50%', 
+                              bgcolor: /[A-Z]/.test(formData.password) ? '#4caf50' : '#e0e0e0',
+                              transition: 'all 0.3s ease'
+                            }} />
+                            <Typography variant="caption" sx={{ fontWeight: 500 }}>มีตัวพิมพ์ใหญ่</Typography>
+                            <Box sx={{ 
+                              width: 10, 
+                              height: 10, 
+                              borderRadius: '50%', 
+                              bgcolor: /[0-9]/.test(formData.password) ? '#4caf50' : '#e0e0e0',
+                              transition: 'all 0.3s ease'
+                            }} />
+                            <Typography variant="caption" sx={{ fontWeight: 500 }}>มีตัวเลข</Typography>
+                          </Box>
+                        </Zoom>
+
+                        <Zoom in timeout={3000}>
+                          <Button
+                            type="submit"
+                            fullWidth
+                            variant="contained"
+                            size="large"
+                            disabled={isLoading || !agree}
+                            sx={{
+                              py: 1.6,
+                              borderRadius: 3,
+                              fontSize: '1.1rem',
+                              fontWeight: 700,
+                              textTransform: 'none',
+                              boxShadow: '0 8px 24px rgba(76, 175, 80, 0.4)',
+                              background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                              '&:hover': { 
+                                background: 'linear-gradient(135deg, #45a049 0%, #4CAF50 100%)',
+                                boxShadow: '0 12px 32px rgba(76, 175, 80, 0.5)',
+                                transform: 'translateY(-2px)',
+                              },
+                              '&:disabled': {
+                                background: 'rgba(0,0,0,0.12)',
+                                color: 'rgba(0,0,0,0.26)',
+                              },
+                              transition: 'all 0.3s ease',
+                            }}
+                          >
+                            {isLoading ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <CircularProgress size={24} color="inherit" />
+                                <Typography>กำลังสร้างบัญชี...</Typography>
+                              </Box>
+                            ) : (
+                              'สมัครสมาชิก'
+                            )}
+                          </Button>
+                        </Zoom>
+
+                        <Divider sx={{ my: 4 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ px: 2, bgcolor: 'background.paper' }}>
+                            หรือ
+                          </Typography>
+                        </Divider>
+
+                        <Zoom in timeout={3200}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+                              มีบัญชีอยู่แล้ว?
+                            </Typography>
+                            <Link 
+                              component={RouterLink} 
+                              to="/signin" 
+                              sx={{ 
+                                color: '#4CAF50', 
+                                textDecoration: 'none', 
+                                fontWeight: 700,
+                                fontSize: '1.1rem',
+                                '&:hover': {
+                                  textDecoration: 'underline',
+                                }
+                              }}
+                            >
+                              เข้าสู่ระบบ
+                            </Link>
+                          </Box>
+                        </Zoom>
+                      </Box>
+                      </Box>
+                    </Fade>
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
-          </Grid>
-        </Paper>
+          </Paper>
+        </Fade>
       </Container>
     </Box>
   );

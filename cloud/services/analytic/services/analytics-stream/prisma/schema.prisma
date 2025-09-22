@@ -163,9 +163,9 @@ model AnalyticsAgg {
   bucketStart DateTime @map("bucket_start") @db.Timestamptz(6)
   windowS     Int      @map("window_s")
   tenantId    String   @map("tenant_id")
-  factoryId   String   @map("factory_id")
-  machineId   String   @map("machine_id")
-  sensorId    String?  @map("sensor_id")
+  farmId      String   @map("farm_id")
+  houseId     String   @map("house_id")
+  sensorId    String   @map("sensor_id")
   metric      String
   countN      BigInt   @default(0) @map("count_n")
   sumVal      Float?   @map("sum_val")
@@ -177,9 +177,9 @@ model AnalyticsAgg {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@id([tenantId, factoryId, machineId, metric, windowS, bucketStart], map: "analytics_agg_pk")
+  @@id([tenantId, farmId, houseId, metric, windowS, bucketStart], map: "analytics_agg_pk")
+  @@unique([tenantId, farmId, houseId, sensorId, metric, windowS, bucketStart], map: "analytics_agg_conflict_idx")
   @@index([bucketStart(sort: Desc)])
-  @@index([factoryId, machineId, metric, windowS, bucketStart(sort: Desc)], map: "idx_agg_lookup")
   @@map("analytics_agg")
   @@schema("analytics")
 }
@@ -227,14 +227,13 @@ model AnalyticsEventRollup {
   @@schema("analytics")
 }
 
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model AnalyticsKpi {
   period      String   @map("period") // Changed from Unsupported("kpi_period") to String
   periodStart DateTime @map("period_start") @db.Timestamptz(6)
   tenantId    String   @map("tenant_id")
-  factoryId   String   @map("factory_id")
-  machineId   String   @map("machine_id")
-  sensorId    String?  @map("sensor_id")
+  farmId      String   @map("farm_id")
+  houseId     String   @map("house_id")
+  sensorId    String   @map("sensor_id")
   metric      String
   n           BigInt   @default(0)
   meanVal     Float?   @map("mean_val")
@@ -246,19 +245,18 @@ model AnalyticsKpi {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@id([tenantId, factoryId, machineId, metric, period, periodStart], map: "analytics_kpi_pk")
+  @@id([tenantId, farmId, houseId, sensorId, metric, period, periodStart], map: "analytics_kpi_pk")
   @@index([periodStart(sort: Desc)])
-  @@index([factoryId, machineId, metric, period, periodStart(sort: Desc)], map: "idx_kpi_lookup")
+  @@index([tenantId, farmId, houseId, metric, period, periodStart(sort: Desc)], map: "idx_kpi_lookup")
   @@map("analytics_kpi")
-  @@ignore
   @@schema("analytics")
 }
 
 model AnalyticsAnomaly {
   time      DateTime @db.Timestamptz(6)
   tenantId  String   @map("tenant_id")
-  factoryId String   @map("factory_id")
-  machineId String   @map("machine_id")
+  farmId    String   @map("farm_id")
+  houseId   String   @map("house_id")
   sensorId  String?  @map("sensor_id")
   metric    String
   ruleCode  String   @map("rule_code")
@@ -271,9 +269,9 @@ model AnalyticsAnomaly {
   details   Json?
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@id([tenantId, factoryId, machineId, metric, time, ruleCode], map: "analytics_anomaly_pk")
+  @@id([tenantId, farmId, houseId, metric, time, ruleCode], map: "analytics_anomaly_pk")
   @@index([time(sort: Desc)])
-  @@index([factoryId, machineId, metric, time(sort: Desc)], map: "idx_anomaly_lookup")
+  @@index([tenantId, farmId, houseId, metric, time(sort: Desc)], map: "idx_anomaly_lookup")
   @@map("analytics_anomaly")
   @@schema("analytics")
 }
@@ -287,7 +285,7 @@ model AnalyticsAlerts {
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(6)
   tenantId       String    @map("tenant_id")
-  factoryId      String    @map("factory_id")
+  farmId         String    @map("farm_id")
   deviceId       String    @map("device_id")
   metric         String
   value          Float
@@ -299,21 +297,19 @@ model AnalyticsAlerts {
   @@index([metric, alertTime], map: "idx_analytics_alerts_metric_time")
   @@index([isResolved, createdAt], map: "idx_analytics_alerts_resolved")
   @@index([severity, createdAt], map: "idx_analytics_alerts_severity")
-  @@index([tenantId, factoryId, deviceId], map: "idx_analytics_alerts_tenant_factory_device")
+  @@index([tenantId, farmId, deviceId], map: "idx_analytics_alerts_tenant_farm_device")
   @@index([alertType, createdAt], map: "idx_analytics_alerts_type")
   @@map("analytics_alerts")
   @@schema("analytics")
 }
 
-/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model analytics_spec_limits {
   tenant_id  String
-  factory_id String
-  machine_id String
+  farm_id    String
+  house_id   String
   sensor_id  String?
   metric     String
-  period     String   @map("period") // Changed from Unsupported("tstzrange") to String
+  period     String   @map("period")
   cl         Float?
   ucl        Float?
   lcl        Float?
@@ -321,9 +317,8 @@ model analytics_spec_limits {
   notes      String?
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
-  @@id([tenant_id, factory_id, machine_id, metric, period], map: "analytics_spec_limits_pk")
-  @@index([factory_id, machine_id, metric], map: "idx_spec_lookup")
-  @@ignore
+  @@id([tenant_id, farm_id, house_id, metric, period], map: "analytics_spec_limits_pk")
+  @@index([tenant_id, farm_id, house_id, metric], map: "idx_spec_lookup")
   @@schema("analytics")
 }
 
@@ -393,6 +388,7 @@ model FcrCalculation {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  @@unique([tenantId, farmId, houseId, flockId, periodStart, periodEnd], map: "fcr_calculations_conflict_idx")
   @@index([tenantId, farmId, houseId, flockId])
   @@index([periodStart, periodEnd])
   @@index([fcrValue])
@@ -497,24 +493,28 @@ model Prediction {
 // Health Analytics Models
 // ===========================================
 model HealthMetrics {
-  id          String   @id @default(cuid())
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
   tenantId    String   @map("tenant_id")
   farmId      String   @map("farm_id")
   houseId     String   @map("house_id")
   flockId     String   @map("flock_id")
   measurementDate DateTime @map("measurement_date") @db.Timestamptz(6)
-  mortalityRate Float  @map("mortality_rate") // Deaths per 1000 animals
-  morbidityRate Float  @map("morbidity_rate") // Sick animals per 1000
+  mortalityRate Float?  @map("mortality_rate") // Deaths per 1000 animals
+  morbidityRate Float?  @map("morbidity_rate") // Sick animals per 1000
   avgWeight   Float?   @map("avg_weight") // Average weight
   feedIntake  Float?   @map("feed_intake") // Daily feed intake
   waterIntake Float?   @map("water_intake") // Daily water intake
   temperature Float?   // Average temperature
   humidity    Float?   // Average humidity
+  co2Level    Float?   @map("co2_level")
+  nh3Level    Float?   @map("nh3_level")
   metadata    Json?    @default("{}")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([tenantId, farmId, houseId, flockId])
   @@index([measurementDate])
+  @@unique([tenantId, farmId, houseId, flockId, measurementDate], map: "health_metrics_conflict_idx")
   @@map("health_metrics")
   @@schema("analytics")
 }
@@ -523,7 +523,7 @@ model HealthMetrics {
 // Production Analytics Models
 // ===========================================
 model ProductionMetrics {
-  id          String   @id @default(cuid())
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
   tenantId    String   @map("tenant_id")
   farmId      String   @map("farm_id")
   houseId     String   @map("house_id")
@@ -538,6 +538,7 @@ model ProductionMetrics {
   metadata    Json?    @default("{}")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  @@unique([tenantId, farmId, houseId, flockId, periodStart, periodEnd], map: "production_metrics_conflict_idx")
   @@index([tenantId, farmId, houseId, flockId])
   @@index([periodStart, periodEnd])
   @@map("production_metrics")

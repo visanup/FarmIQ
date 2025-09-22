@@ -30,7 +30,7 @@ import {
   handleBreedSnapshot,
 } from '../pipelines/dimUpserts';
 
-// analytics mappers
+// analytics mappers (for measurement conversion only)
 import {
   toMeasurementsFromFcrCalculation,
   toMeasurementsFromHealthMetrics,
@@ -231,25 +231,30 @@ export const routes: Record<string, Handler> = {
     await handleBreedSnapshot(obj); // pass FULL event; handler unwraps .data
     },
 
-  // Analytics calculated topics
+  // Analytics calculated topics (convert to measurements only)
   [env.TOPIC_ANALYTICS_FCR]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
+    console.log('📊 [FCR] Converting analytics event to measurement');
     await handleAsMeasurement(toMeasurementsFromFcrCalculation, raw);
   },
   [env.TOPIC_ANALYTICS_HEALTH]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
+    console.log('📊 [HEALTH] Converting analytics event to measurement');
     await handleAsMeasurement(toMeasurementsFromHealthMetrics, raw);
   },
   [env.TOPIC_ANALYTICS_PRODUCTION]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
+    console.log('📊 [PRODUCTION] Converting analytics event to measurement');
     await handleAsMeasurement(toMeasurementsFromProductionMetrics, raw);
   },
   [env.TOPIC_ANALYTICS_ENVIRONMENTAL]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
+    console.log('📊 [ENVIRONMENTAL] Converting analytics event to measurement');
     await handleAsMeasurement(toMeasurementsFromEnvironmentalMetrics, raw);
   },
   [env.TOPIC_ANALYTICS_SIZE]: async (_t, msg) => {
     const raw = msg.value?.toString('utf8') ?? '{}';
+    console.log('📊 [SIZE_DISTRIBUTION] Converting analytics event to measurement');
     await handleAsMeasurement(toMeasurementsFromSizeDistribution, raw);
   },
 };

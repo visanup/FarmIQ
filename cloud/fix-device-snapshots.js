@@ -71,3 +71,4 @@ async function fixDeviceSnapshots() {
 }
 
 fixDeviceSnapshots().catch(console.error);
+

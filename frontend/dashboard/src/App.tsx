@@ -29,6 +29,7 @@ import FormulaManagementPage from './pages/formula/FormulaManagementPage';
 import HousesPage from './pages/houses/HousesPage';
 import FlocksPage from './pages/flocks/FlocksPage';
 import ExternalDataSourcesPage from './pages/external-data-sources/ExternalDataSourcesPage';
+import ReportsPage from './pages/reports/ReportsPage';
 import SettingsPage from './pages/settings/SettingsPage';
 
 // Create a client
@@ -87,6 +88,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/houses" element={<HousesPage />} />
       <Route path="/flocks" element={<FlocksPage />} />
       <Route path="/external-data-sources" element={<ExternalDataSourcesPage />} />
+      <Route path="/reports" element={<ReportsPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

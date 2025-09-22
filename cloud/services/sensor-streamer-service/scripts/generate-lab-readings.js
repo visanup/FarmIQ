@@ -17,7 +17,7 @@ const prisma = new PrismaClient();
 // Configuration - Reduced for testing
 const CUSTOMERS = 1;
 const FARMS_PER_CUSTOMER = 1;
-const DAYS = 7; // Reduced from 60 to 7 days
+const DAYS = Number(process.env.DAYS || 60);
 
 let globalTimestampCounter = 0;
 

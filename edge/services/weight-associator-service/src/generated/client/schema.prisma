@@ -1,0 +1,74 @@
+// Weight Associator Service Prisma Schema
+// Uses shared database with separate schema for microservice isolation
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["edge_weight"]
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
+  output        = "../src/generated/client"
+}
+
+// Weight Associator Service Models
+model WeightReading {
+  id        String   @id @default(cuid())
+  tenantId  String
+  farmId    String?
+  houseId   String?
+  stationId String?
+  sensorId  String?
+  value     Float
+  unit      String
+  quality   String
+  metadata  Json?
+  timestamp DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, timestamp])
+  @@index([sensorId, timestamp])
+  @@map("weight_readings")
+  @@schema("edge_weight")
+}
+
+model LabReading {
+  id        String   @id @default(cuid())
+  sampleId  String   @unique
+  farmId    String?
+  tenantId  String
+  testType  String
+  value     Float
+  unit      String
+  result    String?
+  metadata  Json?
+  timestamp DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sampleId, testType])
+  @@index([tenantId, timestamp])
+  @@map("lab_readings")
+  @@schema("edge_weight")
+}
+
+model WeightAssociation {
+  id         String   @id @default(cuid())
+  mediaId    String
+  readingId  String
+  deltaMs    Int
+  strategy   String
+  confidence Float?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([mediaId, readingId])
+  @@index([mediaId])
+  @@index([readingId])
+  @@map("weight_associations")
+  @@schema("edge_weight")
+}

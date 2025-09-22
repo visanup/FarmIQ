@@ -58,15 +58,49 @@ export class AuthService {
     // Create email verification token (valid 24h)
     const vExp = new Date();
     vExp.setHours(vExp.getHours() + 24);
-    const vtoken = jwt.sign({ userId: user.id, type: 'verify' }, JWT_SECRET, {
+    let vtoken = jwt.sign({ 
+      userId: user.id, 
+      type: 'verify',
+      jti: crypto.randomUUID() // Add unique identifier
+    }, JWT_SECRET, {
       algorithm: JWT_ALGORITHM,
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
       expiresIn: '24h',
     });
-    await prisma.verificationToken.create({
-      data: { token: vtoken, userId: user.id, expiresAt: vExp },
-    });
+    
+    // Check if token already exists and retry if needed
+    let attempts = 0;
+    let created = false;
+    while (!created && attempts < 3) {
+      try {
+        await prisma.verificationToken.create({
+          data: { token: vtoken, userId: user.id, expiresAt: vExp },
+        });
+        created = true;
+      } catch (error: any) {
+        if (error.code === 'P2002' && error.meta?.target?.includes('token')) {
+          // Token already exists, generate a new one
+          vtoken = jwt.sign({ 
+            userId: user.id, 
+            type: 'verify',
+            jti: crypto.randomUUID()
+          }, JWT_SECRET, {
+            algorithm: JWT_ALGORITHM,
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            expiresIn: '24h',
+          });
+          attempts++;
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    if (!created) {
+      throw new Error('Failed to create verification token after multiple attempts');
+    }
 
     return {
       user: this.formatUserResponse(user),
@@ -149,13 +183,50 @@ export class AuthService {
     if (!user) throw new Error('User not found');
     const vExp = new Date();
     vExp.setHours(vExp.getHours() + 24);
-    const vtoken = jwt.sign({ userId: user.id, type: 'verify' }, JWT_SECRET, {
+    let vtoken = jwt.sign({ 
+      userId: user.id, 
+      type: 'verify',
+      jti: crypto.randomUUID() // Add unique identifier
+    }, JWT_SECRET, {
       algorithm: JWT_ALGORITHM,
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
       expiresIn: '24h',
     });
-    await prisma.verificationToken.create({ data: { token: vtoken, userId: user.id, expiresAt: vExp } });
+    
+    // Check if token already exists and retry if needed
+    let attempts = 0;
+    let created = false;
+    while (!created && attempts < 3) {
+      try {
+        await prisma.verificationToken.create({ 
+          data: { token: vtoken, userId: user.id, expiresAt: vExp } 
+        });
+        created = true;
+      } catch (error: any) {
+        if (error.code === 'P2002' && error.meta?.target?.includes('token')) {
+          // Token already exists, generate a new one
+          vtoken = jwt.sign({ 
+            userId: user.id, 
+            type: 'verify',
+            jti: crypto.randomUUID()
+          }, JWT_SECRET, {
+            algorithm: JWT_ALGORITHM,
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            expiresIn: '24h',
+          });
+          attempts++;
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    if (!created) {
+      throw new Error('Failed to create verification token after multiple attempts');
+    }
+    
     return { token: vtoken };
   }
 
@@ -174,13 +245,50 @@ export class AuthService {
     if (!user) return; // to avoid user enumeration
     const exp = new Date();
     exp.setHours(exp.getHours() + 2);
-    const token = jwt.sign({ userId: user.id, type: 'reset' }, JWT_SECRET, {
+    let token = jwt.sign({ 
+      userId: user.id, 
+      type: 'reset',
+      jti: crypto.randomUUID() // Add unique identifier
+    }, JWT_SECRET, {
       algorithm: JWT_ALGORITHM,
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
       expiresIn: '2h',
     });
-    await prisma.passwordResetToken.create({ data: { token, userId: user.id, expiresAt: exp } });
+    
+    // Check if token already exists and retry if needed
+    let attempts = 0;
+    let created = false;
+    while (!created && attempts < 3) {
+      try {
+        await prisma.passwordResetToken.create({ 
+          data: { token, userId: user.id, expiresAt: exp } 
+        });
+        created = true;
+      } catch (error: any) {
+        if (error.code === 'P2002' && error.meta?.target?.includes('token')) {
+          // Token already exists, generate a new one
+          token = jwt.sign({ 
+            userId: user.id, 
+            type: 'reset',
+            jti: crypto.randomUUID()
+          }, JWT_SECRET, {
+            algorithm: JWT_ALGORITHM,
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            expiresIn: '2h',
+          });
+          attempts++;
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    if (!created) {
+      throw new Error('Failed to create password reset token after multiple attempts');
+    }
+    
     return { token };
   }
 

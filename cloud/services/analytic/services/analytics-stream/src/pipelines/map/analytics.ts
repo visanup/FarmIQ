@@ -2,7 +2,7 @@
 // Handlers for analytics-specific Kafka topics
 
 import { z } from 'zod';
-import { Measurement } from '../../types/measurement';
+import type { Measurement } from '../../types/measurement';
 
 const Time = z.preprocess((input) => {
   if (input instanceof Date) return input;
@@ -13,6 +13,14 @@ const Time = z.preprocess((input) => {
 
 const sanitize = (x: string) =>
   x.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
+
+// ensure meta values become string tags
+function stringifyTags(meta?: Record<string, unknown>): Record<string, string> {
+  if (!meta) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(meta)) out[k] = v == null ? '' : String(v);
+  return out;
+}
 
 /* ------------------------------------------------------------------------------------------------
  * 1) FCR CALCULATION (topic: analytics.fcr.calculation.v1)
@@ -51,7 +59,7 @@ export function toMeasurementsFromFcrCalculation(o: any): Measurement[] | null {
       house_id: d.house_id,
       flock_id: d.flock_id,
       ...(d.breed && { breed: d.breed }),
-      ...d.meta
+      ...stringifyTags(d.meta)
     }
   };
 
@@ -100,7 +108,7 @@ export function toMeasurementsFromHealthMetrics(o: any): Measurement[] | null {
       farm_id: d.farm_id,
       house_id: d.house_id,
       flock_id: d.flock_id,
-      ...d.meta
+      ...stringifyTags(d.meta)
     }
   };
 
@@ -221,7 +229,7 @@ export function toMeasurementsFromEnvironmentalMetrics(o: any): Measurement[] | 
     tags: {
       farm_id: d.farm_id,
       house_id: d.house_id,
-      ...d.meta
+      ...stringifyTags(d.meta)
     }
   };
 
@@ -288,7 +296,7 @@ export function toMeasurementsFromSizeDistribution(o: any): Measurement[] | null
       house_id: d.house_id,
       flock_id: d.flock_id,
       weight_class: d.weight_class,
-      ...d.meta
+      ...stringifyTags(d.meta)
     }
   };
 

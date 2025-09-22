@@ -1,0 +1,1 @@
+cd D:\FarmIQ\device\mock-iot-service && set MQTT_URL=mqtt://localhost:1883 && set ENV_SENSORS_ENABLED=true && set WATER_SENSORS_ENABLED=true && set FEED_SENSOR_ENABLED=true && set CAPTURE_ENABLED=false && set VISION_INFERENCE_ENABLED=false && node src/index.js

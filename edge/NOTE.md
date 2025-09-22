@@ -43,6 +43,7 @@ protocol websockets
 รันใน CMD (Admin)
 netsh advfirewall firewall add rule name="MQTT 1883" dir=in action=allow protocol=TCP localport=1883 profile=domain,private
 netsh advfirewall firewall add rule name="MQTT WS 9002" dir=in action=allow protocol=TCP localport=9002 profile=domain,private
+
 --------------------
 
 ## เงื่อนไขที่ subscribe (QoS 1 ทั้งหมด)

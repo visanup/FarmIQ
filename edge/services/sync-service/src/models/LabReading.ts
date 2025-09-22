@@ -1,16 +1,42 @@
 // src/models/LabReading.ts
 import { Entity, Column, PrimaryColumn, Index } from "typeorm";
 
-@Entity({ name: "lab_readings", schema: "sensors" })
-@Index(["tenant_id", "station_id", "metric", "time"])
+@Entity({ name: "lab_readings", schema: "edge_sensor" })
+@Index("idx_lab_tenant_robot_timestamp", ["tenantId", "robotId", "timestamp"])
 export class LabReading {
-  @PrimaryColumn("timestamptz") time!: Date;
-  @PrimaryColumn("text") tenant_id!: string;
-  @PrimaryColumn("text") station_id!: string;
-  @PrimaryColumn("text") sensor_id!: string;
-  @PrimaryColumn("text") metric!: string;
+  @PrimaryColumn({ type: "text", name: "id" })
+  id!: string;
 
-  @Column("double precision") value!: number;
-  @Column("text", { default: "clean" }) quality!: string;
-  @Column("jsonb", { nullable: true }) payload?: Record<string, any>;
+  @Column({ type: "text", name: "tenantId" })
+  tenantId!: string;
+
+  @Column({ type: "text", name: "robotId" })
+  robotId!: string;
+
+  @Column({ type: "text", name: "runId" })
+  runId!: string;
+
+  @Column({ type: "text", name: "sampleId" })
+  sampleId!: string;
+
+  @Column({ type: "text", name: "metric" })
+  metric!: string;
+
+  @Column({ type: "double precision", name: "value" })
+  value!: number;
+
+  @Column({ type: "text", name: "quality" })
+  quality!: string;
+
+  @Column({ type: "jsonb", name: "payload", nullable: true })
+  payload?: Record<string, any> | null;
+
+  @Column({ type: "timestamp", name: "timestamp" })
+  timestamp!: Date;
+
+  @Column({ type: "timestamp", name: "createdAt" })
+  createdAt!: Date;
+
+  @Column({ type: "timestamp", name: "updatedAt" })
+  updatedAt!: Date;
 }

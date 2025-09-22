@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -8,9 +8,28 @@ import {
   Tab,
   useTheme,
   useMediaQuery,
+  Card,
+  CardContent,
+  Avatar,
+  CircularProgress,
+  Fade,
+  Zoom,
+  alpha,
+  LinearProgress,
 } from '@mui/material';
+import {
+  Psychology as PsychologyIcon,
+  TrendingUp as TrendingUpIcon,
+  Assessment as AssessmentIcon,
+  Timeline as TimelineIcon,
+  Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+} from '@mui/icons-material';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
-import { useFarms, useAnimals, usePerformanceMetrics } from '../../hooks/useApi';
+import { useAIData } from '../../hooks/useAIData';
+import { safeRenderValue, safeRenderNumber } from '../../utils/displayUtils';
 import { AIControls } from './components/AIControls';
 import { AIInsights } from './components/AIInsights';
 import { PredictionCharts } from './components/PredictionCharts';
@@ -120,14 +139,112 @@ const AIAnalyticsPage: React.FC = () => {
   const [aiEnabled, setAiEnabled] = useState(true);
   const [confidence, setConfidence] = useState(85); // %
 
+  // Use custom hook for data fetching
+  const { 
+    data, 
+    isLoading, 
+    error, 
+    lastUpdate, 
+    refresh 
+  } = useAIData({
+    selectedFarm,
+    selectedAnimal,
+    predictionHorizon
+  });
+
+  const {
+    farms,
+    animals,
+    sensorReadings,
+    performanceMetrics,
+    aiData
+  } = data;
+
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const { data: farms = [], isLoading: farmsLoading } = useFarms();
-  const { data: animals = [], isLoading: animalsLoading } = useAnimals();
-  const { data: performanceMetrics = [], isLoading: metricsLoading } = usePerformanceMetrics();
+  const handleRefresh = () => {
+    refresh();
+  };
 
-  const aiData = generateAIPredictions();
+  // Generate AI predictions from real sensor data
+  const generateAIPredictionsFromRealData = (readings: any[]) => {
+    const data = [];
+    const now = new Date();
+    
+    // Process real sensor data for historical trends
+    const temperatureReadings = readings.filter(r => r.sensorType === 'temperature');
+    const humidityReadings = readings.filter(r => r.sensorType === 'humidity');
+    
+    // Calculate baseline metrics from real data
+    const avgTemperature = temperatureReadings.length > 0 ? 
+      temperatureReadings.reduce((sum, r) => sum + (typeof r.value === 'number' ? r.value : 0), 0) / temperatureReadings.length : 25;
+    const avgHumidity = humidityReadings.length > 0 ? 
+      humidityReadings.reduce((sum, r) => sum + (typeof r.value === 'number' ? r.value : 0), 0) / humidityReadings.length : 60;
+    
+    // Historical data (past 30 days) - enhanced with real data patterns
+    for (let i = 30; i >= 0; i--) {
+      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dayReadings = readings.filter(r => {
+        const readingDate = new Date(r.timestamp);
+        return readingDate.toDateString() === date.toDateString();
+      });
+      
+      const dayTemp = dayReadings.filter(r => r.sensorType === 'temperature');
+      const dayHumidity = dayReadings.filter(r => r.sensorType === 'humidity');
+      
+      const actualTemp = dayTemp.length > 0 ? 
+        dayTemp.reduce((sum, r) => sum + (typeof r.value === 'number' ? r.value : 0), 0) / dayTemp.length : 
+        avgTemperature + Math.sin(i * 0.1) * 2;
+      
+      const actualHumidity = dayHumidity.length > 0 ? 
+        dayHumidity.reduce((sum, r) => sum + (typeof r.value === 'number' ? r.value : 0), 0) / dayHumidity.length : 
+        avgHumidity + Math.cos(i * 0.15) * 10;
+      
+      // Calculate FCR and ADG based on environmental conditions
+      const fcrBase = 1.8 + (actualTemp - 25) * 0.02 + (actualHumidity - 60) * 0.001;
+      const adgBase = 0.6 + (25 - actualTemp) * 0.01 + (actualHumidity - 60) * 0.0005;
+      
+      data.push({
+        date: date.toLocaleDateString('th-TH', { month: 'short', day: 'numeric' }),
+        actualFCR: fcrBase + Math.random() * 0.2,
+        predictedFCR: fcrBase + Math.random() * 0.2,
+        actualADG: adgBase + Math.random() * 0.1,
+        predictedADG: adgBase + Math.random() * 0.1,
+        actualWeight: 50 + i * 2 + Math.random() * 3,
+        predictedWeight: 50 + i * 2 + Math.random() * 3,
+        temperature: actualTemp,
+        humidity: actualHumidity,
+        feedIntake: 2.5 + Math.random() * 0.3,
+        waterIntake: 4.0 + Math.random() * 0.5,
+      });
+    }
+    
+    // Future predictions (next 30 days) - based on historical trends
+    for (let i = 1; i <= 30; i++) {
+      const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+      const trendFactor = Math.sin(i * 0.1) * 0.1;
+      
+      data.push({
+        date: date.toLocaleDateString('th-TH', { month: 'short', day: 'numeric' }),
+        actualFCR: null,
+        predictedFCR: 1.7 + trendFactor + Math.random() * 0.2,
+        actualADG: null,
+        predictedADG: 0.65 + trendFactor + Math.random() * 0.1,
+        actualWeight: null,
+        predictedWeight: 50 + (30 + i) * 2 + trendFactor * 2,
+        temperature: avgTemperature + Math.sin(i * 0.1) * 3,
+        humidity: avgHumidity + Math.cos(i * 0.15) * 15,
+        feedIntake: 2.5 + Math.random() * 0.3,
+        waterIntake: 4.0 + Math.random() * 0.5,
+        isPrediction: true,
+      });
+    }
+    
+    return data;
+  };
+
+
   const weightDistribution = generateWeightDistribution();
   const healthPredictions = generateHealthPredictions();
   const performanceRadar = generatePerformanceRadar();
@@ -180,11 +297,96 @@ const AIAnalyticsPage: React.FC = () => {
     },
   ];
 
-  if (farmsLoading || animalsLoading || metricsLoading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <Typography>กำลังโหลดข้อมูล AI Analytics...</Typography>
+        <Box 
+          display="flex" 
+          flexDirection="column"
+          justifyContent="center" 
+          alignItems="center" 
+          minHeight="500px"
+          sx={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: 4,
+            p: 6,
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <Box sx={{ 
+            position: 'absolute', 
+            top: -50, 
+            right: -50, 
+            width: 200, 
+            height: 200, 
+            borderRadius: '50%', 
+            background: 'rgba(255,255,255,0.1)', 
+            filter: 'blur(40px)' 
+          }} />
+          <Box sx={{ 
+            position: 'absolute', 
+            bottom: -30, 
+            left: -30, 
+            width: 150, 
+            height: 150, 
+            borderRadius: '50%', 
+            background: 'rgba(255,255,255,0.08)', 
+            filter: 'blur(30px)' 
+          }} />
+          
+          <Fade in timeout={800}>
+            <Box sx={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+              <Avatar sx={{ 
+                width: 80, 
+                height: 80, 
+                mb: 3, 
+                background: 'linear-gradient(135deg, #9C27B0, #673AB7)',
+                boxShadow: '0 8px 32px rgba(156, 39, 176, 0.4)'
+              }}>
+                <PsychologyIcon sx={{ fontSize: 40 }} />
+              </Avatar>
+              
+              <Typography variant="h3" sx={{ 
+                fontWeight: 800, 
+                mb: 2, 
+                background: 'linear-gradient(135deg, #ffffff, #f0f0f0)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                AI Predictive Analytics
+              </Typography>
+              
+              <Typography variant="h5" sx={{ 
+                fontWeight: 600, 
+                mb: 3, 
+                color: 'rgba(255,255,255,0.9)',
+                textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+              }}>
+                กำลังวิเคราะห์ข้อมูลด้วย AI...
+              </Typography>
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <LinearProgress 
+                  sx={{ 
+                    width: 200, 
+                    height: 8, 
+                    borderRadius: 4,
+                    background: 'rgba(255,255,255,0.2)',
+                    '& .MuiLinearProgress-bar': {
+                      background: 'linear-gradient(90deg, #9C27B0, #673AB7)',
+                      borderRadius: 4
+                    }
+                  }} 
+                />
+                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                  กรุณารอสักครู่
+                </Typography>
+              </Box>
+            </Box>
+          </Fade>
         </Box>
       </DashboardLayout>
     );
@@ -193,119 +395,359 @@ const AIAnalyticsPage: React.FC = () => {
   return (
     <DashboardLayout>
       <Box sx={{ p: { xs: 2, sm: 3 } }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-            <Box>
-              <Typography 
-                variant="h4" 
-                component="h1" 
-                gutterBottom
-                sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
-                  fontWeight: 700,
-                  color: 'primary.main'
-                }}
-              >
-                AI Predictive Analytics
-              </Typography>
-              <Typography 
-                variant="body1" 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
-              >
-                การวิเคราะห์เชิงทำนายด้วยปัญญาประดิษฐ์ สำหรับการจัดการฟาร์ม
-              </Typography>
+        {/* Premium Hero Header */}
+        <Fade in timeout={1000}>
+          <Card
+            elevation={0}
+            sx={{
+              mb: 4,
+              p: { xs: 3, md: 4 },
+              borderRadius: 4,
+              position: 'relative',
+              overflow: 'hidden',
+              border: `1px solid ${alpha('#9C27B0', 0.2)}`,
+              background: `linear-gradient(135deg, ${alpha('#9C27B0', 0.08)} 0%, ${alpha('#673AB7', 0.05)} 100%)`,
+              backdropFilter: 'blur(20px)',
+            }}
+          >
+            <Box sx={{ 
+              position: 'absolute', 
+              right: -60, 
+              top: -60, 
+              width: 300, 
+              height: 300, 
+              borderRadius: '50%', 
+              background: `radial-gradient(circle, ${alpha('#9C27B0', 0.1)} 0%, transparent 70%)`,
+              filter: 'blur(40px)'
+            }} />
+            <Box sx={{ 
+              position: 'absolute', 
+              right: 60, 
+              bottom: -80, 
+              width: 350, 
+              height: 350, 
+              borderRadius: '50%', 
+              background: `radial-gradient(circle, ${alpha('#673AB7', 0.08)} 0%, transparent 70%)`,
+              filter: 'blur(50px)'
+            }} />
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+              <Box>
+                <Box sx={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: 1.5, 
+                  mb: 2, 
+                  px: 2, 
+                  py: 1, 
+                  borderRadius: 999, 
+                  background: `linear-gradient(135deg, #9C27B0, #673AB7)`,
+                  color: 'white',
+                  boxShadow: `0 8px 24px ${alpha('#9C27B0', 0.4)}`
+                }}>
+                  <PsychologyIcon fontSize="small" />
+                  <Typography variant="body2" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
+                    AI Predictive Analytics
+                  </Typography>
+                </Box>
+                <Typography variant="h3" component="h1" sx={{ 
+                  fontWeight: 900, 
+                  letterSpacing: -0.5,
+                  background: `linear-gradient(135deg, #9C27B0, #673AB7)`,
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  mb: 1
+                }}>
+                  AI Predictive Analytics
+                </Typography>
+                <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 400, opacity: 0.8 }}>
+                  การวิเคราะห์เชิงทำนายด้วยปัญญาประดิษฐ์ สำหรับการจัดการฟาร์ม
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, opacity: 0.7 }}>
+                  อัปเดตล่าสุด: {lastUpdate.toLocaleString('th-TH')}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Avatar sx={{ 
+                  bgcolor: aiEnabled ? 'success.main' : 'error.main',
+                  width: 48,
+                  height: 48
+                }}>
+                  {aiEnabled ? <CheckCircleIcon /> : <ErrorIcon />}
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary">
+                    AI Status
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    {aiEnabled ? 'Active' : 'Inactive'}
+                  </Typography>
+                </Box>
+              </Box>
             </Box>
-          </Box>
-        </Box>
+          </Card>
+        </Fade>
 
         {/* AI Status Alert */}
-        {aiEnabled && (
+        <Fade in timeout={1200}>
           <Alert 
-            severity="success" 
+            severity={aiEnabled ? "success" : "warning"}
             sx={{ 
               mb: 3,
-              borderRadius: 2,
+              borderRadius: 3,
+              border: `1px solid ${alpha(aiEnabled ? '#4CAF50' : '#FF9800', 0.3)}`,
+              background: `linear-gradient(135deg, ${alpha(aiEnabled ? '#4CAF50' : '#FF9800', 0.1)} 0%, ${alpha('#ffffff', 0.9)} 100%)`,
+              backdropFilter: 'blur(10px)',
               '& .MuiAlert-message': {
                 width: '100%'
               }
             }}
           >
-            <AlertTitle>AI กำลังทำงาน</AlertTitle>
-            ระบบ AI กำลังวิเคราะห์ข้อมูลและสร้างการทำนายแบบเรียลไทม์
+            <AlertTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PsychologyIcon color={aiEnabled ? "success" : "warning"} />
+              {aiEnabled ? 'AI กำลังทำงาน' : 'AI ถูกปิดใช้งาน'}
+            </AlertTitle>
+            {aiEnabled 
+              ? 'ระบบ AI กำลังวิเคราะห์ข้อมูลและสร้างการทำนายแบบเรียลไทม์'
+              : 'กรุณาเปิดใช้งาน AI เพื่อเริ่มการวิเคราะห์และทำนาย'
+            }
           </Alert>
-        )}
+        </Fade>
 
-        {/* Controls */}
-        <AIControls
-          selectedFarm={selectedFarm}
-          setSelectedFarm={setSelectedFarm}
-          selectedAnimal={selectedAnimal}
-          setSelectedAnimal={setSelectedAnimal}
-          predictionHorizon={predictionHorizon}
-          setPredictionHorizon={setPredictionHorizon}
-          aiEnabled={aiEnabled}
-          setAiEnabled={setAiEnabled}
-          confidence={confidence}
-          setConfidence={setConfidence}
-          farms={farms}
-          animals={animals}
-        />
+        {/* Enhanced Controls */}
+        <Fade in timeout={1400}>
+          <Box>
+            <AIControls
+              selectedFarm={selectedFarm}
+              setSelectedFarm={setSelectedFarm}
+              selectedAnimal={selectedAnimal}
+              setSelectedAnimal={setSelectedAnimal}
+              predictionHorizon={predictionHorizon}
+              setPredictionHorizon={setPredictionHorizon}
+              aiEnabled={aiEnabled}
+              setAiEnabled={setAiEnabled}
+              confidence={confidence}
+              setConfidence={setConfidence}
+              farms={farms}
+              animals={animals}
+            />
+          </Box>
+        </Fade>
 
         {/* AI Insights */}
-        <AIInsights insights={aiInsights} />
+        <Fade in timeout={1600}>
+          <Box>
+            <AIInsights insights={aiInsights} />
+          </Box>
+        </Fade>
 
-        {/* Tabs */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
-            <Tab label="การทำนาย FCR & ADG" />
-            <Tab label="การกระจายน้ำหนัก" />
-            <Tab label="การทำนายสุขภาพ" />
-            <Tab label="ประสิทธิภาพโดยรวม" />
-          </Tabs>
-        </Box>
+        {/* Enhanced Tabs */}
+        <Fade in timeout={1800}>
+          <Card elevation={0} sx={{ 
+            mb: 3, 
+            borderRadius: 3, 
+            border: `1px solid ${alpha('#9C27B0', 0.2)}`,
+            background: `linear-gradient(135deg, ${alpha('#9C27B0', 0.05)} 0%, ${alpha('#ffffff', 0.9)} 100%)`,
+            backdropFilter: 'blur(10px)'
+          }}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs 
+                value={tabValue} 
+                onChange={(e, newValue) => setTabValue(newValue)}
+                sx={{
+                  '& .MuiTab-root': {
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    minHeight: 60,
+                    '&.Mui-selected': {
+                      color: '#9C27B0',
+                    }
+                  },
+                  '& .MuiTabs-indicator': {
+                    backgroundColor: '#9C27B0',
+                    height: 3,
+                    borderRadius: '3px 3px 0 0'
+                  }
+                }}
+              >
+                <Tab 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TrendingUpIcon fontSize="small" />
+                      การทำนาย FCR & ADG
+                    </Box>
+                  } 
+                />
+                <Tab 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <AssessmentIcon fontSize="small" />
+                      การกระจายน้ำหนัก
+                    </Box>
+                  } 
+                />
+                <Tab 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CheckCircleIcon fontSize="small" />
+                      การทำนายสุขภาพ
+                    </Box>
+                  } 
+                />
+                <Tab 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TimelineIcon fontSize="small" />
+                      ประสิทธิภาพโดยรวม
+                    </Box>
+                  } 
+                />
+              </Tabs>
+            </Box>
+          </Card>
+        </Fade>
 
         {/* Prediction Charts Tab */}
         <TabPanel value={tabValue} index={0}>
-          <PredictionCharts
-            aiData={aiData}
-            weightDistribution={weightDistribution}
-            healthPredictions={healthPredictions}
-            performanceRadar={performanceRadar}
-            currentFCR={currentFCR}
-            predictedFCR={predictedFCR}
-            currentADG={currentADG}
-            predictedADG={predictedADG}
-            confidence={confidence}
-          />
+          <Zoom in timeout={1000}>
+            <Box>
+              <PredictionCharts
+                aiData={aiData}
+                weightDistribution={weightDistribution}
+                healthPredictions={healthPredictions}
+                performanceRadar={performanceRadar}
+                currentFCR={currentFCR}
+                predictedFCR={predictedFCR}
+                currentADG={currentADG}
+                predictedADG={predictedADG}
+                confidence={confidence}
+              />
+            </Box>
+          </Zoom>
         </TabPanel>
 
         {/* Weight Distribution Tab */}
         <TabPanel value={tabValue} index={1}>
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary">
-              การกระจายน้ำหนัก - กำลังพัฒนา
-            </Typography>
-          </Box>
+          <Zoom in timeout={1000}>
+            <Card elevation={0} sx={{ 
+              p: 4, 
+              textAlign: 'center', 
+              borderRadius: 3,
+              border: `1px solid ${alpha('#9C27B0', 0.2)}`,
+              background: `linear-gradient(135deg, ${alpha('#9C27B0', 0.05)} 0%, ${alpha('#ffffff', 0.9)} 100%)`,
+              backdropFilter: 'blur(10px)'
+            }}>
+              <Avatar sx={{ 
+                width: 80, 
+                height: 80, 
+                mb: 3, 
+                mx: 'auto',
+                background: 'linear-gradient(135deg, #9C27B0, #673AB7)',
+                boxShadow: '0 8px 32px rgba(156, 39, 176, 0.4)'
+              }}>
+                <AssessmentIcon sx={{ fontSize: 40 }} />
+              </Avatar>
+              <Typography variant="h4" sx={{ 
+                fontWeight: 700, 
+                mb: 2, 
+                background: `linear-gradient(135deg, #9C27B0, #673AB7)`,
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                การกระจายน้ำหนัก
+              </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+                กำลังพัฒนา
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                ฟีเจอร์นี้จะแสดงการกระจายน้ำหนักของสัตว์ในฟาร์ม
+              </Typography>
+            </Card>
+          </Zoom>
         </TabPanel>
 
         {/* Health Prediction Tab */}
         <TabPanel value={tabValue} index={2}>
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary">
-              การทำนายสุขภาพ - กำลังพัฒนา
-            </Typography>
-          </Box>
+          <Zoom in timeout={1000}>
+            <Card elevation={0} sx={{ 
+              p: 4, 
+              textAlign: 'center', 
+              borderRadius: 3,
+              border: `1px solid ${alpha('#4CAF50', 0.2)}`,
+              background: `linear-gradient(135deg, ${alpha('#4CAF50', 0.05)} 0%, ${alpha('#ffffff', 0.9)} 100%)`,
+              backdropFilter: 'blur(10px)'
+            }}>
+              <Avatar sx={{ 
+                width: 80, 
+                height: 80, 
+                mb: 3, 
+                mx: 'auto',
+                background: 'linear-gradient(135deg, #4CAF50, #45a049)',
+                boxShadow: '0 8px 32px rgba(76, 175, 80, 0.4)'
+              }}>
+                <CheckCircleIcon sx={{ fontSize: 40 }} />
+              </Avatar>
+              <Typography variant="h4" sx={{ 
+                fontWeight: 700, 
+                mb: 2, 
+                background: `linear-gradient(135deg, #4CAF50, #45a049)`,
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                การทำนายสุขภาพ
+              </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+                กำลังพัฒนา
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                ฟีเจอร์นี้จะทำนายสุขภาพของสัตว์และแจ้งเตือนความเสี่ยง
+              </Typography>
+            </Card>
+          </Zoom>
         </TabPanel>
 
         {/* Overall Performance Tab */}
         <TabPanel value={tabValue} index={3}>
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary">
-              ประสิทธิภาพโดยรวม - กำลังพัฒนา
-            </Typography>
-          </Box>
+          <Zoom in timeout={1000}>
+            <Card elevation={0} sx={{ 
+              p: 4, 
+              textAlign: 'center', 
+              borderRadius: 3,
+              border: `1px solid ${alpha('#2196F3', 0.2)}`,
+              background: `linear-gradient(135deg, ${alpha('#2196F3', 0.05)} 0%, ${alpha('#ffffff', 0.9)} 100%)`,
+              backdropFilter: 'blur(10px)'
+            }}>
+              <Avatar sx={{ 
+                width: 80, 
+                height: 80, 
+                mb: 3, 
+                mx: 'auto',
+                background: 'linear-gradient(135deg, #2196F3, #1976D2)',
+                boxShadow: '0 8px 32px rgba(33, 150, 243, 0.4)'
+              }}>
+                <TimelineIcon sx={{ fontSize: 40 }} />
+              </Avatar>
+              <Typography variant="h4" sx={{ 
+                fontWeight: 700, 
+                mb: 2, 
+                background: `linear-gradient(135deg, #2196F3, #1976D2)`,
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                ประสิทธิภาพโดยรวม
+              </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+                กำลังพัฒนา
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                ฟีเจอร์นี้จะแสดงประสิทธิภาพโดยรวมของฟาร์มและเปรียบเทียบกับเป้าหมาย
+              </Typography>
+            </Card>
+          </Zoom>
         </TabPanel>
       </Box>
     </DashboardLayout>

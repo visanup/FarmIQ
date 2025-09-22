@@ -122,7 +122,7 @@ export default async function deviceHealthLogsRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { tenantId, id } = request.params;
-      const deviceHealthLog = await deviceHealthLogService.getDeviceHealthLogById(tenantId, BigInt(id));
+      const deviceHealthLog = await deviceHealthLogService.getDeviceHealthLogById(tenantId, Number(id));
       
       if (!deviceHealthLog) {
         return reply.status(404).send({ error: 'Device health log not found' });
@@ -156,7 +156,7 @@ export default async function deviceHealthLogsRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { tenantId, id } = request.params;
-      await deviceHealthLogService.deleteDeviceHealthLog(tenantId, BigInt(id));
+      await deviceHealthLogService.deleteDeviceHealthLog(tenantId, Number(id));
       return reply.status(204).send();
     } catch (error) {
       request.log.error(error);

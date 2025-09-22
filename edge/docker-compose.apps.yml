@@ -108,7 +108,7 @@ services:
     container_name: image-ingestion
     restart: unless-stopped
     ports:
-      - "${IMAGE_INGESTION_SERVICE_PORT:-6304}:6304"
+      - "${IMAGE_INGESTION_SERVICE_PORT:-6313}:6313"
     env_file:
       - .env
     environment:
@@ -117,13 +117,13 @@ services:
       MQTT_BROKER_URL: mqtt://edge-mqtt:1883
     networks: [farm_edge]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6304/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:6313/health || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 5
       start_period: 10s
     expose:
-      - "6304"
+      - "6313"
 
   # edge-topic-bridge (translate sensor.* / dm/* to edge/* and optional Kafka)
   edge-topic-bridge:

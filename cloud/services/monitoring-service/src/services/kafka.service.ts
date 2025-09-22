@@ -97,7 +97,7 @@ export class KafkaService {
     }
 
     const event = {
-      eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       eventType: 'monitoring.alert.created',
       version: '1.0',
       timestamp: new Date().toISOString(),
@@ -149,7 +149,7 @@ export class KafkaService {
     }
 
     const event = {
-      eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       eventType: 'monitoring.health.updated',
       version: '1.0',
       timestamp: new Date().toISOString(),

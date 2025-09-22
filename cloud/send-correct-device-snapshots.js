@@ -101,3 +101,4 @@ async function sendCorrectDeviceSnapshots() {
 }
 
 sendCorrectDeviceSnapshots().catch(console.error);
+

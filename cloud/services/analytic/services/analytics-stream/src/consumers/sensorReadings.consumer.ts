@@ -1,72 +1,74 @@
 // src/consumers/sensorReadings.consumer.ts
+// Legacy single-topic consumer kept for compatibility/testing.
+// The main service now uses consumers/router.ts to subscribe to all topics.
 
 import { consumer, producer } from '../utils/kafka';
-import { tenantFilterList } from '../configs/config';
+import { tenantFilterList, dlqTopic, env } from '../configs/config';
 import { logger } from '../utils/logger';
-import { BaseReadingSchema } from '../types/events';
+import { MeasurementSchema } from '../types/measurement';
 import { upsertMinuteFeature } from '../stores/analyticsFeature.repo';
-import { dlqTopic } from '../configs/config';
+import { toMeasurementFromSensor } from '../pipelines/map/sensors';
 
-export async function runConsumers() {
-  await consumer.connect();
-  await producer.connect();
+/** Run a focused consumer for sensor readings only (optional/legacy). */
+export async function runSensorReadingsConsumer() {
+  // Make connect idempotent
+  try { await producer.connect(); } catch {}
+  try { await consumer.connect(); } catch {}
 
-  await consumer.subscribe({ topic: 'sensors.device.readings.v1', fromBeginning: false });
+  const topic = env.TOPIC_SENSORS;
+  await consumer.subscribe({ topic, fromBeginning: false });
 
   await consumer.run({
     eachBatchAutoResolve: true,
     eachBatch: async ({ batch, resolveOffset, heartbeat, isRunning, isStale }) => {
       for (const message of batch.messages) {
         if (!isRunning() || isStale()) break;
-
         const offset = message.offset;
+        const raw = message.value?.toString('utf8') ?? '';
+
         try {
-          const raw = message.value?.toString('utf8');
-          if (!raw) { resolveOffset(offset); continue; }
+          // Map incoming event to Measurement (same mapper used by router)
+          const mapped = toMeasurementFromSensor(JSON.parse(raw));
+          const list = Array.isArray(mapped) ? mapped : [mapped];
 
-          const data = JSON.parse(raw);
-          const parsed = BaseReadingSchema.parse(data);
-
-          if (tenantFilterList.length && !tenantFilterList.includes(parsed.tenant_id)) {
-            resolveOffset(offset); continue;
+          for (const m of list) {
+            const mm = MeasurementSchema.parse(m);
+            // tenant filter
+            if (tenantFilterList.length && !tenantFilterList.includes(mm.tenant_id)) continue;
+            await upsertMinuteFeature({
+              tenant_id: mm.tenant_id,
+              device_id: mm.device_id,
+              sensor_id: mm.sensor_id,
+              metric: mm.metric,
+              value: mm.value,
+              time: mm.time,
+              tags: mm.tags,
+            });
           }
 
-          await upsertMinuteFeature(parsed);
           resolveOffset(offset);
         } catch (err: any) {
-          const raw = message.value?.toString('utf8');
-          const issue = (err?.issues && Array.isArray(err.issues)) ? err.issues[0] : undefined;
-
-          // ถ้าเป็น ZodError/invalid_date → ส่ง DLQ แล้วข้าม
-          if (err?.name === 'ZodError') {
-            logger.warn({ err: err.issues, raw }, 'invalid-payload -> DLQ');
-            try {
-              await producer.send({
-                topic: dlqTopic,
-                messages: [{
-                  key: Buffer.from(`${batch.topic}:${batch.partition}:${offset}`),
-                  value: Buffer.from(JSON.stringify({
-                    error: 'zod-parse-error',
-                    issues: err.issues,
-                    payload: raw
-                  }))
-                }]
-              });
-            } catch (e) {
-              logger.error({ e }, 'dlq-send-failed');
-            }
-            resolveOffset(offset); // ← ข้ามเมสเสจเสีย
-          } else {
-            logger.error({ err, topic: batch.topic, partition: batch.partition, offset }, 'consume-error');
-            // ยังไม่ resolveOffset เพื่อให้ลองใหม่ได้ (error ชนิดอื่น)
+          // send to DLQ and skip this message
+          logger.warn({ err, raw }, 'sensor-readings-invalid -> DLQ');
+          try {
+            await producer.send({
+              topic: dlqTopic,
+              messages: [{
+                key: Buffer.from(`${batch.topic}:${batch.partition}:${offset}`),
+                value: Buffer.from(JSON.stringify({ error: 'sensor-consumer-error', details: err?.issues ?? String(err), payload: raw })),
+                headers: { 'content-type': 'application/json' },
+              }],
+            });
+          } catch (e) {
+            logger.error({ e }, 'dlq-send-failed');
           }
+          resolveOffset(offset);
         }
 
         await heartbeat();
       }
-    }
+    },
   });
 
-  logger.info({ topics: ['sensors.device.readings'] }, '🟢 consumers running');
+  logger.info({ topics: [topic] }, '🟢 sensor consumer running');
 }
-

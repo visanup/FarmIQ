@@ -19,18 +19,24 @@ async function clearAllTables() {
     // Clear junction tables first (to avoid foreign key constraints)
     console.log('\n1. Clearing junction tables...');
     
-    // Clear DataQualityCheck relationships
-    await prisma.$executeRaw`DELETE FROM "_DataQualityCheckToDeviceReading"`;
-    console.log('   ✅ Cleared _DataQualityCheckToDeviceReading');
-    
-    await prisma.$executeRaw`DELETE FROM "_DataQualityCheckToLabReading"`;
-    console.log('   ✅ Cleared _DataQualityCheckToLabReading');
-    
-    await prisma.$executeRaw`DELETE FROM "_DataQualityCheckToSweepReading"`;
-    console.log('   ✅ Cleared _DataQualityCheckToSweepReading');
-    
-    await prisma.$executeRaw`DELETE FROM "_DeviceReadingToSensorAlert"`;
-    console.log('   ✅ Cleared _DeviceReadingToSensorAlert');
+    // Clear DataQualityCheck relationships (schema-qualified, tolerate missing tables)
+    const junctionDeletes = [
+      'DELETE FROM "sensors"."_DataQualityCheckToDeviceReading"',
+      'DELETE FROM "sensors"."_DataQualityCheckToLabReading"',
+      'DELETE FROM "sensors"."_DataQualityCheckToSweepReading"',
+      'DELETE FROM "sensors"."_DeviceReadingToSensorAlert"',
+    ];
+
+    for (const sql of junctionDeletes) {
+      try {
+        await prisma.$executeRawUnsafe(sql);
+        const tbl = sql.match(/\"(.*?)\"\]\)?|\"([^"]+)\"$/) ? '' : '';
+        console.log('   ✅ Cleared', sql.replace('DELETE FROM ', ''));
+      } catch (e) {
+        // Ignore if table doesn't exist in this environment
+        console.log('   ⚠️  Skipped (missing):', sql.replace('DELETE FROM ', ''));
+      }
+    }
 
     // Clear main data tables
     console.log('\n2. Clearing main data tables...');

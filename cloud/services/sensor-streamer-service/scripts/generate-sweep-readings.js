@@ -18,7 +18,7 @@ const prisma = new PrismaClient();
 const CUSTOMERS = 1;
 const FARMS_PER_CUSTOMER = 1;
 const HOUSES_PER_FARM = 1;
-const DAYS = 7; // Reduced from 60 to 7 days
+const DAYS = Number(process.env.DAYS || 60);
 
 let globalTimestampCounter = 0;
 

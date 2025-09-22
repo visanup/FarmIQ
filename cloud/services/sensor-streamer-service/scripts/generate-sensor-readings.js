@@ -19,19 +19,56 @@ const CUSTOMERS = Number(process.env.CUSTOMERS || 1);
 const FARMS_PER_CUSTOMER = Number(process.env.FARMS_PER_CUSTOMER || 1);
 const HOUSES_PER_FARM = Number(process.env.HOUSES_PER_FARM || 1);
 const SENSORS_PER_HOUSE = Number(process.env.SENSORS_PER_HOUSE || 5);
-// Defaults tuned for frequent local testing
-const DAYS = Number(process.env.DAYS || 1);
-const INTERVAL_MINUTES = Number(process.env.INTERVAL_MINUTES || 15);
+// Scenario: duck grow-out 60 days
+const DAYS = Number(process.env.DAYS || 60);
+const INTERVAL_MINUTES = Number(process.env.INTERVAL_MINUTES || 60); // hourly env metrics
+
+// FCR scenario configuration
+const ANIMAL_COUNT = Number(process.env.ANIMALS || 200);
+const START_WEIGHT_KG = Number(process.env.START_WEIGHT_KG || 0.8);
+const END_WEIGHT_KG = Number(process.env.END_WEIGHT_KG || 2.95);
+const FEED_PER_ANIMAL_KG_PER_DAY = Number(process.env.FEED_PER_ANIMAL_KG_PER_DAY || 0.1); // 100 grams per animal per day
 
 let globalTimestampCounter = 0;
 
-// Sensor types and their configurations - Reduced for testing
-const SENSOR_TYPES = [
-  { type: 'temperature', unit: '°C', min: 30, max: 40, variance: 2 },
+function padId(value) {
+  return value.toString().padStart(2, '0');
+}
+
+function buildEntityIds(customerIndex, farmIndex, houseIndex) {
+  const tenantId = `tenant${padId(customerIndex)}`;
+  const farmId = `farm${padId(customerIndex)}f${padId(farmIndex)}`;
+  const houseId = `house${padId(customerIndex)}f${padId(farmIndex)}h${padId(houseIndex)}`;
+  const deviceId = `device_${tenantId}_${houseId}`;
+  const flockId = `flock${padId(customerIndex)}${padId(farmIndex)}`;
+  return { tenantId, farmId, houseId, deviceId, flockId };
+}
+
+// Hourly environmental sensors (24 readings/day)
+const HOURLY_SENSORS = [
+  { type: 'temperature', unit: '°C', min: 22, max: 35, variance: 1.5 },
   { type: 'humidity', unit: '%', min: 40, max: 80, variance: 5 },
   { type: 'CO2', unit: 'ppm', min: 300, max: 2000, variance: 50 },
+  { type: 'NH3', unit: 'ppm', min: 0, max: 50, variance: 2 },
+  { type: 'illuminance', unit: 'lux', min: 0, max: 8000, variance: 200 },
+  { type: 'photoperiod', unit: 'hours', min: 0, max: 24, variance: 0.5 },
+  { type: 'VOCs', unit: 'ppb', min: 0, max: 800, variance: 15 },
+];
+
+// Daily sensors (1 reading/day)
+const DAILY_SENSORS = [
+  { type: 'feed.intake.kg', unit: 'kg' },
+  { type: 'sensors.weight_scale.current_kg', unit: 'kg' },
+  { type: 'sensors.weight_predict.current_kg', unit: 'kg' },
+];
+
+// Daily-only sensors moved from hourly per request
+const DAILY_EXTRA_SENSORS = [
   { type: 'pH', unit: 'pH', min: 6.0, max: 8.5, variance: 0.3 },
-  { type: 'water_temp', unit: '°C', min: 18, max: 28, variance: 1 }
+  { type: 'TDS', unit: 'ppm', min: 100, max: 2000, variance: 50 },
+  { type: 'EC', unit: 'mS/cm', min: 0.2, max: 5.0, variance: 0.1 },
+  { type: 'water_volume', unit: 'L', min: 0, max: 5000, variance: 50 },
+  { type: 'water_temp', unit: '°C', min: 18, max: 28, variance: 1 },
 ];
 
 function generateSensorTimestamp() {
@@ -54,6 +91,26 @@ function generateSensorValue(sensorConfig) {
   });
   const value = base + variance;
   return Math.max(sensorConfig.min, Math.min(sensorConfig.max, value));
+}
+
+function weightForDay(dayIndex) {
+  const t = dayIndex / (DAYS - 1);
+  const linear = START_WEIGHT_KG + (END_WEIGHT_KG - START_WEIGHT_KG) * t;
+  const noise = faker.number.float({ min: -0.05, max: 0.05, fractionDigits: 2 });
+  return Math.max(0, Number((linear + noise).toFixed(3)));
+}
+
+function dailyFeedIntakeKg() {
+  const base = ANIMAL_COUNT * FEED_PER_ANIMAL_KG_PER_DAY; // e.g., 200 * 0.1 = 20kg
+  const noise = faker.number.float({ min: -1.0, max: 1.0, fractionDigits: 2 });
+  return Math.max(0.1, Number((base + noise).toFixed(2)));
+}
+
+function dayHourTimestamp(baseTs, dayIndex, hour) {
+  const d = new Date(baseTs);
+  d.setUTCDate(d.getUTCDate() + dayIndex);
+  d.setUTCHours(hour, 0, 0, 0);
+  return d.toISOString();
 }
 
 async function postSensorReading(data) {
@@ -82,25 +139,33 @@ async function postSensorReading(data) {
 async function generateCustomerFarmStructure() {
   const structure = [];
   
-  for (let customerId = 1; customerId <= CUSTOMERS; customerId++) {
+  for (let customerIndex = 1; customerIndex <= CUSTOMERS; customerIndex++) {
+    const { tenantId } = buildEntityIds(customerIndex, 1, 1);
     const customer = {
-      id: `customer_${customerId}`,
-      name: `Customer ${customerId}`,
+      id: tenantId,
+      name: `Customer ${customerIndex}`,
       farms: []
     };
     
-    for (let farmId = 1; farmId <= FARMS_PER_CUSTOMER; farmId++) {
+    for (let farmIndex = 1; farmIndex <= FARMS_PER_CUSTOMER; farmIndex++) {
+      const { farmId, flockId } = buildEntityIds(customerIndex, farmIndex, 1);
       const farm = {
-        id: `farm_${customerId}_${farmId}`,
-        name: `Farm ${customerId}-${farmId}`,
+        id: farmId,
+        name: `Farm ${customerIndex}-${farmIndex}`,
+        tenantId: customer.id,
+        flockId,
         houses: []
       };
       
-      for (let houseId = 1; houseId <= HOUSES_PER_FARM; houseId++) {
+      for (let houseIndex = 1; houseIndex <= HOUSES_PER_FARM; houseIndex++) {
+        const ids = buildEntityIds(customerIndex, farmIndex, houseIndex);
         const house = {
-          id: `house_${customerId}_${farmId}_${houseId}`,
-          name: `House ${customerId}-${farmId}-${houseId}`,
-          deviceId: `device_${customerId}_${farmId}_${houseId}`
+          id: ids.houseId,
+          name: `House ${customerIndex}-${farmIndex}-${houseIndex}`,
+          deviceId: ids.deviceId,
+          tenantId: ids.tenantId,
+          farmId: farmId,
+          flockId: farm.flockId
         };
         
         farm.houses.push(house);
@@ -119,48 +184,147 @@ async function generateSensorReadingsData() {
   console.log('🔄 Generating sensor readings data...');
   
   const structure = await generateCustomerFarmStructure();
-  const totalIntervals = (DAYS * 24 * 60) / INTERVAL_MINUTES; // 1440 intervals for 60 days
   let totalRecords = 0;
-  
-  console.log(`📊 Total intervals to process: ${totalIntervals}`);
-  
-  for (let interval = 0; interval < totalIntervals; interval++) {
-    const timestamp = generateSensorTimestamp();
-    
-    // Progress indicator
-    if (interval % Math.floor(totalIntervals / 20) === 0) {
-      const progress = Math.floor((interval / totalIntervals) * 100);
-      console.log(`📈 Progress: ${progress}% (${interval}/${totalIntervals} intervals)`);
+  const baseStart = new Date();
+  baseStart.setUTCHours(0, 0, 0, 0);
+  // Shift baseStart back so that we generate historical data ending today
+  baseStart.setUTCDate(baseStart.getUTCDate() - (DAYS - 1));
+
+  for (let day = 0; day < DAYS; day++) {
+    // Hourly environment readings (24 per day)
+    for (let hour = 0; hour < 24; hour++) {
+      for (const customer of structure) {
+        for (const farm of customer.farms) {
+          for (const house of farm.houses) {
+            for (const s of HOURLY_SENSORS) {
+              const sensorReading = {
+                deviceId: house.deviceId,
+                farmId: farm.id,
+                houseId: house.id,
+                tenantId: customer.id,
+                sensorType: s.type,
+                timestamp: dayHourTimestamp(baseStart, day, hour),
+                value: generateSensorValue(s),
+                unit: s.unit,
+                location: {
+                  x: faker.number.float({ min: 0, max: 100, fractionDigits: 2 }),
+                  y: faker.number.float({ min: 0, max: 100, fractionDigits: 2 }),
+                  z: faker.number.float({ min: 0, max: 10, fractionDigits: 2 })
+                },
+                metadata: {
+                  customerId: customer.id,
+                  tenantId: customer.id,
+                  farmId: farm.id,
+                  houseId: house.id,
+                  flockId: house.flockId,
+                  dayIndex: day,
+                  hour,
+                  generatedAt: new Date().toISOString()
+                }
+              };
+              const result = await postSensorReading(sensorReading);
+              if (result) totalRecords++;
+            }
+          }
+        }
+      }
     }
-    
+
+    // Daily readings (1 per day): feed intake + weights + daily-only sensors
+    const dailyTs = dayHourTimestamp(baseStart, day, 12); // midday
+    const dailyWeight = weightForDay(day);
+    const dailyFeed = dailyFeedIntakeKg();
+
     for (const customer of structure) {
       for (const farm of customer.farms) {
         for (const house of farm.houses) {
-          for (const sensorType of SENSOR_TYPES) {
-            const sensorReading = {
+          // feed.intake.kg
+          {
+            const reading = {
               deviceId: house.deviceId,
               farmId: farm.id,
               houseId: house.id,
-              sensorType: sensorType.type,
-              timestamp: timestamp,
-              value: generateSensorValue(sensorType),
-              unit: sensorType.unit,
-              location: {
-                x: faker.number.float({ min: 0, max: 100, fractionDigits: 2 }),
-                y: faker.number.float({ min: 0, max: 100, fractionDigits: 2 }),
-                z: faker.number.float({ min: 0, max: 10, fractionDigits: 2 })
-              },
-              metadata: {
-                customerId: customer.id,
-                interval: interval,
-                generatedAt: new Date().toISOString()
+              tenantId: customer.id,
+              sensorType: 'feed.intake.kg',
+              timestamp: dailyTs,
+              value: dailyFeed,
+              unit: 'kg',
+              metadata: { customerId: customer.id, tenantId: customer.id, farmId: farm.id, houseId: house.id, flockId: house.flockId, dayIndex: day }
+            };
+            const r = await postSensorReading(reading);
+            if (r) totalRecords++;
+          }
+          // sensors.weight_scale.current_kg - 200 animals per house
+          for (let animalId = 1; animalId <= ANIMAL_COUNT; animalId++) {
+            const individualWeight = dailyWeight + faker.number.float({ min: -0.2, max: 0.2, fractionDigits: 3 });
+            const tsOffset = new Date(new Date(dailyTs).getTime() + animalId * 1000).toISOString();
+            const reading = {
+              deviceId: house.deviceId,
+              farmId: farm.id,
+              houseId: house.id,
+              tenantId: customer.id,
+              sensorType: 'sensors.weight_scale.current_kg',
+              sensorId: `weight_scale_${animalId}`,
+              timestamp: tsOffset,
+              value: Math.max(0.1, individualWeight),
+              unit: 'kg',
+              metadata: { 
+                customerId: customer.id, 
+                tenantId: customer.id, 
+                farmId: farm.id, 
+                houseId: house.id, 
+                flockId: house.flockId, 
+                dayIndex: day, 
+                animalId: animalId,
+                animalCount: ANIMAL_COUNT
               }
             };
-            
-            const result = await postSensorReading(sensorReading);
-            if (result) {
-              totalRecords++;
-            }
+            const r = await postSensorReading(reading);
+            if (r) totalRecords++;
+          }
+          // sensors.weight_predict.current_kg - 200 animals per house
+          for (let animalId = 1; animalId <= ANIMAL_COUNT; animalId++) {
+            const individualWeight = dailyWeight + faker.number.float({ min: -0.15, max: 0.15, fractionDigits: 3 });
+            const tsOffset = new Date(new Date(dailyTs).getTime() + animalId * 1000 + 500).toISOString();
+            const reading = {
+              deviceId: house.deviceId,
+              farmId: farm.id,
+              houseId: house.id,
+              tenantId: customer.id,
+              sensorType: 'sensors.weight_predict.current_kg',
+              sensorId: `weight_predict_${animalId}`,
+              timestamp: tsOffset,
+              value: Math.max(0.1, individualWeight),
+              unit: 'kg',
+              metadata: { 
+                customerId: customer.id, 
+                tenantId: customer.id, 
+                farmId: farm.id, 
+                houseId: house.id, 
+                flockId: house.flockId, 
+                dayIndex: day, 
+                animalId: animalId,
+                animalCount: ANIMAL_COUNT
+              }
+            };
+            const r = await postSensorReading(reading);
+            if (r) totalRecords++;
+          }
+          // Daily-only extra sensors
+          for (const s of DAILY_EXTRA_SENSORS) {
+            const reading = {
+              deviceId: house.deviceId,
+              farmId: farm.id,
+              houseId: house.id,
+              tenantId: customer.id,
+              sensorType: s.type,
+              timestamp: dailyTs,
+              value: generateSensorValue(s),
+              unit: s.unit,
+              metadata: { customerId: customer.id, tenantId: customer.id, farmId: farm.id, houseId: house.id, flockId: house.flockId, dayIndex: day }
+            };
+            const r = await postSensorReading(reading);
+            if (r) totalRecords++;
           }
         }
       }
@@ -174,7 +338,7 @@ async function generateSensorReadingsData() {
 async function main() {
   console.log('🚀 Starting Sensor Readings Data Generation...');
   console.log(`📊 Configuration: ${CUSTOMERS} customers, ${FARMS_PER_CUSTOMER} farms per customer, ${HOUSES_PER_FARM} houses per farm`);
-  console.log(`📊 Sensors: ${SENSOR_TYPES.length} types per house, ${DAYS} days, every ${INTERVAL_MINUTES} minutes`);
+  console.log(`📊 Sensors: ${HOURLY_SENSORS.length} hourly + ${DAILY_SENSORS.length} daily types per house, ${DAYS} days, every ${INTERVAL_MINUTES} minutes`);
   
   try {
     // Clear existing sensor readings data
@@ -201,3 +365,5 @@ if (require.main === module) {
 }
 
 module.exports = { generateSensorReadingsData };
+
+

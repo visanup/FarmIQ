@@ -238,7 +238,7 @@ const Layout: React.FC<LayoutProps> = ({
                 color: theme.palette.text.primary,
               }}
             >
-              FarmIQ™
+              FarmIQ
             </Typography>
             <Typography
               variant="caption"

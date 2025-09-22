@@ -7,10 +7,14 @@ import { Alert } from '../models/alert.model';
  * Service class for handling alerts
  */
 export class AlertService {
-  private alertRepository: Repository<Alert>;
+  private alertRepository?: Repository<Alert>;
 
-  constructor() {
-    this.alertRepository = AppDataSource.getRepository(Alert);
+  // Lazily fetch repository to avoid using DataSource before initialization
+  private repo(): Repository<Alert> {
+    if (!this.alertRepository) {
+      this.alertRepository = AppDataSource.getRepository(Alert);
+    }
+    return this.alertRepository;
   }
 
   /**
@@ -19,8 +23,9 @@ export class AlertService {
    * @returns Promise<Alert> created alert
    */
   async createAlert(alert: Partial<Alert>): Promise<Alert> {
-    const newAlert = this.alertRepository.create(alert);
-    return await this.alertRepository.save(newAlert);
+    const r = this.repo();
+    const newAlert = r.create(alert);
+    return await r.save(newAlert);
   }
 
   /**
@@ -30,7 +35,8 @@ export class AlertService {
    * @returns Promise<{alerts: Alert[], total: number, page: number, limit: number}> paginated alerts
    */
   async getAllAlerts(page: number = 1, limit: number = 50): Promise<{alerts: Alert[], total: number, page: number, limit: number}> {
-    const [alerts, total] = await this.alertRepository.findAndCount({
+    const r = this.repo();
+    const [alerts, total] = await r.findAndCount({
       skip: (page - 1) * limit,
       take: limit,
       order: { created_at: 'DESC' }
@@ -52,7 +58,8 @@ export class AlertService {
    * @returns Promise<{alerts: Alert[], total: number, page: number, limit: number}> paginated alerts
    */
   async getAlertsByTenant(tenantId: string, page: number = 1, limit: number = 50): Promise<{alerts: Alert[], total: number, page: number, limit: number}> {
-    const [alerts, total] = await this.alertRepository.findAndCount({
+    const r = this.repo();
+    const [alerts, total] = await r.findAndCount({
       where: { tenant_id: tenantId },
       skip: (page - 1) * limit,
       take: limit,
@@ -76,7 +83,8 @@ export class AlertService {
    * @returns Promise<{alerts: Alert[], total: number, page: number, limit: number}> paginated alerts
    */
   async getAlertsByTenantAndFactory(tenantId: string, factoryId: string, page: number = 1, limit: number = 50): Promise<{alerts: Alert[], total: number, page: number, limit: number}> {
-    const [alerts, total] = await this.alertRepository.findAndCount({
+    const r = this.repo();
+    const [alerts, total] = await r.findAndCount({
       where: { 
         tenant_id: tenantId,
         factory_id: factoryId
@@ -100,7 +108,7 @@ export class AlertService {
    * @returns Promise<Alert | null> alert or null if not found
    */
   async getAlertById(id: number): Promise<Alert | null> {
-    return await this.alertRepository.findOne({ where: { id } });
+    return await this.repo().findOne({ where: { id } });
   }
 
   /**
@@ -109,7 +117,8 @@ export class AlertService {
    * @returns Promise<Alert> updated alert
    */
   async resolveAlert(id: number): Promise<Alert> {
-    const alert = await this.alertRepository.findOne({ where: { id } });
+    const r = this.repo();
+    const alert = await r.findOne({ where: { id } });
     
     if (!alert) {
       throw new Error('Alert not found');
@@ -118,7 +127,7 @@ export class AlertService {
     alert.is_resolved = true;
     alert.resolved_at = new Date();
     
-    return await this.alertRepository.save(alert);
+    return await r.save(alert);
   }
 
   /**
@@ -128,7 +137,8 @@ export class AlertService {
    * @returns Promise<{alerts: Alert[], total: number, page: number, limit: number}> paginated alerts
    */
   async getUnresolvedAlerts(page: number = 1, limit: number = 50): Promise<{alerts: Alert[], total: number, page: number, limit: number}> {
-    const [alerts, total] = await this.alertRepository.findAndCount({
+    const r = this.repo();
+    const [alerts, total] = await r.findAndCount({
       where: { is_resolved: false },
       skip: (page - 1) * limit,
       take: limit,

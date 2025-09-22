@@ -20,9 +20,10 @@ export async function publish(topic: string, message: any) {
   try {
     const p = await getProducer();
     await p.send({ topic, messages: [{ value: JSON.stringify(message) }] });
-  } catch (err) {
-    // Swallow errors in publishing to not block auth flow
-    // TODO: add proper logging
+  } catch (err: any) {
+    // Log error but don't throw - auth flow should continue
+    console.warn(`Failed to publish to Kafka topic ${topic}:`, err.message);
+    // Don't rethrow the error to prevent blocking auth operations
   }
 }
 

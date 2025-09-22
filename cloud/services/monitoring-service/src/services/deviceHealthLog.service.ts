@@ -22,7 +22,7 @@ export class DeviceHealthLogService {
   }
 
   // Get device health log by ID
-  async getDeviceHealthLogById(tenantId: string, id: bigint) {
+  async getDeviceHealthLogById(tenantId: string, id: number) {
     // Composite unique is not defined; use findFirst with both conditions
     return prisma.device_health_log.findFirst({
       where: {
@@ -46,7 +46,7 @@ export class DeviceHealthLogService {
   }
 
   // Delete device health log
-  async deleteDeviceHealthLog(tenantId: string, id: bigint) {
+  async deleteDeviceHealthLog(tenantId: string, id: number) {
     // Use deleteMany to enforce tenant filter
     await prisma.device_health_log.deleteMany({
       where: { tenant_id: tenantId, id: id },

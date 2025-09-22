@@ -12,7 +12,7 @@ import { initializeDatabase } from './utils/database';
 import { connectKafka, consumer, disconnectKafka } from './utils/kafka';
 import { AlertService } from './services/alert.service';
 import { Alert } from './models/alert.model';
-import { PORT, ENV } from './configs/config';
+import { PORT, ENV, TOPIC_ANALYTICS_FEATURES, TOPIC_ANALYTICS_ANOMALIES } from './configs/config';
 import { initRegistry } from './pipelines/registry';
 import { handleAnalyticsFeature } from './pipelines/map/analyticsFeature';
 import { handleAnomaly } from './pipelines/map/anomaly';
@@ -43,8 +43,8 @@ const logger = winston.createLogger({
 // Initialize alert service
 const alertService = new AlertService();
 
-// Initialize Kafka topics
-const KAFKA_TOPICS = ["analytics.features", "analytics.anomalies"];
+// Initialize Kafka topics from config
+const KAFKA_TOPICS = [TOPIC_ANALYTICS_FEATURES, TOPIC_ANALYTICS_ANOMALIES];
 
 // Initialize Kafka consumer
 const run = async () => {
@@ -108,19 +108,15 @@ const run = async () => {
             try {
               const payload = JSON.parse(message.value?.toString() || '{}');
               
-              // Route message to appropriate handler
+              // Route message by configured topics
               let alert = null;
-              
-              switch(topic) {
-                case 'analytics.features':
-                  alert = await handleAnalyticsFeature(payload);
-                  break;
-                case 'analytics.anomalies':
-                  alert = await handleAnomaly(payload);
-                  break;
-                default:
-                  logger.warn(`⚠️ Unknown topic: ${topic}`);
-                  return;
+              if (topic === TOPIC_ANALYTICS_FEATURES) {
+                alert = await handleAnalyticsFeature(payload);
+              } else if (topic === TOPIC_ANALYTICS_ANOMALIES) {
+                alert = await handleAnomaly(payload);
+              } else {
+                logger.warn(`⚠️ Unknown topic: ${topic}`);
+                return;
               }
               
               if (alert) {

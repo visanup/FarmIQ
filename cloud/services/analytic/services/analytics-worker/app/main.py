@@ -28,6 +28,9 @@ def _enabled(key: str, default: str = "1") -> bool:
 async def lifespan(app: FastAPI):
     # Initialize pipeline registry
     init_registry()
+    print(f"[boot] ENV={Config.ENV} DB={Config.DB_HOST}:{Config.DB_PORT}/{Config.DB_NAME} schema={Config.DB_SCHEMA}")
+    print(f"[boot] Kafka client={Config.KAFKA_CLIENT_ID} group={Config.CONSUMER_GROUP} brokers={Config.KAFKA_BROKERS}")
+    print(f"[boot] Topics (env override? {'yes' if os.getenv('KAFKA_TOPICS') else 'no'}) -> {Config.KAFKA_TOPICS}")
     
     if _enabled("ENABLE_SCHEDULER", "1"):
         start_scheduler()

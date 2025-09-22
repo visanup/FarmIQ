@@ -11,13 +11,12 @@ import { SweepReading } from "../models/SweepReading";
 import { LabReading } from "../models/LabReading";
 import { DeviceReading } from "../models/DeviceReading";
 import { DeviceHealth } from "../models/DeviceHealth";
-import { SyncState } from "../models/SyncState";
 
 export const edgeDataSource = new DataSource({
   type: "postgres",
   url: EDGE_DATABASE_URL,
   applicationName: "sync-service-edge",
-  entities: [SweepReading, LabReading, DeviceReading, DeviceHealth, SyncState],
+  entities: [SweepReading, LabReading, DeviceReading, DeviceHealth],
   synchronize: false, // ใช้ DDL/migrations เอง
   // schema: ไม่ต้องกำหนด เพราะเราใส่ schema ใน @Entity แต่ถ้าต้องการบังคับให้ทั้งคอนเนกชันอยู่ใน sensors: schema: "sensors"
 });

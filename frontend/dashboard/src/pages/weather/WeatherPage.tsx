@@ -47,7 +47,9 @@ import {
   AcUnit as ColdIcon,
   Whatshot as HotIcon,
 } from '@mui/icons-material';
-import { weatherService, THAILAND_REGIONS, type ProcessedWeatherData } from '@/services/weather';
+import { weatherService, THAILAND_REGIONS, type ProcessedWeatherData } from '../../services/weather';
+import { masterServiceClient } from '../../services/api';
+import { safeRenderValue } from '../../utils/displayUtils';
 
 // Weather condition icons mapping
 const getWeatherIcon = (condition: string, size: 'small' | 'medium' | 'large' = 'medium') => {
@@ -119,6 +121,7 @@ const WeatherPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [farms, setFarms] = useState<any[]>([]);
 
   // Load weather data for selected region
   const loadWeatherData = async (region: string) => {
@@ -126,8 +129,13 @@ const WeatherPage: React.FC = () => {
     setError(null);
     
     try {
-      const data = await weatherService.getRegionWeather(region);
-      setWeatherData(data);
+      const [weatherDataResult, farmsResult] = await Promise.all([
+        weatherService.getRegionWeather(region),
+        masterServiceClient.getFarms().catch(() => []) // Fallback to empty array if fails
+      ]);
+      
+      setWeatherData(weatherDataResult);
+      setFarms(farmsResult);
       setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load weather data');
@@ -362,7 +370,7 @@ const WeatherPage: React.FC = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
               <LocationIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Current Weather - {weatherData.location}
+                Current Weather - {safeRenderValue(weatherData.location)}
               </Typography>
               <Chip
                 label={`${weatherData.coordinates.lat.toFixed(2)}°N, ${weatherData.coordinates.lon.toFixed(2)}°E`}
@@ -639,7 +647,7 @@ const WeatherPage: React.FC = () => {
                 <Card>
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                      Agricultural Recommendations for {weatherData.location}
+                      Agricultural Recommendations for {safeRenderValue(weatherData.location)}
                     </Typography>
                     
                     <List>
@@ -940,7 +948,7 @@ const WeatherPage: React.FC = () => {
                   <Alert severity="info" sx={{ mt: 2 }}>
                     <AlertTitle>Current Data Information</AlertTitle>
                     <Typography variant="body2">
-                      Showing weather data for <strong>{weatherData.location}</strong> at coordinates{' '}
+                      Showing weather data for <strong>{safeRenderValue(weatherData.location)}</strong> at coordinates{' '}
                       <strong>{weatherData.coordinates.lat.toFixed(4)}°N, {weatherData.coordinates.lon.toFixed(4)}°E</strong>.
                       Data includes current conditions and {weatherData.forecast.length}-hour detailed forecast.
                     </Typography>

@@ -9,6 +9,8 @@ import { publishIngest } from '../utils/mqtt';
 
 type IngestMeta = {
   tenant_id: string;
+  farm_id?: string;
+  house_id?: string;
   metric?: string;
   time?: string;
   robot_id?: string;
@@ -50,22 +52,26 @@ export async function ingestImage(
     { 'Content-Type': file.mimetype || 'application/octet-stream' }
   );
 
-  let mediaId: number = 0;
+  let mediaId: string = '';
   await prisma.$transaction(async (tx: any) => {
+    const id = crypto.randomUUID();
+    mediaId = crypto.randomUUID();
+    
     const rows = await (tx.$queryRawUnsafe(
-      `INSERT INTO sensors.media_objects (time, tenant_id, kind, bucket, object_key, sha256, width, height, meta)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING media_id`,
-      now, meta.tenant_id, meta.kind || 'image', bucket, objectKey, sha256, width ?? null, height ?? null, { mimetype: file.mimetype, size }
+      `INSERT INTO edge_image.media_objects (id, "mediaId", time, "tenantId", "farmId", "houseId", "stationId", "sensorId", bucket, "objectKey", "fileName", "fileSize", "mimeType", sha256, width, height, metadata, "createdAt", "updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+       RETURNING "mediaId"`,
+      id, mediaId, now, meta.tenant_id, (meta as any).farm_id || null, (meta as any).house_id || null, meta.station_id || null, meta.sensor_id || null, bucket, objectKey, file.originalname, size, file.mimetype || 'application/octet-stream', sha256, width ?? null, height ?? null, { mimetype: file.mimetype, size }, now, now
     ) as Promise<any[]>);
-    mediaId = Number(rows[0].media_id as any);
+    // mediaId is already set above
 
-    await tx.$executeRawUnsafe(
-      `INSERT INTO sensors.reading_media_map (time, tenant_id, robot_id, run_id, station_id, sensor_id, metric, media_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT DO NOTHING`,
-      now, meta.tenant_id, meta.robot_id ?? null, meta.run_id ?? null, meta.station_id ?? null, meta.sensor_id ?? null, meta.metric || 'image', mediaId
-    );
+    // Skip reading_media_map for now as it has different schema
+    // await tx.$executeRawUnsafe(
+    //   `INSERT INTO edge_image.reading_media_map (id, "mediaId", "readingId", "deltaMs", "strategy", "confidence", "metadata", "createdAt", "updatedAt")
+    //    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    //    ON CONFLICT DO NOTHING`,
+    //   crypto.randomUUID(), mediaId, 'unknown', 0, 'manual', null, {}, now, now
+    // );
   });
 
     // แจ้ง event เข้า MQTT (non-blocking)
@@ -96,7 +102,7 @@ export async function ingestImage(
 export async function listRecentMedia(limit = 20) {
   const lim = Math.min(Math.max(limit, 1), 200);
   return prisma.$queryRawUnsafe(
-    `SELECT * FROM sensors.media_objects ORDER BY time DESC LIMIT $1`,
+    `SELECT * FROM edge_image.media_objects ORDER BY time DESC LIMIT $1`,
     lim
   ) as Promise<any[]>;
 }

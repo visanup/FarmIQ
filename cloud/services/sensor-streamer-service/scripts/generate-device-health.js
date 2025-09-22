@@ -14,10 +14,11 @@ const API_BASE_URL = 'http://localhost:7302';
 const API_KEY = 'admin-key';
 const prisma = new PrismaClient();
 
-// Configuration
-const CUSTOMERS = 2;
-const FARMS_PER_CUSTOMER = 2;
-const HOUSES_PER_FARM = 2;
+// Configuration - align with 60-day scenario (daily health per device)
+const CUSTOMERS = Number(process.env.CUSTOMERS || 1);
+const FARMS_PER_CUSTOMER = Number(process.env.FARMS_PER_CUSTOMER || 1);
+const HOUSES_PER_FARM = Number(process.env.HOUSES_PER_FARM || 1);
+const DAYS = Number(process.env.DAYS || 60);
 
 let globalTimestampCounter = 0;
 
@@ -86,26 +87,24 @@ async function generateDeviceHealthData() {
   const structure = await generateCustomerFarmStructure();
   let totalRecords = 0;
   
-  for (const customer of structure) {
-    for (const farm of customer.farms) {
-      for (const house of farm.houses) {
-        const status = faker.helpers.arrayElement(['ONLINE', 'OFFLINE', 'ERROR', 'MAINTENANCE']);
-        const lastSeen = generateHealthTimestamp();
-        
-        const deviceHealth = {
-          deviceId: house.deviceId,
-          status: status,
-          lastSeen: lastSeen,
-          batteryLevel: faker.number.int({ min: 20, max: 100 }),
-          signalStrength: faker.number.int({ min: -100, max: -30 }),
-          temperature: faker.number.float({ min: 15, max: 45, fractionDigits: 1 }),
-          errors: status === 'ERROR' ? [faker.helpers.arrayElement(['SENSOR_FAILURE', 'COMM_ERROR', 'BATTERY_LOW'])] : [],
-          warnings: faker.helpers.arrayElements(['MAINTENANCE_DUE', 'SIGNAL_WEAK', 'TEMPERATURE_HIGH'], { min: 0, max: 2 })
-        };
-        
-        const result = await postDeviceHealth(deviceHealth);
-        if (result) {
-          totalRecords++;
+  for (let day = 0; day < DAYS; day++) {
+    for (const customer of structure) {
+      for (const farm of customer.farms) {
+        for (const house of farm.houses) {
+          const status = faker.helpers.arrayElement(['ONLINE', 'OFFLINE', 'ERROR', 'MAINTENANCE']);
+          const lastSeen = generateHealthTimestamp();
+          const deviceHealth = {
+            deviceId: house.deviceId,
+            status,
+            lastSeen,
+            batteryLevel: faker.number.int({ min: 20, max: 100 }),
+            signalStrength: faker.number.int({ min: -100, max: -30 }),
+            temperature: faker.number.float({ min: 15, max: 45, fractionDigits: 1 }),
+            errors: status === 'ERROR' ? [faker.helpers.arrayElement(['SENSOR_FAILURE', 'COMM_ERROR', 'BATTERY_LOW'])] : [],
+            warnings: faker.helpers.arrayElements(['MAINTENANCE_DUE', 'SIGNAL_WEAK', 'TEMPERATURE_HIGH'], { min: 0, max: 2 })
+          };
+          const result = await postDeviceHealth(deviceHealth);
+          if (result) totalRecords++;
         }
       }
     }

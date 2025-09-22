@@ -44,21 +44,20 @@ function requireEnv(name: string): string {
 }
 
 // 1) Edge Database settings
-export const DB_HOST     = process.env.DB_HOST     || 'localhost';
+export const DB_HOST     = requireEnv('DB_HOST');
 export const DB_PORT     = Number(process.env.DB_PORT) || 5432;
-export const DB_NAME     = process.env.DB_NAME     || 'edge_db';
-export const DB_USER     = process.env.DB_USER     || 'postgres';
-export const DB_PASSWORD = process.env.DB_PASSWORD || 'password';
+export const DB_NAME     = requireEnv('DB_NAME');
+export const DB_USER     = requireEnv('DB_USER');
+export const DB_PASSWORD = requireEnv('DB_PASSWORD');
 
-export const EDGE_DATABASE_URL = process.env.EDGE_DATABASE_URL ||
-  `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+export const EDGE_DATABASE_URL = requireEnv('DATABASE_URL');
 console.log(`Using EDGE_DATABASE_URL: ${EDGE_DATABASE_URL}`);
 
-// 2) Cloud Database settings
-export const CLOUD_DB_HOST     = process.env.CLOUD_DB_HOST     || 'localhost';
+// 2) Cloud Database settings (for future use)
+export const CLOUD_DB_HOST     = process.env.CLOUD_DB_HOST || 'localhost';
 export const CLOUD_DB_PORT     = Number(process.env.CLOUD_DB_PORT) || 5432;
-export const CLOUD_DB_NAME     = process.env.CLOUD_DB_NAME     || 'sensor_cloud_db';
-export const CLOUD_DB_USER     = process.env.CLOUD_DB_USER     || 'postgres';
+export const CLOUD_DB_NAME     = process.env.CLOUD_DB_NAME || 'sensor_cloud_db';
+export const CLOUD_DB_USER     = process.env.CLOUD_DB_USER || 'postgres';
 export const CLOUD_DB_PASSWORD = process.env.CLOUD_DB_PASSWORD || 'password';
 
 export const CLOUD_DATABASE_URL = process.env.CLOUD_DATABASE_URL ||
@@ -73,9 +72,9 @@ export const SERVICE_API_KEY = process.env.API_KEY ?? "";
 
 export const SYNC_INTERVAL_MINUTES = Number(process.env.SYNC_INTERVAL_MINUTES) || 5;
 
-// In container, use host.docker.internal to reach host services (Windows/macOS Docker Desktop)
-export const CLOUD_API_URL = process.env.CLOUD_API_URL || 'http://host.docker.internal:7302';
-export const CLOUD_API_KEY = process.env.CLOUD_API_KEY || 'your-api-key';
+// Cloud API configuration
+export const CLOUD_API_URL = requireEnv('CLOUD_API_URL');
+export const CLOUD_API_KEY = requireEnv('CLOUD_API_KEY');
 
 export const NODE_ENV = process.env.NODE_ENV || 'development';
 

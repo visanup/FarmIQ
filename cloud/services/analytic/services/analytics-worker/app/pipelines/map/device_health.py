@@ -14,43 +14,47 @@ def _sev(level: Optional[str]) -> int:
 
 def handle_device_health(o: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """
-    Expected (flexible) payload examples:
+    Handle envelope format from analytics-stream
+    Expected payload examples:
     {
-      "time":"2025-08-20T03:12:00Z",
-      "tenant_id":"t1","factory_id":"f1","machine_id":"mc-01",
-      "status":"online",              # online|offline (optional)
-      "level":"ok",                   # ok|warn|error|critical (optional)
-      "health_score": 0.97,           # optional numeric
-      "battery_pct": 82,              # optional numeric
-      "cpu_pct": 36.4,                # optional numeric
-      "payload": {...}
+      "data": {
+        "deviceId": "device_123",
+        "status": "online",
+        "batteryLevel": 82,
+        "temperature": 36.4,
+        "timestamp": "2025-08-20T03:12:00Z"
+      }
     }
     Strategy:
       - ถ้ามี status → สร้าง EVENT domain=device, event_type="status"
       - ถ้าไม่มี status แต่มี health_score → measurement metric="device.health_score"
       - อย่างอื่น: fallback เป็น event "heartbeat"
     """
-    t = _ts(o.get("time"))
-    tenant = o["tenant_id"]; factory = o["factory_id"]; machine = o["machine_id"]
-    payload = o.get("payload") or {k:v for k,v in o.items() if k not in ("tenant_id","factory_id","machine_id","time")}
+    # Handle envelope format
+    data = o.get("data", o)
+    
+    t = _ts(data.get("timestamp") or data.get("time"))
+    tenant = data["tenant_id"] if "tenant_id" in data else "unknown"
+    device_id = data.get("deviceId") or data.get("device_id") or "unknown"
+    payload = data.get("payload") or {k:v for k,v in data.items() if k not in ("tenant_id","deviceId","device_id","timestamp","time")}
 
-    status = (o.get("status") or "").lower().strip()
+    status = (data.get("status") or "").lower().strip()
     if status in ("online","offline"):
         val = 1.0 if status == "online" else 0.0
         return "event", {
             "time": t, "tenant_id": tenant, "domain": "device",
-            "entity_type": "machine", "entity_id": machine,
+            "entity_type": "device", "entity_id": device_id,
             "event_type": "status",
-            "value": val, "unit":"binary", "severity": _sev(o.get("level")),
+            "value": val, "unit":"binary", "severity": _sev(data.get("level")),
             "payload": payload
         }
 
-    if "health_score" in o:
+    if "health_score" in data:
         return "measurement", {
-            "tenant_id": tenant, "factory_id": factory, "machine_id": machine,
-            "sensor_id": o.get("sensor_id"),
+            "tenant_id": tenant, "farm_id": data.get("farmId"), "device_id": device_id,
+            "sensor_id": data.get("sensorId"),
             "metric": "device.health_score",
-            "value": float(o["health_score"]),
+            "value": float(data["health_score"]),
             "time": t,
             "payload": payload
         }
@@ -58,8 +62,8 @@ def handle_device_health(o: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     # Fallback: heartbeat event (count-only)
     return "event", {
         "time": t, "tenant_id": tenant, "domain": "device",
-        "entity_type": "machine", "entity_id": machine,
+        "entity_type": "device", "entity_id": device_id,
         "event_type": "heartbeat",
-        "value": None, "unit": None, "severity": _sev(o.get("level")),
+        "value": None, "unit": None, "severity": _sev(data.get("level")),
         "payload": payload
     }

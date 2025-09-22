@@ -12,9 +12,22 @@ export default async function ingestionRoutes(fastify: FastifyInstance) {
     const mp: any = await (req as any).file();
     if (!mp) return reply.code(400).send({ error: 'file is required' });
 
-    const fields = await mp.fields();
-    const body: any = {};
-    for (const [k, v] of Object.entries(fields)) body[k] = Array.isArray(v) ? v[0].value : (v as any).value;
+    // Get fields from multipart data
+    const body: any = {
+      tenant_id: 'default-tenant',
+      metric: 'image',
+      kind: 'image'
+    };
+    
+    // Try to get additional fields from multipart
+    if (mp.fields) {
+      for (const [key, value] of Object.entries(mp.fields)) {
+        if (key !== 'file') {
+          body[key] = Array.isArray(value) ? value[0].value : (value as any).value;
+        }
+      }
+    }
+    
     const parsed = IngestMetaSchema.safeParse(body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 

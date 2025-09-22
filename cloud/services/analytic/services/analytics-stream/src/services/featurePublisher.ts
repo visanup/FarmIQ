@@ -18,39 +18,58 @@ export async function publishFinalizedMinuteFeatures() {
   `);
   if (!rows.length) return;
 
-  const msgs = rows.map((r) => {
+  const messages: { key: Buffer; value: Buffer }[] = [];
+
+  // Build payloads and use Redis NX to deduplicate per bucket
+  for (const r of rows) {
     const count = Number(r.count) || 0;
-    const avg = count ? r.sum / count : 0;
-    const variance = Math.max(0, (count ? r.sumsq / count : 0) - avg * avg);
+    const sum = Number(r.sum) || 0;
+    const sumsq = Number(r.sumsq) || 0;
+    const min = r.min != null ? Number(r.min) : null;
+    const max = r.max != null ? Number(r.max) : null;
+
+    const avg = count ? sum / count : 0;
+    const variance = Math.max(0, (count ? sumsq / count : 0) - avg * avg);
     const stddev = Math.sqrt(variance);
 
-    const tags = r.tags || {};
+    const tags = (r.tags as Record<string, unknown>) || {};
     const payload = {
       bucket: new Date(r.bucket).toISOString(),
-      tenant_id: r.tenant_id,
-      farm_id: tags.farm_id || null,
-      house_id: tags.house_id || null,
-      device_id: r.device_id,
-      metric: r.metric,
+      tenant_id: String(r.tenant_id),
+      farm_id: (tags as any).farm_id ?? null,
+      house_id: (tags as any).house_id ?? null,
+      device_id: String(r.device_id),
+      metric: String(r.metric),
       count,
-      min: r.min,
-      max: r.max,
+      min,
+      max,
       avg,
       stddev,
-      window: '1m'
+      window: '1m' as const,
     };
 
-    const key = `feat:${payload.tenant_id}:${payload.device_id}:${payload.metric}:${payload.bucket}`;
-    void redis.setex(key, env.FEATURE_TTL_SECONDS, JSON.stringify(payload));
+    const dedupKey = `feat:${payload.tenant_id}:${payload.device_id}:${payload.metric}:${payload.bucket}`;
+    try {
+      const ok = await redis.set(dedupKey, JSON.stringify(payload), 'EX', env.FEATURE_TTL_SECONDS, 'NX');
+      if (ok === 'OK') {
+        messages.push({
+          key: Buffer.from(`${payload.tenant_id}:${payload.device_id}:${payload.metric}:${payload.bucket}`),
+          value: Buffer.from(JSON.stringify(payload)),
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, dedupKey }, 'feature-dedup-cache-failed');
+      // ถ้า cache ล้มเหลว ให้ยังส่งต่อไปเพื่อไม่พลาดข้อมูล
+      messages.push({
+        key: Buffer.from(`${payload.tenant_id}:${payload.device_id}:${payload.metric}:${payload.bucket}`),
+        value: Buffer.from(JSON.stringify(payload)),
+      });
+    }
+  }
 
-    return {
-      key: Buffer.from(`${payload.tenant_id}:${payload.device_id}:${payload.metric}`),
-      value: Buffer.from(JSON.stringify(payload))
-    };
-  });
+  if (!messages.length) return; // ทุกข้อความเคยส่งไปแล้ว
 
-  await producer.send({ topic: topicOut, messages: msgs });
-  logger.info({ published: msgs.length, topic: topicOut }, '📤 published minute features');
+  await producer.send({ topic: topicOut, messages });
+  logger.info({ published: messages.length, topic: topicOut }, '📤 published minute features');
 }
-
 

@@ -56,15 +56,16 @@ export const PredictionCharts: React.FC<PredictionChartsProps> = ({
   confidence,
 }) => {
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={4}>
       {/* FCR & ADG Prediction Chart */}
-      <Grid item xs={12} lg={8}>
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+      <Grid item xs={12} xl={8}>
+        <Card sx={{ height: '100%', minHeight: 650 }}>
+          <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
               การทำนาย FCR และ ADG
             </Typography>
-            <ResponsiveContainer width="100%" height={500}>
+            <Box sx={{ flex: 1, minHeight: 550 }}>
+              <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={aiData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis 
@@ -92,7 +93,7 @@ export const PredictionCharts: React.FC<PredictionChartsProps> = ({
                   }}
                 />
                 <Legend />
-                <ReferenceLine x="30" stroke="#ff9800" strokeDasharray="5 5" />
+                <ReferenceLine x="30" yAxisId="left" stroke="#ff9800" strokeDasharray="5 5" />
                 <Line 
                   yAxisId="left"
                   type="monotone" 
@@ -133,64 +134,83 @@ export const PredictionCharts: React.FC<PredictionChartsProps> = ({
                 />
               </ComposedChart>
             </ResponsiveContainer>
+            </Box>
           </CardContent>
         </Card>
       </Grid>
-      <Grid item xs={12} lg={4}>
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+      <Grid item xs={12} xl={4}>
+        <Card sx={{ height: '100%', minHeight: 650 }}>
+          <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
               สถิติการทำนาย
             </Typography>
-            <Stack spacing={3}>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Stack spacing={4}>
+              <Box sx={{ textAlign: 'center', p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #e8f5e8, #f1f8e9)' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
                   FCR ปัจจุบัน
                 </Typography>
-                <Typography variant="h4" color="primary" fontWeight="700">
+                <Typography variant="h2" color="primary" fontWeight="800" sx={{ mb: 1 }}>
                   {currentFCR.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 500 }}>
                   FCR ทำนาย: {predictedFCR.toFixed(2)}
                 </Typography>
               </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ textAlign: 'center', p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #e3f2fd, #f3e5f5)' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
                   ADG ปัจจุบัน
                 </Typography>
-                <Typography variant="h4" color="info" fontWeight="700">
-                  {currentADG.toFixed(2)} กก./วัน
+                <Typography variant="h2" color="info" fontWeight="800" sx={{ mb: 1 }}>
+                  {currentADG.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 500 }}>
+                  กก./วัน
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                   ADG ทำนาย: {predictedADG.toFixed(2)} กก./วัน
                 </Typography>
               </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ textAlign: 'center', p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #fff3e0, #fce4ec)' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, fontWeight: 600 }}>
                   ความแม่นยำ
                 </Typography>
                 <LinearProgress 
                   variant="determinate" 
                   value={confidence} 
-                  sx={{ height: 8, borderRadius: 4, mb: 1 }}
+                  sx={{ 
+                    height: 12, 
+                    borderRadius: 6, 
+                    mb: 2,
+                    background: 'rgba(0,0,0,0.1)',
+                    '& .MuiLinearProgress-bar': {
+                      background: 'linear-gradient(90deg, #4CAF50, #45a049)',
+                      borderRadius: 6
+                    }
+                  }}
                 />
-                <Typography variant="body2" color="text.secondary">
-                  {confidence}% ความเชื่อมั่น
+                <Typography variant="h4" color="success" fontWeight="700">
+                  {confidence}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  ความเชื่อมั่น
                 </Typography>
               </Box>
             </Stack>
+            </Box>
           </CardContent>
         </Card>
       </Grid>
 
       {/* Weight Distribution */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+      <Grid item xs={12} lg={6}>
+        <Card sx={{ height: '100%', minHeight: 550 }}>
+          <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
               การกระจายน้ำหนักปัจจุบัน
             </Typography>
-            <ResponsiveContainer width="100%" height={400}>
+            <Box sx={{ flex: 1, minHeight: 450 }}>
+              <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weightDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis 
@@ -213,18 +233,20 @@ export const PredictionCharts: React.FC<PredictionChartsProps> = ({
                 <Bar dataKey="count" fill="#2e7d32" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </Box>
           </CardContent>
         </Card>
       </Grid>
 
       {/* Health Predictions */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+      <Grid item xs={12} lg={6}>
+        <Card sx={{ height: '100%', minHeight: 550 }}>
+          <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
               การทำนายสุขภาพ
             </Typography>
-            <ResponsiveContainer width="100%" height={400}>
+            <Box sx={{ flex: 1, minHeight: 450 }}>
+              <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={healthPredictions}
@@ -250,18 +272,20 @@ export const PredictionCharts: React.FC<PredictionChartsProps> = ({
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+            </Box>
           </CardContent>
         </Card>
       </Grid>
 
       {/* Performance Radar */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+      <Grid item xs={12} lg={6}>
+        <Card sx={{ height: '100%', minHeight: 550 }}>
+          <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
               ประสิทธิภาพโดยรวม
             </Typography>
-            <ResponsiveContainer width="100%" height={400}>
+            <Box sx={{ flex: 1, minHeight: 450 }}>
+              <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={performanceRadar}>
                 <PolarGrid />
                 <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }} />
@@ -283,58 +307,97 @@ export const PredictionCharts: React.FC<PredictionChartsProps> = ({
                 <Legend />
               </RadarChart>
             </ResponsiveContainer>
+            </Box>
           </CardContent>
         </Card>
       </Grid>
 
       {/* AI Targets */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+      <Grid item xs={12} lg={6}>
+        <Card sx={{ height: '100%', minHeight: 550 }}>
+          <CardContent sx={{ p: 4, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
               เป้าหมาย AI
             </Typography>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Stack spacing={3}>
+              <Box sx={{ textAlign: 'center', p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #e8f5e8, #f1f8e9)', border: '2px solid #4CAF50' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
                   FCR เป้าหมาย
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={(currentFCR / 2.0) * 100} 
-                  sx={{ height: 8, borderRadius: 4, mb: 1 }}
-                />
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="h3" color="primary" fontWeight="800" sx={{ mb: 2 }}>
                   {currentFCR.toFixed(2)} / 2.0
                 </Typography>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={Math.min((currentFCR / 2.0) * 100, 100)} 
+                  sx={{ 
+                    height: 10, 
+                    borderRadius: 5, 
+                    background: 'rgba(0,0,0,0.1)',
+                    '& .MuiLinearProgress-bar': {
+                      background: currentFCR <= 2.0 ? 'linear-gradient(90deg, #4CAF50, #45a049)' : 'linear-gradient(90deg, #ff9800, #f57c00)',
+                      borderRadius: 5
+                    }
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontWeight: 500 }}>
+                  {currentFCR <= 2.0 ? '✅ เป้าหมายสำเร็จ' : '⚠️ เกินเป้าหมาย'}
+                </Typography>
               </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ textAlign: 'center', p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #e3f2fd, #f3e5f5)', border: '2px solid #2196F3' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
                   ADG เป้าหมาย
+                </Typography>
+                <Typography variant="h3" color="info" fontWeight="800" sx={{ mb: 2 }}>
+                  {currentADG.toFixed(2)} / 0.8
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+                  กก./วัน
                 </Typography>
                 <LinearProgress 
                   variant="determinate" 
-                  value={(currentADG / 0.8) * 100} 
-                  sx={{ height: 8, borderRadius: 4, mb: 1 }}
+                  value={Math.min((currentADG / 0.8) * 100, 100)} 
+                  sx={{ 
+                    height: 10, 
+                    borderRadius: 5, 
+                    background: 'rgba(0,0,0,0.1)',
+                    '& .MuiLinearProgress-bar': {
+                      background: currentADG >= 0.8 ? 'linear-gradient(90deg, #4CAF50, #45a049)' : 'linear-gradient(90deg, #ff9800, #f57c00)',
+                      borderRadius: 5
+                    }
+                  }}
                 />
-                <Typography variant="body2" color="text.secondary">
-                  {currentADG.toFixed(2)} / 0.8 กก./วัน
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontWeight: 500 }}>
+                  {currentADG >= 0.8 ? '✅ เป้าหมายสำเร็จ' : '⚠️ ต่ำกว่าเป้าหมาย'}
                 </Typography>
               </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ textAlign: 'center', p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #fff3e0, #fce4ec)', border: '2px solid #FF9800' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
                   อัตราการรอด
+                </Typography>
+                <Typography variant="h3" color="warning" fontWeight="800" sx={{ mb: 2 }}>
+                  98% / 95%
                 </Typography>
                 <LinearProgress 
                   variant="determinate" 
                   value={98} 
-                  sx={{ height: 8, borderRadius: 4, mb: 1 }}
+                  sx={{ 
+                    height: 10, 
+                    borderRadius: 5, 
+                    background: 'rgba(0,0,0,0.1)',
+                    '& .MuiLinearProgress-bar': {
+                      background: 'linear-gradient(90deg, #4CAF50, #45a049)',
+                      borderRadius: 5
+                    }
+                  }}
                 />
-                <Typography variant="body2" color="text.secondary">
-                  98% / 95%
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontWeight: 500 }}>
+                  ✅ เป้าหมายสำเร็จ
                 </Typography>
               </Box>
             </Stack>
+            </Box>
           </CardContent>
         </Card>
       </Grid>

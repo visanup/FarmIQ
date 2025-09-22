@@ -2,35 +2,22 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, IconButton, Menu, MenuItem, ListItemIcon, Dialog,
-  DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, Alert, Avatar, Grid, InputAdornment
+  DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, Alert, Avatar, Grid, InputAdornment,
+  Pagination, Card, CardContent, Fade, Zoom, useTheme
 } from '@mui/material';
+import { Chip } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, MoreVert as MoreVertIcon,
-  DevicesOther as DeviceTypeIcon, Search as SearchIcon
+  DevicesOther as DeviceTypeIcon, Search as SearchIcon, Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import NoData from '../../components/common/NoData';
-
-interface DeviceType {
-  id: string;
-  name: string;
-  description: string;
-  manufacturer: string;
-}
-
-const mockDeviceTypes: DeviceType[] = [
-  { id: '1', name: 'Temperature Sensor', description: 'Measures ambient temperature', manufacturer: 'SensorCorp' },
-  { id: '2', name: 'Humidity Sensor', description: 'Measures relative humidity', manufacturer: 'SensorCorp' },
-  { id: '3', name: 'Smart Feeder', description: 'Automated feeding system', manufacturer: 'FarmTech' },
-];
-
-const deviceTypeService = {
-  getDeviceTypes: async (): Promise<DeviceType[]> => {
-    return new Promise(resolve => setTimeout(() => resolve(mockDeviceTypes), 500));
-  },
-};
+import { masterServiceClient } from '../../services/api';
+import { DeviceType } from '../../types/api';
+import { safeRenderValue, safeRenderBoolean } from '../../utils/displayUtils';
 
 const DeviceTypesPage: React.FC = () => {
+    const theme = useTheme();
     const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -38,13 +25,27 @@ const DeviceTypesPage: React.FC = () => {
     const [editingItem, setEditingItem] = useState<DeviceType | null>(null);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+    const itemsPerPage = 10;
 
     useEffect(() => {
-        deviceTypeService.getDeviceTypes()
-            .then(res => setDeviceTypes(res))
-            .catch(() => setError('Failed to load device types.'))
-            .finally(() => setLoading(false));
+        loadDeviceTypes();
     }, []);
+
+    const loadDeviceTypes = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await masterServiceClient.getDeviceTypes();
+            setDeviceTypes(data);
+            setLastUpdate(new Date());
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to load device types.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleMenuClick = (event: React.MouseEvent<HTMLElement>, item: DeviceType) => {
         setAnchorEl(event.currentTarget);
@@ -61,77 +62,129 @@ const DeviceTypesPage: React.FC = () => {
 
     const filteredDeviceTypes = deviceTypes.filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.manufacturer.toLowerCase().includes(searchTerm.toLowerCase())
+        item.manufacturer?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const totalPages = Math.ceil(filteredDeviceTypes.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentDeviceTypes = filteredDeviceTypes.slice(startIndex, endIndex);
+
+    const handlePageChange = (_: React.ChangeEvent<unknown>, page: number) => setCurrentPage(page);
+    const handleRefresh = () => loadDeviceTypes();
 
     if (loading) return <DashboardLayout><Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box></DashboardLayout>;
     if (error) return <DashboardLayout><Alert severity="error">{error}</Alert></DashboardLayout>;
 
     return (
       <DashboardLayout>
-        <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Box>
-                    <Typography variant="h5" component="h1" sx={{ fontWeight: 'fontWeightBold' }}>Device Type Management</Typography>
-                    <Typography variant="body2" color="text.secondary">Manage all device types for your system.</Typography>
+        <Box sx={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', minHeight: '100vh' }}>
+          {/* Header */}
+          <Fade in timeout={800}>
+            <Box sx={{ p: 3, pb: 0 }}>
+              <Card sx={{ p: 3, borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', position: 'relative' }}>
+                <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg, #7C4DFF 0%, #651FFF 100%)' }} />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ width: 56, height: 56, background: 'linear-gradient(135deg, #7C4DFF 0%, #651FFF 100%)', boxShadow: '0 4px 15px rgba(124,77,255,0.4)' }}>
+                      <DeviceTypeIcon sx={{ fontSize: 28 }} />
+                    </Avatar>
+                    <Box>
+                      <Typography variant="h3" sx={{ fontWeight: 800, mb: 1, background: 'linear-gradient(135deg, #7C4DFF 0%, #651FFF 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>จัดการประเภทอุปกรณ์</Typography>
+                      <Typography variant="h6" sx={{ color: 'text.secondary' }}>จัดการประเภทอุปกรณ์ทั้งหมดของระบบ</Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>อัปเดตล่าสุด: {lastUpdate.toLocaleString('th-TH')}</Typography>
+                    <Button variant="outlined" startIcon={<RefreshIcon />} onClick={handleRefresh}>รีเฟรช</Button>
+                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>เพิ่มประเภท</Button>
+                  </Box>
                 </Box>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>Add New Device Type</Button>
+              </Card>
             </Box>
+          </Fade>
 
-            <Paper sx={{ borderRadius: 2, boxShadow: 3 }}>
-                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <TextField
-                        variant="outlined"
-                        size="small"
-                        placeholder="Search Device Types..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon />
-                                </InputAdornment>
-                            ),
-                        }}
-                        sx={{ width: { xs: '100%', sm: 300 } }}
-                    />
-                </Box>
+          {/* Search */}
+          <Fade in timeout={600}>
+            <Box sx={{ p: 3 }}>
+              <Card sx={{ borderRadius: 4 }}>
+                <CardContent sx={{ p: 3 }}>
+                  <TextField
+                    variant="outlined"
+                    size="medium"
+                    placeholder="ค้นหาประเภทอุปกรณ์..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>) }}
+                    sx={{ width: { xs: '100%', sm: 400 } }}
+                  />
+                </CardContent>
+              </Card>
+            </Box>
+          </Fade>
+
+          {/* Table */}
+          <Fade in timeout={800}>
+            <Box sx={{ px: 3, mb: 4 }}>
+              <Card sx={{ borderRadius: 4 }}>
                 <TableContainer>
-                    <Table>
-                        <TableHead sx={{ bgcolor: 'grey.100' }}>
-                            <TableRow>
-                                <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold' }}>Manufacturer</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', display: { xs: 'none', md: 'table-cell' } }}>Description</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold' }} align="right">Actions</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {filteredDeviceTypes.length > 0 ? filteredDeviceTypes.map((item) => (
-                                <TableRow key={item.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                                    <TableCell>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                            <Avatar sx={{ bgcolor: 'primary.light' }}><DeviceTypeIcon /></Avatar>
-                                            <Typography variant="body2" sx={{ fontWeight: 'fontWeightMedium' }}>{item.name}</Typography>
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell>{item.manufacturer}</TableCell>
-                                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{item.description}</TableCell>
-                                    <TableCell align="right">
-                                        <IconButton onClick={(e) => handleMenuClick(e, item)}><MoreVertIcon /></IconButton>
-                                    </TableCell>
-                                </TableRow>
-                            )) : (
-                                <TableRow>
-                                    <TableCell colSpan={4}>
-                                        <NoData message="No device types found. Try adjusting your search." />
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                  <Table>
+                    <TableHead sx={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)' }}>
+                      <TableRow>
+                        <TableCell>ชื่อประเภท</TableCell>
+                        <TableCell>ผู้ผลิต</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>คำอธิบาย</TableCell>
+                        <TableCell>สถานะ</TableCell>
+                        <TableCell align="right">การดำเนินการ</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {currentDeviceTypes.length > 0 ? currentDeviceTypes.map((item, index) => (
+                        <Zoom in timeout={600 + (index * 100)} key={item.id}>
+                          <TableRow hover>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Avatar sx={{ background: 'linear-gradient(135deg, #7C4DFF 0%, #651FFF 100%)' }}><DeviceTypeIcon /></Avatar>
+                                <Typography sx={{ fontWeight: 600 }}>{item.name}</Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell>{safeRenderValue(item.manufacturer)}</TableCell>
+                            <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{safeRenderValue(item.description)}</TableCell>
+                            <TableCell>
+                              <Chip label={item.isActive ? 'ใช้งาน' : 'ไม่ใช้งาน'} color={item.isActive ? 'success' : 'default'} size="small" />
+                            </TableCell>
+                            <TableCell align="right">
+                              <IconButton onClick={(e) => handleMenuClick(e, item)}><MoreVertIcon /></IconButton>
+                            </TableCell>
+                          </TableRow>
+                        </Zoom>
+                      )) : (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
+                            <NoData message="ไม่พบข้อมูลประเภทอุปกรณ์" />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
                 </TableContainer>
-            </Paper>
+              </Card>
+            </Box>
+          </Fade>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Fade in timeout={1000}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+                <Card sx={{ p: 2, borderRadius: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <Typography variant="body2" color="text.secondary">แสดง {startIndex + 1}-{Math.min(endIndex, filteredDeviceTypes.length)} จาก {filteredDeviceTypes.length} รายการ</Typography>
+                    <Pagination count={totalPages} page={currentPage} onChange={handlePageChange} color="primary" size="large" />
+                  </Box>
+                </Card>
+              </Box>
+            </Fade>
+          )}
 
             <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
                 <MenuItem onClick={() => handleOpenDialog(editingItem!)}><ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>Edit</MenuItem>

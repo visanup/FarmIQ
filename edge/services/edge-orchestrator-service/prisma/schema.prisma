@@ -1,15 +1,58 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
-
-model Placeholder {
-  id Int @id
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["edge_orchestrator"]
 }
 
+model DatasetExport {
+  id        String   @id @default(cuid())
+  datasetS3 String
+  rows      Int
+  metaJson  Json?
+  tenantId  String?
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@map("dataset_exports")
+  @@schema("edge_orchestrator")
+}
+
+model ModelRegistry {
+  id        String   @id @default(cuid())
+  modelId   String   @unique
+  tenantId  String
+  name      String
+  version   String
+  status    String   @default("pending")
+  config    Json?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status])
+  @@index([modelId])
+  @@map("model_registry")
+  @@schema("edge_orchestrator")
+}
+
+model WeightMapping {
+  id        String   @id @default(cuid())
+  mediaId   String
+  weightKg  Float
+  tenantId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([mediaId])
+  @@index([tenantId, createdAt])
+  @@map("weight_mappings")
+  @@schema("edge_orchestrator")
+}

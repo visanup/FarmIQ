@@ -210,11 +210,17 @@ export class KafkaService {
       data: {
         sampleId: data.sampleId,
         farmId: data.farmId,
+        stationId: data.stationId || data.deviceId || data.farmId || null,
+        sensorId: data.sensorId || data.testType,
+        metric: data.metric || data.testType,
         testType: data.testType,
-        value: data.value,
+        value: typeof data.value === 'number' ? data.value : parseFloat(String(data.value)),
         unit: data.unit,
         result: data.result,
-        metadata: data.metadata,
+        metadata: {
+          ...data.metadata,
+          customerId: data.metadata?.customerId || data.customerId || undefined,
+        },
         timestamp: data.timestamp || new Date().toISOString(),
       },
     };

@@ -14,10 +14,10 @@ const API_BASE_URL = 'http://localhost:7302';
 const API_KEY = 'admin-key';
 const prisma = new PrismaClient();
 
-// Configuration - Reduced for testing
-const CUSTOMERS = 1;
-const FARMS_PER_CUSTOMER = 1;
-const HOUSES_PER_FARM = 1;
+// Configuration - align with 60-day scenario (static configs per device)
+const CUSTOMERS = Number(process.env.CUSTOMERS || 1);
+const FARMS_PER_CUSTOMER = Number(process.env.FARMS_PER_CUSTOMER || 1);
+const HOUSES_PER_FARM = Number(process.env.HOUSES_PER_FARM || 1);
 
 let globalTimestampCounter = 0;
 

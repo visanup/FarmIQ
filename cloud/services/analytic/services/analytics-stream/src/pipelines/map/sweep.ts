@@ -3,28 +3,40 @@ import { z } from 'zod';
 import type { Measurement } from '../../types/measurement';
 import { normalizeTime } from './time'; // ✅ ใช้ตัวกลางเดียวกับไฟล์อื่น
 
+const sanitize = (x: string) =>
+  x.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
+
+const num = (v: any): number | undefined => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(+v)) return +v;
+  if (Array.isArray(v)) return v.length;
+  return undefined;
+};
+
 /** payload จาก edge (sweep_readings) - รองรับทั้งรูปแบบเก่าและใหม่ */
 const SweepReading = z.object({
+  // รูปแบบเก่า (flat)
   schema: z.string().optional(),
   tenant_id: z.string().min(1).optional(),
   robot_id: z.string().min(1).optional(),
   run_id: z.union([z.string(), z.number()]).optional(),
   sensor_id: z.string().min(1).optional(),
   metric: z.string().min(1).optional(),
-  value: z.number().finite().optional(),
+  value: z.union([z.number(), z.string(), z.array(z.any())]).optional(),
   zone_id: z.string().optional(),
-  x: z.number().optional(),
-  y: z.number().optional(),
+  x: z.union([z.number(), z.string()]).optional(),
+  y: z.union([z.number(), z.string()]).optional(),
   quality: z.string().optional(),
   payload: z.record(z.unknown()).optional(),
   time: normalizeTime.optional(),
   ts: normalizeTime.optional(),
-  
-  // รองรับรูปแบบใหม่จาก sensor-streamer-service
+
+  // รูปแบบใหม่จาก sensor-streamer-service (envelope)
   eventId: z.string().optional(),
   eventType: z.string().optional(),
   version: z.string().optional(),
   timestamp: normalizeTime.optional(),
+  headers: z.record(z.union([z.string(), z.instanceof(Buffer)])).optional(),
   source: z.object({
     service: z.string().optional(),
     version: z.string().optional(),
@@ -38,63 +50,101 @@ const SweepReading = z.object({
     metadata: z.record(z.unknown()).optional(),
     timestamp: normalizeTime.optional(),
     createdAt: normalizeTime.optional(),
+    tenantId: z.string().optional(),
   }).optional(),
 });
 
 export function toMeasurementFromSweep(o: any): Measurement | null {
   const d = SweepReading.parse(o);
-  
-  // รองรับทั้งรูปแบบเก่าและใหม่
-  let tenant_id: string;
-  let device_id: string;
-  let sensor_id: string;
-  let metric: string;
-  let value: number;
-  let time: Date;
-  let tags: Record<string, string> = {};
 
-  // รูปแบบใหม่จาก sensor-streamer-service
+  // -------- รูปแบบใหม่ (envelope) --------
   if (d.data && d.data.deviceId) {
-    tenant_id = (d.data.metadata as any)?.customerId || 'unknown';
-    device_id = d.data.deviceId;
-    sensor_id = d.data.id || 'sweep-sensor';
-    metric = `sweep.${(d.data.data as any)?.sweepType || 'reading'}`;
-    value = (d.data.data as any)?.qualityScore || (d.data.data as any)?.readings || 0;
-    time = d.data.timestamp || d.timestamp || new Date();
-    
-    // สร้าง tags จาก metadata
-    if (d.data.metadata) {
-      tags.farm_id = d.data.farmId || '';
-      tags.farm_name = (d.data.metadata as any).farmName || '';
-      tags.house_name = (d.data.metadata as any).houseName || '';
-      tags.operator = (d.data.metadata as any).operator || '';
-      tags.equipment = (d.data.metadata as any).equipment || '';
-      tags.sweep_id = d.data.sweepId || '';
-      tags.sweep_type = (d.data.data as any)?.sweepType || '';
-      tags.duration = String((d.data.data as any)?.duration || 0);
-      tags.readings_count = String((d.data.data as any)?.readings || 0);
-      tags.anomalies_count = String((d.data.data as any)?.anomalies || 0);
+    const meta = (d.data.metadata as any) ?? {};
+    const dataBlock = (d.data.data as any) ?? {};
+
+    const tenant_id =
+      meta.customerId ??
+      d.data.tenantId ??
+      d.tenant_id ??
+      'unknown';
+
+    const device_id = d.data.deviceId;
+    const sensor_id = d.data.id ?? 'sweep-sensor';
+
+    const sweepType = dataBlock.sweepType ? sanitize(String(dataBlock.sweepType)) : 'reading';
+    const metric = `sweep.${sweepType}`;
+
+    // เลือก value แบบรักษา 0 และ coerce
+    const candidates = [
+      dataBlock.qualityScore,
+      dataBlock.score,
+      dataBlock.readings_count,
+      dataBlock.readings,
+      dataBlock.anomalies_count,
+      dataBlock.anomalies,
+      dataBlock.duration,
+    ];
+    let value: number | undefined;
+    for (const c of candidates) {
+      const v = num(c);
+      if (v !== undefined) { value = v; break; }
     }
-  } else {
-    // รูปแบบเก่า
-    if (!d.tenant_id || !d.robot_id || !d.sensor_id || !d.metric || d.value === undefined) {
-      return null;
-    }
-    
-    tenant_id = d.tenant_id;
-    device_id = d.robot_id;
-    sensor_id = d.sensor_id;
-    metric = `sweep.${d.metric.toLowerCase()}`;
-    value = d.value;
-    time = d.time ?? d.ts ?? new Date();
-    
-    tags.run_id = String(d.run_id || '');
-    tags.sensor_id = d.sensor_id;
-    if (d.zone_id) tags.zone_id = d.zone_id;
-    if (typeof d.x === 'number') tags.x = String(d.x);
-    if (typeof d.y === 'number') tags.y = String(d.y);
-    if (d.quality) tags.quality = d.quality;
+    if (value === undefined) value = 0;
+
+    const time =
+      d.data.timestamp ??
+      d.timestamp ??
+      new Date();
+
+    const tags: Record<string, string> = {};
+    if (d.data.farmId) tags.farm_id = d.data.farmId;
+    if (d.data.sweepId) tags.sweep_id = d.data.sweepId;
+    if (dataBlock.sweepType) tags.sweep_type = sweepType;
+
+    const duration = num(dataBlock.duration);
+    if (duration !== undefined) tags.duration_s = String(duration);
+
+    const readingsCount = num(dataBlock.readings);
+    if (readingsCount !== undefined) tags.readings_count = String(readingsCount);
+
+    const anomaliesCount = num(dataBlock.anomalies);
+    if (anomaliesCount !== undefined) tags.anomalies_count = String(anomaliesCount);
+
+    if (meta.farmName)  tags.farm_name  = String(meta.farmName);
+    if (meta.houseName) tags.house_name = String(meta.houseName);
+    if (meta.operator)  tags.operator   = String(meta.operator);
+    if (meta.equipment) tags.equipment  = String(meta.equipment);
+
+    return {
+      tenant_id,
+      device_id,
+      sensor_id,
+      metric,
+      value,
+      time,
+      tags,
+    };
   }
+
+  // -------- รูปแบบเก่า (flat) --------
+  const tenant_id = d.tenant_id;
+  const device_id = d.robot_id;
+  const sensor_id = d.sensor_id;
+  const metric = d.metric ? `sweep.${sanitize(d.metric)}` : undefined;
+  const value = num(d.value);
+  const time = d.time ?? d.ts ?? new Date();
+
+  if (!tenant_id || !device_id || !sensor_id || !metric || value === undefined) {
+    return null;
+  }
+
+  const tags: Record<string, string> = {};
+  if (d.run_id !== undefined) tags.run_id = String(d.run_id);
+  if (sensor_id) tags.sensor_id = sensor_id;
+  if (d.zone_id) tags.zone_id = d.zone_id;
+  if (d.x !== undefined) tags.x = String(num(d.x) ?? d.x);
+  if (d.y !== undefined) tags.y = String(num(d.y) ?? d.y);
+  if (d.quality) tags.quality = d.quality;
 
   return {
     tenant_id,
@@ -106,6 +156,3 @@ export function toMeasurementFromSweep(o: any): Measurement | null {
     tags,
   };
 }
-
-
-

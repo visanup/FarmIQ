@@ -38,7 +38,7 @@ const testTopics = [
 // Test data generators
 function createDeviceHealthEvent() {
   return {
-    eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     eventType: 'device.health.updated',
     version: '1.0',
     timestamp: new Date().toISOString(),
@@ -65,7 +65,7 @@ function createDeviceHealthEvent() {
 
 function createAnalyticsAnomalyEvent() {
   return {
-    eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     eventType: 'analytics.anomaly.detected',
     version: '1.0',
     timestamp: new Date().toISOString(),
@@ -93,7 +93,7 @@ function createAnalyticsAnomalyEvent() {
 
 function createMonitoringAlertEvent() {
   return {
-    eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     eventType: 'monitoring.alert.created',
     version: '1.0',
     timestamp: new Date().toISOString(),
@@ -102,7 +102,7 @@ function createMonitoringAlertEvent() {
       version: '1.0.0',
     },
     data: {
-      alertId: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      alertId: `alert_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       tenantId: 'tenant-001',
       alertType: 'device_offline',
       severity: 'critical',
@@ -120,7 +120,7 @@ function createMonitoringAlertEvent() {
 
 function createMonitoringHealthEvent() {
   return {
-    eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     eventType: 'monitoring.health.updated',
     version: '1.0',
     timestamp: new Date().toISOString(),
@@ -274,7 +274,7 @@ async function runPublishTests(existingTopics) {
     } else {
       // Generic event for other topics
       event = {
-        eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         eventType: 'test.event',
         version: '1.0',
         timestamp: new Date().toISOString(),

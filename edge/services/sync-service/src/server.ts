@@ -159,8 +159,8 @@ async function start() {
     // Start server
     await fastify.listen({ port: PORT, host: "0.0.0.0" });
     
-    console.log(`🚀 Sync service running on http://localhost:${PORT}`);
-    console.log(`📖 Swagger UI: http://localhost:${PORT}/api-docs`);
+    console.log(`🚀 Sync service running on http://0.0.0.0:${PORT}`);
+    console.log(`📖 Swagger UI: http://0.0.0.0:${PORT}/api-docs`);
 
     // Schedule cron job
     const everyMin = SYNC_INTERVAL_MINUTES;

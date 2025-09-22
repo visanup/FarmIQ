@@ -59,7 +59,8 @@ function sanitize(x: string) {
  */
 export function toMeasurementsFromOps(o: any): Measurement[] | null {
   const d = OpsEvent.parse(o);
-  const time = (d.time ?? d.ts)!;
+  // ใช้เวลาจาก event ถ้ามี ไม่มีก็ใช้เวลาปัจจุบันเพื่อหลีกเลี่ยง undefined
+  const time = d.time ?? d.ts ?? new Date();
 
   const entity =
     d.device_id ?? d.house_id ?? d.farm_id;

@@ -107,7 +107,7 @@ export const SignInPage: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
                   <Agriculture sx={{ fontSize: 44, mr: 1 }} />
                   <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                    FarmIQ™
+                    FarmIQ
                   </Typography>
                 </Box>
                 <Typography variant="h6" sx={{ opacity: 0.95, mb: 1 }}>

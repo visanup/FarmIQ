@@ -1,0 +1,97 @@
+// Vision Inference Service Prisma Schema
+// Uses shared database with separate schema for microservice isolation
+// This service handles computer vision inference for weight prediction
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-py"
+}
+
+// Vision Inference Service Models
+model InferenceJob {
+  id          String   @id @default(cuid())
+  mediaId     String   // Reference to image from image-ingestion-service
+  tenantId    String
+  farmId      String?
+  houseId     String?
+  stationId   String?
+  modelId     String   // Which model version to use
+  status      String   @default("pending") // pending, processing, completed, failed
+  inputData   Json?    // Input parameters for inference
+  outputData  Json?    // Inference results (weight, confidence, etc.)
+  metadata    Json?    // Additional metadata
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("inference_jobs")
+  @@index([mediaId])
+  @@index([tenantId, status])
+  @@index([status, createdAt])
+}
+
+model WeightPrediction {
+  id            String   @id @default(cuid())
+  jobId         String   // Reference to InferenceJob
+  mediaId       String   // Reference to original image
+  tenantId      String
+  farmId        String?
+  houseId       String?
+  stationId     String?
+  predictedWeight Float  // Predicted weight in kg
+  confidence    Float    // Confidence score (0-1)
+  modelVersion  String   // Model version used
+  inferenceTime Int      // Time taken for inference in ms
+  bbox          Json?    // Bounding box coordinates if detected
+  metadata      Json?    // Additional prediction metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("weight_predictions")
+  @@index([jobId])
+  @@index([mediaId])
+  @@index([tenantId, createdAt])
+  @@index([predictedWeight, confidence])
+}
+
+model ModelRegistry {
+  id          String   @id @default(cuid())
+  modelId     String   @unique
+  tenantId    String
+  name        String
+  version     String
+  type        String   // "weight_prediction", "object_detection", etc.
+  status      String   @default("active") // active, deprecated, training
+  modelPath   String?  // Path to model file
+  config      Json?    // Model configuration
+  metrics     Json?    // Model performance metrics
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("model_registry")
+  @@index([tenantId, status])
+  @@index([modelId, version])
+}
+
+model InferenceMetrics {
+  id            String   @id @default(cuid())
+  modelId       String
+  tenantId      String
+  totalJobs     Int      @default(0)
+  successfulJobs Int     @default(0)
+  failedJobs    Int      @default(0)
+  avgInferenceTime Int   @default(0) // Average inference time in ms
+  avgConfidence Float    @default(0) // Average confidence score
+  lastUpdated   DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("inference_metrics")
+  @@index([modelId])
+  @@index([tenantId, lastUpdated])
+}

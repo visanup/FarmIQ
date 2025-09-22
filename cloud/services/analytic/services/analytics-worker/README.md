@@ -1,253 +1,114 @@
 # Analytics Worker Service
 
-Analytics worker service for FarmIQ - processes real-time data from Kafka, performs aggregations, and runs scheduled analytics jobs.
+Analytics worker for FarmIQ. Default operating mode is DB-first analytics: analytics-stream ingests Kafka and writes per-minute aggregates to `analytics.minute_features`, and this worker reads from the database to compute higher‑level analytics on a schedule. Real‑time Kafka streaming in this service is optional and disabled by default.
 
-## ๐—๏ธ Architecture
+## Architecture
 
-- **Framework**: FastAPI + SQLAlchemy + APScheduler
-- **Database**: PostgreSQL with TimescaleDB (analytics schema)
-- **Message Queue**: Kafka (consumer)
-- **Scheduler**: APScheduler for background jobs
-- **Port**: 7305
+- Framework: FastAPI + SQLAlchemy + APScheduler
+- Database: PostgreSQL/TimescaleDB (`analytics` schema)
+- Kafka: optional consumer (disabled by default)
+- Port: 7304 (configurable)
 
-## ๐“ Prerequisites
+## Quick Start (Scheduler‑only mode)
 
-- Python 3.11+
-- PostgreSQL with TimescaleDB extension
-- Kafka
-- Docker & Docker Compose (optional)
+1) Environment
 
-## ๐€ Quick Start
+Create `.env` (only DB + scheduler needed):
 
-### 1. Database Setup
-
-Create the analytics schema and tables in PostgreSQL:
-
-```sql
--- Connect to your PostgreSQL database
-\c farmiq_cloud
-
--- Create analytics schema
-CREATE SCHEMA IF NOT EXISTS analytics;
-
--- Create analytics_agg table (aggregated data)
-CREATE TABLE analytics.analytics_agg (
-    bucket_start TIMESTAMPTZ NOT NULL,
-    window_s INTEGER NOT NULL,
-    tenant_id TEXT NOT NULL,
-    factory_id TEXT NOT NULL,
-    machine_id TEXT NOT NULL,
-    sensor_id TEXT,
-    metric TEXT NOT NULL,
-    count_n BIGINT DEFAULT 0,
-    sum_val DOUBLE PRECISION DEFAULT 0,
-    avg_val DOUBLE PRECISION DEFAULT 0,
-    min_val DOUBLE PRECISION DEFAULT 0,
-    max_val DOUBLE PRECISION DEFAULT 0,
-    stddev_val DOUBLE PRECISION DEFAULT 0,
-    p95_val DOUBLE PRECISION DEFAULT 0,
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (bucket_start, window_s, tenant_id, factory_id, machine_id, sensor_id, metric)
-);
-
--- Convert to TimescaleDB hypertable
-SELECT create_hypertable('analytics.analytics_agg', 'bucket_start');
 ```
-
-### 2. Environment Setup
-
-Create `.env` file:
-
-```bash
 # Database
-DB_HOST=postgres
+DB_HOST=timescaledb
 DB_PORT=5432
-DB_NAME=farmiq_cloud
+DB_NAME=sensor_cloud_db
 DB_USER=postgres
-DB_PASSWORD=postgres1611
+DB_PASSWORD=password
 DB_SCHEMA=analytics
 
-# Kafka
+# Kafka (not used when ENABLE_WORKER=0)
 KAFKA_BROKERS=kafka:9092
-CONSUMER_GROUP=analytic-service.v1
+CONSUMER_GROUP=analytics-worker.v1
 KAFKA_CLIENT_ID=analytics-worker
+KAFKA_TOPICS=
 
-# Topics (comma-separated)
-KAFKA_TOPICS=sensors.device.readings.v1,sensors.device.health.v1,sensors.lab.readings.v1
-
-# Aggregation windows (comma-separated)
+# Windows (seconds)
 WINDOWS=60,300,3600
 
 # API
 API_HOST=0.0.0.0
-ANALYTICS_WORKER_PORT=7305
+ANALYTICS_WORKER_PORT=7304
 ENV=dev
 
-# Worker settings
-ENABLE_WORKER=1
+# Mode
 ENABLE_SCHEDULER=1
+ENABLE_WORKER=0
 ```
 
-### 3. Installation & Development
+2) Run
 
-```bash
-# Install dependencies
+```
 pip install -r requirements.txt
-
-# Development mode
 python -m app.main
-
-# Or with uvicorn
-uvicorn app.main:app --host 0.0.0.0 --port 7305 --reload
+# or
+uvicorn app.main:app --host 0.0.0.0 --port 7304
 ```
 
-### 4. Docker Deployment
+3) Health
 
-```bash
-# Build and run with Docker Compose
-docker-compose -f ../../../docker-compose.apps.yml up analytics-worker --build
+```
+curl http://localhost:7304/v1/health
+curl http://localhost:7304/v1/metrics
 ```
 
-## ๐งช Testing
+## API Endpoints
 
-### Health Checks
+- GET `/v1/health` – status + worker/scheduler flags
+- GET `/v1/metrics` – Prometheus metrics
+- POST `/v1/analytics/trigger/hourly` – run hourly health
+- POST `/v1/analytics/trigger/daily` – run daily FCR/health/production
+- POST `/v1/analytics/trigger/weekly` – run weekly FCR/production
+ - GET `/v1/checkpoints?limit=200` – list recent checkpoints
+ - GET `/v1/checkpoints/{job}/{tenant}/{farm}/{house}` – legacy: list all flock checkpoints under a house
+ - GET `/v1/checkpoints/{job}/{tenant}/{farm}/{house}/{flock}` – get per-entity (flock-level) checkpoint
+ - DELETE `/v1/checkpoints/{job}/{tenant}/{farm}/{house}/{flock}` – clear checkpoint to force rerun
+ - POST `/v1/checkpoints/{job}/{tenant}/{farm}/{house}/{flock}` with `ts=ISO8601` – set checkpoint explicitly
 
-```bash
-# Health check
-curl http://localhost:7305/v1/health
+## Configuration
 
-# Metrics
-curl http://localhost:7305/v1/metrics
-```
+| Variable | Default | Notes |
+|---|---|---|
+| DB_HOST/PORT/NAME/USER/PASSWORD | timescaledb/5432/sensor_cloud_db/postgres/password | DB connection |
+| DB_SCHEMA | analytics | search_path used by the worker |
+| KAFKA_BROKERS | kafka:9092 | Only used if worker enabled |
+| CONSUMER_GROUP | analytics-worker.v1 | Only used if worker enabled |
+| KAFKA_TOPICS | empty | Comma-separated list of topics; empty disables worker subscribe |
+| WINDOWS | 60,300,3600 | Aggregate windows (seconds) |
+| ENABLE_SCHEDULER | 1 | Enable scheduled analytics |
+| ENABLE_WORKER | 0 | Disable Kafka stream worker |
 
-## ๐“ API Endpoints
+## Processing Flow
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/v1/health` | Health check with worker status |
-| GET | `/v1/metrics` | Prometheus metrics |
+1) Analytics‑stream upserts rows into `analytics.minute_features`
+2) Analytics‑worker queries `minute_features` windows and stores results:
+   - `analytics.fcr_calculation`
+   - `analytics.health_metrics`
+   - `analytics.production_metrics`
+3) Optional: enable Kafka worker (set `ENABLE_WORKER=1`) to process realtime topics.
 
-## ๐”ง Configuration
+## Troubleshooting
 
-### Environment Variables
+- Worker not running jobs: verify `ENABLE_SCHEDULER=1` and check `/v1/health`
+- No analytics rows: ensure `analytics.minute_features` is populated by analytics‑stream and schemas/DB point to the same instance
+- Kafka errors when disabled: leave `KAFKA_TOPICS` empty and `ENABLE_WORKER=0`
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | `timescaledb` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
-| `DB_NAME` | `sensor_cloud_db` | Database name |
-| `DB_USER` | `postgres` | Database user |
-| `DB_PASSWORD` | `password` | Database password |
-| `DB_SCHEMA` | `analytics` | Database schema |
-| `KAFKA_BROKERS` | `kafka:9092` | Kafka broker addresses |
-| `CONSUMER_GROUP` | `analytic-service.v1` | Kafka consumer group |
-| `KAFKA_TOPICS` | - | Comma-separated list of topics to consume |
-| `WINDOWS` | `60,300,3600` | Aggregation windows (seconds) |
-| `API_HOST` | `0.0.0.0` | API host |
-| `ANALYTICS_WORKER_PORT` | `7305` | API port |
-| `ENABLE_WORKER` | `1` | Enable Kafka consumer worker |
-| `ENABLE_SCHEDULER` | `1` | Enable background scheduler |
-
-## ๐” Data Processing Flow
-
-### 1. **Kafka Consumer**
-- Consumes messages from configured topics
-- Handles batch processing (500 messages per batch)
-- Implements graceful shutdown on SIGTERM/SIGINT
-
-### 2. **Data Processing**
-- **Measurements**: Aggregated into time windows (60s, 300s, 3600s)
-- **Events**: Rolled up by entity and event type
-- **Snapshots**: Stored as dimension data
-
-### 3. **Background Jobs**
-- **KPI Calculation**: Runs every 5 minutes
-- **Anomaly Detection**: Real-time processing
-- **Data Aggregation**: Continuous processing
-
-### 4. **Database Operations**
-- **Upsert Operations**: Prevents duplicates
-- **Batch Processing**: Optimizes database performance
-- **Transaction Management**: Ensures data consistency
-
-## ๐“ Monitoring
-
-### Prometheus Metrics
-
-- `aw_ingested_msgs` - Messages ingested from Kafka
-- `aw_consumer_lag` - Consumer lag (approximate)
-- `aw_proc_time_seconds` - Batch processing time
-- `aw_worker_status` - Worker thread status
-- `aw_scheduler_jobs` - Scheduled job count
-
-## ๐จ Troubleshooting
-
-### Common Issues
-
-1. **Kafka Connection Failed**
-   ```bash
-   # Check Kafka status
-   docker exec -it farmiq-kafka kafka-topics.sh --bootstrap-server localhost:9092 --list
-   ```
-
-2. **Database Connection Failed**
-   ```bash
-   # Check database connectivity
-   docker exec -it farmiq-postgres psql -U postgres -d farmiq_cloud -c "SELECT 1;"
-   ```
-
-3. **Worker Not Processing Messages**
-   ```bash
-   # Check worker status
-   curl http://localhost:7305/v1/health
-   ```
-
-## ๐“ Project Structure
+## Project Structure
 
 ```
 app/
-โ”โ”€โ”€ adapters/
-โ”   โ”โ”€โ”€ kafka_consumer.py    # Kafka consumer setup
-โ”   โ”โ”€โ”€ kafka_producer.py    # Kafka producer setup
-โ”   โ””โ”€โ”€ repository.py        # Database repository
-โ”โ”€โ”€ api/
-โ”   โ””โ”€โ”€ v1/
-โ”       โ””โ”€โ”€ endpoint.py      # Health & metrics endpoints
-โ”โ”€โ”€ config.py                # Configuration management
-โ”โ”€โ”€ database.py              # Database connection
-โ”โ”€โ”€ domain/
-โ”   โ”โ”€โ”€ models.py            # Domain models
-โ”   โ”โ”€โ”€ rules.py             # Business rules
-โ”   โ””โ”€โ”€ windows.py           # Time window utilities
-โ”โ”€โ”€ instrumentation/
-โ”   โ”โ”€โ”€ metrics.py           # Prometheus metrics
-โ”   โ””โ”€โ”€ tracing.py           # Distributed tracing
-โ”โ”€โ”€ pipelines/
-โ”   โ”โ”€โ”€ map/                 # Data mapping functions
-โ”   โ””โ”€โ”€ registry.py          # Pipeline registry
-โ”โ”€โ”€ services/
-โ”   โ”โ”€โ”€ aggregator.py        # Data aggregation
-โ”   โ”โ”€โ”€ anomaly_detector.py  # Anomaly detection
-โ”   โ”โ”€โ”€ kpi.py              # KPI calculations
-โ”   โ””โ”€โ”€ spec_limits.py      # Specification limits
-โ”โ”€โ”€ utils/
-โ”   โ”โ”€โ”€ time.py             # Time utilities
-โ”   โ”โ”€โ”€ stats.py            # Statistical functions
-โ”   โ””โ”€โ”€ serialization.py    # Data serialization
-โ”โ”€โ”€ workers/
-โ”   โ”โ”€โ”€ scheduler.py        # Background scheduler
-โ”   โ””โ”€โ”€ stream_worker.py    # Kafka stream worker
-โ””โ”€โ”€ main.py                 # FastAPI application
+├─ adapters/ (kafka, repository)
+├─ api/v1/endpoint.py (health, metrics, triggers)
+├─ services/ (aggregator, analytics_calculator, kpi)
+├─ workers/ (scheduler, stream_worker)
+└─ main.py (FastAPI app + lifespan)
 ```
-
-## ๐ค Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## ๐“ License
 
 This project is part of the FarmIQ platform.

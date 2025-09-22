@@ -24,6 +24,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useUnreadCount } from '../../hooks/useNotifications';
+import NotificationPanel from './NotificationPanel';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -35,6 +37,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, drawerWidth }) => {
   const { user, logout } = useAuthStore();
   const { mode, toggleMode } = useThemeStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const { count: unreadCount } = useUnreadCount();
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -53,6 +57,10 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, drawerWidth }) => {
   const handleSettings = () => {
     navigate('/settings');
     handleProfileMenuClose();
+  };
+
+  const handleNotificationClick = () => {
+    setNotificationOpen(!notificationOpen);
   };
 
   return (
@@ -87,10 +95,21 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, drawerWidth }) => {
                 {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
               </IconButton>
             </Tooltip>
-            <Tooltip title="Notifications">
-                <IconButton>
-                    <Badge badgeContent={4} color="error">
-                    <NotificationsIcon />
+            <Tooltip title="การแจ้งเตือน">
+                <IconButton onClick={handleNotificationClick}>
+                    <Badge 
+                      badgeContent={unreadCount} 
+                      color="error"
+                      sx={{
+                        '& .MuiBadge-badge': {
+                          fontSize: '0.75rem',
+                          height: 18,
+                          minWidth: 18,
+                          fontWeight: 700,
+                        }
+                      }}
+                    >
+                      <NotificationsIcon />
                     </Badge>
                 </IconButton>
             </Tooltip>
@@ -136,6 +155,12 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, drawerWidth }) => {
             Logout
           </MenuItem>
         </Menu>
+
+        {/* Notification Panel */}
+        <NotificationPanel 
+          open={notificationOpen} 
+          onClose={() => setNotificationOpen(false)} 
+        />
       </Toolbar>
     </AppBar>
   );

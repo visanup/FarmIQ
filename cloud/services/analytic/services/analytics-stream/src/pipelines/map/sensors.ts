@@ -109,11 +109,14 @@ export function toMeasurementFromSensor(o: any): Measurement | null {
     location_z: location?.z?.toString() || '0',
   };
 
+  const normalized = sensorType.toLowerCase();
+  const metric = normalized.includes('.') ? normalized : `sensor.${normalized}`;
+
   return {
     tenant_id,
     device_id: data.deviceId,
     sensor_id: sensorType, // Use actual sensor type instead of 'unknown'
-    metric: `sensor.${sensorType.toLowerCase()}`,
+    metric,
     value,
     time: new Date(data.timestamp),
     tags

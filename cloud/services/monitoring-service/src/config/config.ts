@@ -11,6 +11,7 @@ const configSchema = z.object({
   PORT: z.string().transform(Number).default('4112'),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  SERVICE_NAME: z.string().default('Monitoring Service'),
 
   // Database
   DATABASE_URL: z.string().min(1),
@@ -44,6 +45,7 @@ const config = configSchema.parse(process.env);
 export const PORT = config.PORT;
 export const HOST = config.HOST;
 export const NODE_ENV = config.NODE_ENV;
+export const SERVICE_NAME = config.SERVICE_NAME;
 
 // Database configuration
 export const DATABASE_URL = config.DATABASE_URL;
@@ -69,6 +71,3 @@ export const TOPIC_DEVICE_HEALTH = config.TOPIC_DEVICE_HEALTH;
 export const TOPIC_ANALYTICS_ALERTS = config.TOPIC_ANALYTICS_ALERTS;
 export const TOPIC_MONITORING_ALERTS = config.TOPIC_MONITORING_ALERTS;
 export const TOPIC_MONITORING_HEALTH = config.TOPIC_MONITORING_HEALTH;
-
-// Service name
-export const SERVICE_NAME = 'Monitoring Service';

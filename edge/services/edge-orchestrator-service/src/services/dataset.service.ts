@@ -44,3 +44,65 @@ export async function listRecentDatasets(limit = 10) {
     limit
   ) as Promise<any[]>;
 }
+
+// Create sweep reading for robot operations
+export async function createSweepReading(data: {
+  tenantId: string;
+  robotId: string;
+  farmId?: string;
+  houseId?: string;
+  sweepId: string;
+  time: Date;
+  data: {
+    zones: number;
+    animalsDetected: number;
+    averageWeight: number;
+    temperature: number;
+    humidity: number;
+    co2: number;
+    sweepDuration: number;
+    success: boolean;
+    sensorId?: string;
+    metric?: string;
+    value?: number;
+    x?: number;
+    y?: number;
+    zoneId?: string;
+    quality?: string;
+  };
+  metadata?: any;
+}) {
+  const sweepReading = {
+    deviceId: data.robotId,
+    farmId: data.farmId || data.tenantId,
+    sweepId: data.sweepId,
+    data: data.data,
+    metadata: {
+      ...(data.metadata || {}),
+      tenantId: data.tenantId,
+      farmId: data.farmId,
+      houseId: data.houseId,
+      robotId: data.robotId,
+      sweepId: data.sweepId,
+      generatedAt: new Date().toISOString()
+    },
+    timestamp: data.time
+  };
+
+  // Insert into sweep_readings table for sync service
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO sensors.sweep_readings 
+     (device_id, farm_id, sweep_id, data, metadata, time)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (device_id, sweep_id, time) 
+     DO UPDATE SET data=EXCLUDED.data, metadata=EXCLUDED.metadata`,
+    sweepReading.deviceId,
+    sweepReading.farmId,
+    sweepReading.sweepId,
+    JSON.stringify(sweepReading.data),
+    JSON.stringify(sweepReading.metadata),
+    sweepReading.timestamp
+  );
+
+  return sweepReading;
+}

@@ -167,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, drawerWidth }) 
           </Typography>
         </Box>
         <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
-          FarmIQ™
+          FarmIQ
         </Typography>
       </Box>
 
@@ -272,7 +272,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, drawerWidth }) 
       {/* Footer */}
       <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
         <Typography variant="caption" color="text.secondary" display="block">
-          © 2024 FarmIQ™ Analytics
+          © 2024 FarmIQ Analytics
         </Typography>
       </Box>
     </Box>

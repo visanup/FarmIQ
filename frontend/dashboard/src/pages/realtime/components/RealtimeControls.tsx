@@ -8,9 +8,14 @@ import {
   Box,
   Typography,
   Slider,
+  Card,
+  CardContent,
+  Button,
+  Chip,
+  alpha,
+  useTheme,
 } from '@mui/material';
-import { ChartCard } from '../../dashboard/components/ChartCard';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon, FilterList as FilterIcon } from '@mui/icons-material';
 
 interface RealtimeControlsProps {
   selectedFarm: string;
@@ -39,15 +44,37 @@ export const RealtimeControls: React.FC<RealtimeControlsProps> = ({
   farms,
   devices,
 }) => {
+  const theme = useTheme();
   const filteredDevices = devices.filter(device => 
     selectedFarm === 'all' || device.farmId === selectedFarm
   );
 
   return (
-    <ChartCard title="ตัวกรองข้อมูลเรียลไทม์" dense height={140} contentPadding={16}>
-      <Grid container spacing={3} alignItems="center">
+    <Card sx={{
+      borderRadius: 3,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+      background: 'rgba(255,255,255,0.95)',
+      backdropFilter: 'blur(10px)',
+      border: '1px solid rgba(255,255,255,0.2)'
+    }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <FilterIcon sx={{ mr: 1, color: 'primary.main' }} />
+          <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            ตัวกรองข้อมูลเรียลไทม์
+          </Typography>
+        </Box>
+        <Grid container spacing={3} alignItems="center">
           <Grid item xs={12} sm={6} md={3}>
-            <FormControl fullWidth size="small">
+            <FormControl fullWidth size="small" sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                backgroundColor: 'rgba(255,255,255,0.8)',
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'primary.main',
+                },
+              }
+            }}>
               <InputLabel>ฟาร์ม</InputLabel>
               <Select
                 value={selectedFarm}
@@ -119,8 +146,9 @@ export const RealtimeControls: React.FC<RealtimeControlsProps> = ({
               />
             </Box>
           </Grid>
-      </Grid>
-    </ChartCard>
+        </Grid>
+      </CardContent>
+    </Card>
   );
 };
 

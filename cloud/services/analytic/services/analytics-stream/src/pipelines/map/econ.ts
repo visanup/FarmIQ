@@ -26,6 +26,8 @@ const Time = z.preprocess((input) => {
 const sanitize = (x: string) =>
   x.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
 
+const toUpper = (s?: string) => (s ? s.toUpperCase() : s);
+
 /** ---------- สคีมาข้อมูลธุรกรรมต้นทาง ---------- */
 const EconTxn = z.object({
   schema: z.string().optional(),       // "economics.cost.txn.v1"
@@ -43,15 +45,15 @@ const EconTxn = z.object({
   item_code: z.string().optional(),
   description: z.string().optional(),
 
-  amount: z.number().finite().optional(),     // ยอด (ตามสกุลเงินเดิม)
-  currency: z.string().optional(),            // e.g. "THB", "USD"
+  amount: z.coerce.number().finite().optional(),     // ✅ รับ string/number
+  currency: z.string().optional(),                   // e.g. "THB", "USD"
 
-  quantity: z.number().finite().optional(),   // ปริมาณ
-  unit: z.string().optional(),                // e.g. "kg", "h", "kWh"
+  quantity: z.coerce.number().finite().optional(),   // ✅ รับ string/number
+  unit: z.string().optional(),                       // e.g. "kg", "h", "kWh"
 
   // (ออปชัน) การแปลงสกุลเงิน → base
-  base_currency: z.string().optional(),       // e.g. "THB"
-  rate_to_base: z.number().finite().optional(), // base_amount = amount * rate_to_base
+  base_currency: z.string().optional(),              // e.g. "THB"
+  rate_to_base: z.coerce.number().finite().optional(), // ✅ รับ string/number
 
   vendor_id: z.string().optional(),
   invoice_id: z.string().optional(),
@@ -68,9 +70,9 @@ const EconTxn = z.object({
  *   - econ.txn.count = 1
  *   - econ.txn.amount (tags.currency)
  *   - econ.txn.amount_base (ถ้ามี base_currency + rate_to_base)
- *   - econ.txn.qty (ถ้ามี quantity, tags.unit)
- *   - econ.txn.ppu (price per unit) ถ้ามีทั้ง amount & quantity
- *   - econ.category.<cat>.amount / .qty  (แตกตาม category)
+ *   - econ.txn.qty (tags.unit)
+ *   - econ.txn.ppu / ppu_base (price per unit)
+ *   - econ.category.<cat>.amount / .qty / .ppu (+ เวอร์ชัน *_base)
  *
  * entity anchor: house_id > farm_id > cost_center > device_id
  */
@@ -78,14 +80,16 @@ export function toMeasurementsFromEconTxn(o: any): Measurement[] | null {
   const d = EconTxn.parse(o);
   const time = (d.time ?? d.ts)!;
 
-  const entity =
-    d.house_id ?? d.farm_id ?? d.cost_center ?? d.device_id;
+  const entity = d.house_id ?? d.farm_id ?? d.cost_center ?? d.device_id;
   if (!entity) return null; // ไม่มี anchor ให้ผูก → ข้าม
 
   const cat = sanitize(d.category);
+  const currency = toUpper(d.currency);
+  const baseCurrency = toUpper(d.base_currency);
+
   const tags: Record<string, string> = {};
   if (d.subcategory) tags.subcat = sanitize(d.subcategory);
-  if (d.currency)    tags.currency = d.currency;
+  if (currency)      tags.currency = currency;
   if (d.unit)        tags.unit = d.unit;
   if (d.vendor_id)   tags.vendor_id = d.vendor_id;
   if (d.invoice_id)  tags.invoice_id = d.invoice_id;
@@ -105,7 +109,8 @@ export function toMeasurementsFromEconTxn(o: any): Measurement[] | null {
     }
   ];
 
-  if (typeof d.amount === 'number') {
+  // amount + category amount
+  if (typeof d.amount === 'number' && Number.isFinite(d.amount)) {
     out.push({
       tenant_id: d.tenant_id,
       device_id: entity,
@@ -114,7 +119,6 @@ export function toMeasurementsFromEconTxn(o: any): Measurement[] | null {
       time,
       tags
     });
-    // แตกตามหมวด
     out.push({
       tenant_id: d.tenant_id,
       device_id: entity,
@@ -124,28 +128,32 @@ export function toMeasurementsFromEconTxn(o: any): Measurement[] | null {
       tags
     });
 
-    // amount_base ถ้ามีข้อมูลแปลง
-    if (d.base_currency && typeof d.rate_to_base === 'number') {
+    // amount_base / category.amount_base
+    if (baseCurrency && typeof d.rate_to_base === 'number' && Number.isFinite(d.rate_to_base)) {
+      const amountBase = d.amount * d.rate_to_base;
+      const tagsBase = { ...tags, currency: baseCurrency, fx_rate: String(d.rate_to_base) };
+
       out.push({
         tenant_id: d.tenant_id,
         device_id: entity,
         metric: 'econ.txn.amount_base',
-        value: d.amount * d.rate_to_base,
+        value: amountBase,
         time,
-        tags: { ...tags, currency: d.base_currency }
+        tags: tagsBase
       });
       out.push({
         tenant_id: d.tenant_id,
         device_id: entity,
         metric: `econ.category.${cat}.amount_base`,
-        value: d.amount * d.rate_to_base,
+        value: amountBase,
         time,
-        tags: { ...tags, currency: d.base_currency }
+        tags: tagsBase
       });
     }
   }
 
-  if (typeof d.quantity === 'number') {
+  // qty + category qty
+  if (typeof d.quantity === 'number' && Number.isFinite(d.quantity)) {
     out.push({
       tenant_id: d.tenant_id,
       device_id: entity,
@@ -163,16 +171,48 @@ export function toMeasurementsFromEconTxn(o: any): Measurement[] | null {
       tags
     });
 
-    // price per unit (ppu) ถ้ามี amount
-    if (typeof d.amount === 'number' && d.quantity !== 0) {
+    // price per unit
+    if (typeof d.amount === 'number' && Number.isFinite(d.amount) && d.quantity !== 0) {
+      const ppu = d.amount / d.quantity;
       out.push({
         tenant_id: d.tenant_id,
         device_id: entity,
         metric: 'econ.txn.ppu', // price per unit
-        value: d.amount / d.quantity,
+        value: ppu,
         time,
-        tags // currency + unit อยู่ใน tags อยู่แล้ว
+        tags
       });
+      out.push({
+        tenant_id: d.tenant_id,
+        device_id: entity,
+        metric: `econ.category.${cat}.ppu`,
+        value: ppu,
+        time,
+        tags
+      });
+
+      // ppu_base ถ้ามีการแปลงสกุลเงิน
+      if (baseCurrency && typeof d.rate_to_base === 'number' && Number.isFinite(d.rate_to_base)) {
+        const ppuBase = ppu * d.rate_to_base;
+        const tagsBase = { ...tags, currency: baseCurrency, fx_rate: String(d.rate_to_base) };
+
+        out.push({
+          tenant_id: d.tenant_id,
+          device_id: entity,
+          metric: 'econ.txn.ppu_base',
+          value: ppuBase,
+          time,
+          tags: tagsBase
+        });
+        out.push({
+          tenant_id: d.tenant_id,
+          device_id: entity,
+          metric: `econ.category.${cat}.ppu_base`,
+          value: ppuBase,
+          time,
+          tags: tagsBase
+        });
+      }
     }
   }
 

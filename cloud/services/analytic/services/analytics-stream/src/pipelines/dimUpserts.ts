@@ -131,8 +131,8 @@ const HouseSnap = BaseSnap.extend({
 
 const FlockSnap = BaseSnap.extend({
   flock_id: z.string().min(1),
-  house_id: z.string().min(1).optional(),
-  farm_id: z.string().optional(),
+  house_id: z.string().min(1),
+  farm_id: z.string().min(1).optional(),
   breed: z.string().optional(),
   sex: z.enum(['male', 'female', 'mixed']).optional(),
   population: z.number().int().nonnegative().optional(),
@@ -249,8 +249,8 @@ export async function handleFlockSnapshot(o: any) {
     {
       tenant_id: d.tenant_id ?? TENANT_FALLBACK,
       flock_id: d.flock_id,
-      house_id: d.house_id ?? null,
-      farm_id: d.farm_id ?? null,
+      house_id: d.house_id ?? '',
+      farm_id: d.farm_id ?? '',
       breed: d.breed ?? null,
       sex: d.sex ?? null,
       population: d.population ?? null,

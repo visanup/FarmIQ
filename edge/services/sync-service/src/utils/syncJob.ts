@@ -9,12 +9,12 @@ import { DeviceHealth } from "../models/DeviceHealth";
 
 let isSyncing = false;
 
-type Plan = {
-  name:
-    | "sensors.sweep_readings"
-    | "sensors.lab_readings"
-    | "sensors.device_readings"
-    | "sensors.device_health";
+  type Plan = {
+    name:
+      | "edge_sensor.sweep_readings"
+      | "edge_sensor.lab_readings"
+      | "edge_sensor.device_readings"
+      | "edge_sensor.device_health";
   entity: any;
   timeCol: string;
   endpoint: string;
@@ -29,40 +29,87 @@ const BATCH_LAB = Number(process.env.SYNC_BATCH_LAB ?? 10000);
 const BATCH_DEVICE = Number(process.env.SYNC_BATCH_DEVICE ?? 20000);
 const BATCH_HEALTH = Number(process.env.SYNC_BATCH_HEALTH ?? 5000);
 
-const plans: Plan[] = [
-  {
-    name: "sensors.sweep_readings",
+// Helper functions for data mapping
+function getUnitForSensorType(sensorType: string): string {
+  const unitMap: { [key: string]: string } = {
+    'temperature': '°C',
+    'humidity': '%',
+    'CO2': 'ppm',
+    'NH3': 'ppm',
+    'illuminance': 'lux',
+    'photoperiod': 'hours',
+    'VOCs': 'ppb',
+    'pH': 'pH',
+    'TDS': 'ppm',
+    'EC': 'mS/cm',
+    'water_volume': 'L',
+    'water_temp': '°C',
+    'feed.intake.kg': 'kg',
+    'sensors.weight_scale.current_kg': 'kg',
+    'sensors.weight_predict.current_kg': 'kg'
+  };
+  return unitMap[sensorType] || sensorType;
+}
+
+function getUnitForTestType(testType: string): string {
+  const unitMap: { [key: string]: string } = {
+    'water_quality': 'score',
+    'feed_analysis': 'mg/kg',
+    'soil_analysis': 'pH',
+    'pathogen_test': 'cfu/ml',
+    'nutrient_analysis': 'ppm'
+  };
+  return unitMap[testType] || 'unit';
+}
+
+function getResultForValue(testType: string, value: number): string {
+  // Simple pass/fail logic based on test type and value
+  switch (testType) {
+    case 'water_quality':
+      return value >= 70 ? 'PASS' : 'FAIL';
+    case 'pathogen_test':
+      return value <= 100 ? 'PASS' : 'FAIL';
+    case 'soil_analysis':
+      return value >= 6.0 && value <= 8.0 ? 'PASS' : 'FAIL';
+    default:
+      return value > 0 ? 'PASS' : 'FAIL';
+  }
+}
+
+  const plans: Plan[] = [
+    {
+      name: "edge_sensor.sweep_readings",
     entity: SweepReading,
-    timeCol: "time",
+    timeCol: "timestamp",
     endpoint: "/sweep-readings",
-    filter: TENANT ? "t.tenant_id = :tenant" : undefined,
+    filter: TENANT ? "t.tenantId = :tenant" : undefined,
     batch: BATCH_SWEEP,
     order: 2,
   },
-  {
-    name: "sensors.lab_readings",
+    {
+      name: "edge_sensor.lab_readings",
     entity: LabReading,
-    timeCol: "time",
+    timeCol: "timestamp",
     endpoint: "/lab-readings",
-    filter: TENANT ? "t.tenant_id = :tenant" : undefined,
+    filter: TENANT ? "t.tenantId = :tenant" : undefined,
     batch: BATCH_LAB,
     order: 2,
   },
-  {
-    name: "sensors.device_readings",
+    {
+      name: "edge_sensor.device_readings",
     entity: DeviceReading,
-    timeCol: "time",
+    timeCol: "timestamp",
     endpoint: "/sensor-readings",
-    filter: TENANT ? "t.tenant_id = :tenant" : undefined,
+    filter: TENANT ? "t.tenantId = :tenant" : undefined,
     batch: BATCH_DEVICE,
     order: 2,
   },
-  {
-    name: "sensors.device_health",
+    {
+      name: "edge_sensor.device_health",
     entity: DeviceHealth,
-    timeCol: "time",
+    timeCol: "lastSeen",
     endpoint: "/device-health",
-    filter: TENANT ? "t.tenant_id = :tenant" : undefined,
+    filter: TENANT ? "t.tenantId = :tenant" : undefined,
     batch: BATCH_HEALTH,
     order: 3,
   },
@@ -70,13 +117,35 @@ const plans: Plan[] = [
 
 async function getCursor(endpoint: string): Promise<Date> {
   try {
-    const response = await apiClient.get<{ last_ts: string }>(`${endpoint}/latest-timestamp`);
-    const lastTs = new Date(response.data.last_ts);
-    // backoff 1ms กันตกหล่น
+    let url = `${endpoint}/latest-timestamp`;
+
+    if (endpoint === '/device-health') {
+      url = `${endpoint}/latest-timestamp/all`;
+    }
+
+    const response = await apiClient.get<Record<string, string | undefined>>(url);
+    const raw = response.data;
+    const candidate = raw?.last_ts ?? raw?.lastTimestamp ?? raw?.lastSyncedAt ?? raw?.timestamp;
+
+    if (!candidate) {
+      console.warn(`No cursor from ${endpoint}, defaulting to epoch`);
+      return new Date(0);
+    }
+
+    const lastTs = new Date(candidate);
+    if (isNaN(lastTs.getTime())) {
+      console.warn(`Invalid timestamp from ${endpoint}: ${candidate}`);
+      return new Date(0);
+    }
+
     return new Date(lastTs.getTime() - 1);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      console.warn(`Cursor endpoint ${endpoint} not found (404); treating as empty dataset`);
+      return new Date(0);
+    }
+
     console.error(`Error fetching cursor for ${endpoint}:`, error);
-    // Return a very old date on error to be safe
     return new Date(0);
   }
 }
@@ -112,56 +181,101 @@ async function syncOne(p: Plan) {
       // Map edge rows to cloud DTOs per endpoint
       let payload: any[] = [];
       if (p.endpoint === '/sensor-readings') {
-        payload = (rows as any[]).map((r) => ({
-          deviceId: r.device_id,
-          farmId: undefined,
-          houseId: undefined,
-          sensorType: r.metric,
-          value: Number(r.value),
-          unit: (r.payload && (r.payload.unit || r.payload.UOM)) || r.metric,
-          location: r.payload && r.payload.location ? r.payload.location : undefined,
-          metadata: r.payload || undefined,
-          timestamp: new Date(r.time).toISOString(),
-        }));
+         payload = (rows as DeviceReading[]).map((r) => {
+           const raw = (r.payload ?? {}) as Record<string, any>;
+           const farmId = raw.farmId ?? raw.metadata?.farmId ?? null;
+           const houseId = raw.houseId ?? raw.metadata?.houseId ?? null;
+           const stationId = raw.stationId ?? raw.metadata?.stationId ?? null;
+
+           return {
+             deviceId: r.deviceId,
+             tenantId: r.tenantId,
+             farmId: farmId || r.tenantId,
+             houseId: houseId || stationId || null,
+             sensorType: r.metric,
+             value: Number(r.value),
+             unit: raw.unit ?? raw.UOM ?? getUnitForSensorType(r.metric),
+             location: raw.location,
+             metadata: {
+               ...raw,
+               tenantId: r.tenantId,
+               robotId: r.robotId,
+               farmId,
+               houseId,
+               stationId,
+               quality: r.quality,
+               generatedAt: new Date().toISOString(),
+             },
+             timestamp: r.timestamp.toISOString(),
+           };
+         });
       } else if (p.endpoint === '/sweep-readings') {
-        payload = (rows as any[]).map((r) => ({
-          deviceId: r.robot_id,
-          farmId: undefined,
-          sweepId: String(r.run_id),
-          data: {
-            sensorId: r.sensor_id,
-            metric: r.metric,
-            value: r.value,
-            x: r.x,
-            y: r.y,
-            zoneId: r.zone_id,
-            quality: r.quality,
-          },
-          metadata: r.payload || undefined,
-          timestamp: new Date(r.time).toISOString(),
-        }));
+         payload = (rows as SweepReading[]).map((r) => {
+           const data = r.data ?? {};
+           const metadata = r.metadata ?? {};
+           return {
+             deviceId: r.deviceId,
+             farmId: r.farmId ?? r.tenantId,
+             sweepId: r.sweepId,
+             data: {
+               zones: data.zones ?? 1,
+               animalsDetected: data.animalsDetected ?? 0,
+               averageWeight: data.averageWeight ?? 0,
+               temperature: data.temperature ?? 25,
+               humidity: data.humidity ?? 60,
+               co2: data.co2 ?? 400,
+               sweepDuration: data.sweepDuration ?? 60,
+               success: data.success !== false,
+               ...data,
+             },
+             metadata: {
+               ...metadata,
+               tenantId: r.tenantId,
+               deviceId: r.deviceId,
+               sweepId: r.sweepId,
+               generatedAt: new Date().toISOString(),
+             },
+             timestamp: r.timestamp.toISOString(),
+           };
+         });
       } else if (p.endpoint === '/lab-readings') {
-        payload = (rows as any[]).map((r) => ({
-          sampleId: r.station_id,
-          farmId: undefined,
-          testType: r.metric,
-          value: Number(r.value),
-          unit: (r.payload && (r.payload.unit || r.payload.UOM)) || r.metric,
-          result: r.payload?.result,
-          metadata: r.payload || undefined,
-          timestamp: new Date(r.time).toISOString(),
-        }));
+         payload = (rows as LabReading[]).map((r) => {
+           const raw = (r.payload ?? {}) as Record<string, any>;
+           return {
+             sampleId: r.sampleId,
+             tenantId: r.tenantId,
+             robotId: r.robotId,
+             runId: r.runId,
+             testType: r.metric,
+             value: Number(r.value),
+             unit: raw.unit ?? raw.UOM ?? getUnitForTestType(r.metric),
+             result: raw.result ?? getResultForValue(r.metric, r.value),
+             metadata: {
+               ...raw,
+               tenantId: r.tenantId,
+               robotId: r.robotId,
+               runId: r.runId,
+               sampleId: r.sampleId,
+               generatedAt: new Date().toISOString(),
+             },
+             timestamp: r.timestamp.toISOString(),
+           };
+         });
       } else if (p.endpoint === '/device-health') {
-        payload = (rows as any[]).map((r) => ({
-          deviceId: r.device_id,
-          status: r.online === true ? 'ONLINE' : r.online === false ? 'OFFLINE' : 'MAINTENANCE',
-          lastSeen: new Date(r.time).toISOString(),
-          batteryLevel: r.meta?.batteryLevel,
-          signalStrength: r.rssi,
-          temperature: r.meta?.temperature,
-          errors: Array.isArray(r.meta?.errors) ? r.meta.errors : [],
-          warnings: Array.isArray(r.meta?.warnings) ? r.meta.warnings : [],
-        }));
+        payload = (rows as DeviceHealth[]).map((r) => {
+          const metadata = r.metadata ?? {};
+          return {
+            deviceId: r.deviceId,
+            tenantId: r.tenantId,
+            status: r.status,
+            lastSeen: r.lastSeen.toISOString(),
+            batteryLevel: r.batteryLevel ?? 100,
+            signalStrength: r.signalStrength ?? -50,
+            temperature: r.temperature ?? 25,
+            errors: r.errors ?? [],
+            warnings: r.warnings ?? [],
+          };
+        });
       }
 
       // Send batch to the cloud service with retry & backoff
@@ -191,8 +305,21 @@ async function syncOne(p: Plan) {
     }
 
     // Update cursor based on last row
-    const last = (rows as any[])[rows.length - 1][p.timeCol] as Date;
-    cursor = last;
+    const last = (rows as any[])[rows.length - 1][p.timeCol];
+    if (last instanceof Date) {
+      cursor = last;
+    } else if (typeof last === 'string') {
+      const parsedDate = new Date(last);
+      if (isNaN(parsedDate.getTime())) {
+        console.warn(`Invalid timestamp in row: ${last}`);
+        cursor = new Date(0);
+      } else {
+        cursor = parsedDate;
+      }
+    } else {
+      console.warn(`Unexpected timestamp type: ${typeof last}`);
+      cursor = new Date(0);
+    }
   }
 }
 
@@ -219,4 +346,3 @@ export async function runSync() {
     isSyncing = false;
   }
 }
-

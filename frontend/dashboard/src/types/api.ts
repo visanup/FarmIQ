@@ -146,6 +146,113 @@ export const HouseSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
+export const ZoneSchema = z.object({
+  id: z.string(),
+  farmId: z.string(),
+  houseId: z.string(),
+  name: z.string(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const StationSchema = z.object({
+  id: z.string(),
+  farmId: z.string(),
+  houseId: z.string(),
+  zoneId: z.string(),
+  name: z.string(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const FlockSchema = z.object({
+  id: z.string(),
+  farmId: z.string(),
+  houseId: z.string(),
+  name: z.string(),
+  breed: z.string().nullable(),
+  quantity: z.number().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const AnimalTypeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: z.string().nullable(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const BreedSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  animalTypeId: z.string(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const DeviceTypeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  manufacturer: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const SensorTypeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  unit: z.string().nullable(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const FeedTypeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const FormulaSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  animalTypeId: z.string(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const EconomicDataSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  farmId: z.string(),
+  category: z.string(),
+  amount: z.number(),
+  budget: z.number().nullable(),
+  type: z.enum(['income', 'expense']),
+  description: z.string().nullable(),
+  date: z.string().datetime(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
 export const AnimalSchema = z.object({
   id: z.string(),
   farmId: z.string(),
@@ -242,6 +349,16 @@ export type SweepReading = z.infer<typeof SweepReadingSchema>;
 
 export type Farm = z.infer<typeof FarmSchema>;
 export type House = z.infer<typeof HouseSchema>;
+export type Zone = z.infer<typeof ZoneSchema>;
+export type Station = z.infer<typeof StationSchema>;
+export type Flock = z.infer<typeof FlockSchema>;
+export type AnimalType = z.infer<typeof AnimalTypeSchema>;
+export type Breed = z.infer<typeof BreedSchema>;
+export type DeviceType = z.infer<typeof DeviceTypeSchema>;
+export type SensorType = z.infer<typeof SensorTypeSchema>;
+export type FeedType = z.infer<typeof FeedTypeSchema>;
+export type Formula = z.infer<typeof FormulaSchema>;
+export type EconomicData = z.infer<typeof EconomicDataSchema>;
 export type Animal = z.infer<typeof AnimalSchema>;
 export type Device = z.infer<typeof DeviceSchema>;
 export type PerformanceMetric = z.infer<typeof PerformanceMetricSchema>;

@@ -2,6 +2,7 @@
 
 import { prisma } from '../lib/prisma';
 import { BaseReading } from '../types/events';
+import { createHash } from 'crypto';
 
 const UPSERT_SQL = `
 INSERT INTO analytics.minute_features AS t
@@ -29,16 +30,16 @@ export async function upsertMinuteFeature(ev: BaseReading) {
   const vSquared = v * v;
   const sensorId = ev.sensor_id || '';
   const tags = ev.tags || {};
-  
+
   // ✅ Calculate tags_hash (simple hash of JSON string)
   const tagsJson = JSON.stringify(tags);
-  const tagsHash = require('crypto').createHash('md5').update(tagsJson).digest('hex');
+  const tagsHash = createHash('md5').update(tagsJson).digest('hex');
 
   try {
     await prisma.$executeRaw`
       INSERT INTO analytics.minute_features AS t
         (bucket, tenant_id, device_id, sensor_id, metric, tags, tags_hash, value_count, value_sum, value_min, value_max, value_sumsq)
-      VALUES (${t}, ${ev.tenant_id}, ${ev.device_id}, ${sensorId}, ${ev.metric}, ${tags}::jsonb, ${tagsHash}, 1, ${v}, ${v}, ${v}, ${vSquared})
+      VALUES (${t}, ${ev.tenant_id}, ${ev.device_id}, ${sensorId}, ${ev.metric}, ${tagsJson}::jsonb, ${tagsHash}, 1, ${v}, ${v}, ${v}, ${vSquared})
       ON CONFLICT (bucket, tenant_id, device_id, metric, sensor_id, tags_hash)
       DO UPDATE SET
         value_count = t.value_count + 1,

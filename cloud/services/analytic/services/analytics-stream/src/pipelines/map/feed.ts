@@ -27,6 +27,20 @@ const Time = z.preprocess((input) => {
 const sanitize = (x: string) =>
   x.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
 
+/** unwrap envelope: { eventType, timestamp, data: {...} } → flat */
+function unwrap<T = any>(o: any): T {
+  if (o && typeof o === 'object' && 'data' in o && o.data) {
+    const d = o.data;
+    return {
+      ...d,
+      schema: d.schema ?? o.eventType,
+      tenant_id: d.tenant_id ?? d.tenantId ?? d.metadata?.tenantId ?? d.metadata?.customerId,
+      time: d.time ?? d.timestamp ?? o.timestamp,
+    } as T;
+  }
+  return o;
+}
+
 /* ------------------------------------------------------------------------------------------------
  * 1) FEED BATCH  (topic: feed.batch.created.v1)
  *    - สร้าง count เสมอ
@@ -40,7 +54,7 @@ const FeedBatchSchema = z.object({
 
   batch_id: z.string().min(1),
   feed_type: z.string().optional(),
-  mass_kg: z.number().finite().optional(),
+  mass_kg: z.coerce.number().finite().optional(), // ✅ coerce
 
   farm_id: z.string().optional(),
   house_id: z.string().optional(),
@@ -54,7 +68,7 @@ const FeedBatchSchema = z.object({
 }).refine(d => !!(d.time ?? d.ts), { path: ['time'], message: 'Required' });
 
 export function toMeasurementsFromFeedBatch(o: any): Measurement[] | null {
-  const d = FeedBatchSchema.parse(o);
+  const d = FeedBatchSchema.parse(unwrap(o));
   const time = (d.time ?? d.ts)!;
 
   const entity = d.silo_id ?? d.house_id ?? d.device_id ?? d.farm_id;
@@ -88,6 +102,15 @@ export function toMeasurementsFromFeedBatch(o: any): Measurement[] | null {
       time,
       tags: { ...tags, unit: 'kg' }
     });
+    // ถ้าอยากให้ FCR เห็นเป็น intake ด้วย (เลือกเปิดเมื่อ your pipeline ต้องการ):
+    // out.push({
+    //   tenant_id: d.tenant_id,
+    //   device_id: entity,
+    //   metric: 'feed.intake.kg',
+    //   value: d.mass_kg,
+    //   time,
+    //   tags: { ...tags, unit: 'kg', source: 'batch' }
+    // });
   }
 
   return out;
@@ -105,7 +128,7 @@ const FeedQualitySchema = z.object({
   tenant_id: z.string().min(1),
 
   batch_id: z.string().optional(),
-  status: z.enum(['pass','fail']).optional(),
+  status: z.string().optional(), // จะ lower-case ภายหลัง
 
   // entity anchors
   farm_id: z.string().optional(),
@@ -116,15 +139,15 @@ const FeedQualitySchema = z.object({
   time: Time.optional(),
   ts:   Time.optional(),
 
-  // ค่าคุณภาพ (ใส่ optional ไว้หลายตัว—เจอตัวไหน map ตัวนั้น)
-  moisture_pct: z.number().finite().optional(),
-  protein_pct:  z.number().finite().optional(),
-  fat_pct:      z.number().finite().optional(),
-  fiber_pct:    z.number().finite().optional(),
-  ash_pct:      z.number().finite().optional(),
-  salt_pct:     z.number().finite().optional(),
-  energy_mjkg:  z.number().finite().optional(),
-  aflatoxin_ppb:z.number().finite().optional(),
+  // ค่าคุณภาพ (coerce number)
+  moisture_pct:  z.coerce.number().finite().optional(),
+  protein_pct:   z.coerce.number().finite().optional(),
+  fat_pct:       z.coerce.number().finite().optional(),
+  fiber_pct:     z.coerce.number().finite().optional(),
+  ash_pct:       z.coerce.number().finite().optional(),
+  salt_pct:      z.coerce.number().finite().optional(),
+  energy_mjkg:   z.coerce.number().finite().optional(),
+  aflatoxin_ppb: z.coerce.number().finite().optional(),
 
   // เผื่อขยาย
   meta: z.record(z.unknown()).optional()
@@ -142,15 +165,17 @@ const QUALITY_MAP: Record<string, { metric: string; unit?: string }> = {
 };
 
 export function toMeasurementsFromFeedQuality(o: any): Measurement[] | null {
-  const d = FeedQualitySchema.parse(o);
+  const d = FeedQualitySchema.parse(unwrap(o));
   const time = (d.time ?? d.ts)!;
 
   const entity = d.silo_id ?? d.house_id ?? d.device_id ?? d.farm_id;
   if (!entity) return null;
 
+  const statusLc = d.status ? d.status.toLowerCase() : undefined;
+
   const tags: Record<string, string> = {};
   if (d.batch_id) tags.batch_id = d.batch_id;
-  if (d.status)   tags.status   = d.status;
+  if (statusLc)   tags.status   = statusLc;
   if (d.farm_id)  tags.farm_id  = d.farm_id;
   if (d.house_id) tags.house_id = d.house_id;
   if (d.silo_id)  tags.silo_id  = d.silo_id;
@@ -182,13 +207,13 @@ export function toMeasurementsFromFeedQuality(o: any): Measurement[] | null {
     tags
   });
 
-  // สถานะ pass/fail เป็น metric แบบบูลีนได้เหมือนกัน (optional)
-  if (d.status) {
+  // สถานะ pass/fail เป็น metric แบบบูลีน (ถ้ามีส่งมา)
+  if (statusLc === 'pass' || statusLc === 'fail') {
     out.push({
       tenant_id: d.tenant_id,
       device_id: entity,
       metric: 'feed.quality.pass',
-      value: d.status === 'pass' ? 1 : 0,
+      value: statusLc === 'pass' ? 1 : 0,
       time,
       tags
     });

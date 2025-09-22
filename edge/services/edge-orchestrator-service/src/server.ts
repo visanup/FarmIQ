@@ -25,8 +25,8 @@ async function start() {
     app.get('/health', async () => ({ ok: true }));
 
     await app.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`🚀 edge-orchestrator-service on http://localhost:${PORT}`);
-    console.log(`📖 Swagger UI http://localhost:${PORT}/api-docs`);
+    console.log(`🚀 edge-orchestrator-service on http://0.0.0.0:${PORT}`);
+    console.log(`📖 Swagger UI http://0.0.0.0:${PORT}/api-docs`);
 
     const shutdown = async () => { try { await app.close(); } finally { process.exit(0); } };
     process.on('SIGINT', shutdown);

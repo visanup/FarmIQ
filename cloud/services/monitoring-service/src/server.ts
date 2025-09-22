@@ -69,6 +69,24 @@ app.setErrorHandler((error, _request, reply) => {
   reply.status(500).send({ error: 'Internal Server Error' });
 });
 
+// Graceful shutdown
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+  
+  try {
+    await app.close();
+    console.log('✅ Server closed successfully');
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Error during shutdown:', err);
+    process.exit(1);
+  }
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Start server
 const start = async () => {
   try {

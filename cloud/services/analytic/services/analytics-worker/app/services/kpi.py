@@ -42,13 +42,13 @@ def compute_kpi(
 ):
     """
     ดึงจาก analytics_agg (window=use_window_s) มาเฉลี่ยทั้ง period แล้ว upsert ลง analytics_kpi
-    spec_lookup: fn(key)->(lsl,usl)  | key: (tenant_id,factory_id,machine_id,sensor_id,metric,period_start)
+    spec_lookup: fn(key)->(lsl,usl)  | key: (tenant_id,farm_id,house_id,sensor_id,metric,period_start)
     """
     sql = text(f"""
       WITH base AS (
         SELECT
           time_bucket(INTERVAL '1 {period}', bucket_start) AS period_start,
-          tenant_id, factory_id, machine_id, sensor_id, metric,
+          tenant_id, farm_id, house_id, sensor_id, metric,
           SUM(count_n) AS n,
           SUM(sum_val) / NULLIF(SUM(count_n),0) AS mean_val,
           -- stddev ของ aggregate ต้องระวัง; เอาง่าย ๆ ใช้ stddev_pop ของ avg ราย bucket
@@ -56,14 +56,14 @@ def compute_kpi(
         FROM {Config.DB_SCHEMA}.analytics_agg
         WHERE window_s = :w
         { "AND metric = :metric" if metric else "" }
-        GROUP BY period_start, tenant_id, factory_id, machine_id, sensor_id, metric
+        GROUP BY period_start, tenant_id, farm_id, house_id, sensor_id, metric
       )
       SELECT * FROM base
     """)
     rows = db.execute(sql, {"w": use_window_s, **({"metric": metric} if metric else {})}).mappings().all()
 
     for r in rows:
-        key = (r["tenant_id"], r["factory_id"], r["machine_id"], r["sensor_id"], r["metric"], r["period_start"])
+        key = (r["tenant_id"], r["farm_id"], r["house_id"], r["sensor_id"], r["metric"], r["period_start"])
         lsl = usl = None
         if spec_lookup:
             lsl, usl = spec_lookup(*key)  # ผู้ใช้ส่งฟังก์ชันมาเอง (อ่านจาก config/table อื่น ๆ )
@@ -71,11 +71,11 @@ def compute_kpi(
         cp, cpk = _compute_cp_cpk(r["mean_val"], r["stddev_val"], lsl, usl)
         sql_upsert = text(f"""
           INSERT INTO {Config.DB_SCHEMA}.analytics_kpi
-          (period, period_start, tenant_id, factory_id, machine_id, sensor_id, metric,
+          (period, period_start, tenant_id, farm_id, house_id, sensor_id, metric,
            n, mean_val, stddev_val, cp, cpk, pp, ppk)
-          VALUES (:period, :period_start, :tenant_id, :factory_id, :machine_id, :sensor_id, :metric,
+          VALUES (:period, :period_start, :tenant_id, :farm_id, :house_id, :sensor_id, :metric,
                   :n, :mean_val, :stddev_val, :cp, :cpk, :pp, :ppk)
-          ON CONFLICT (tenant_id, factory_id, machine_id, sensor_id, metric, period, period_start)
+          ON CONFLICT (tenant_id, farm_id, house_id, sensor_id, metric, period, period_start)
           DO UPDATE SET
             n = EXCLUDED.n, mean_val = EXCLUDED.mean_val, stddev_val = EXCLUDED.stddev_val,
             cp = EXCLUDED.cp, cpk = EXCLUDED.cpk, pp = EXCLUDED.pp, ppk = EXCLUDED.ppk,
@@ -83,7 +83,7 @@ def compute_kpi(
         """)
         db.execute(sql_upsert, {
             "period": period, "period_start": r["period_start"],
-            "tenant_id": r["tenant_id"], "factory_id": r["factory_id"], "machine_id": r["machine_id"],
+            "tenant_id": r["tenant_id"], "farm_id": r["farm_id"], "house_id": r["house_id"],
             "sensor_id": r["sensor_id"], "metric": r["metric"],
             "n": int(r["n"] or 0), "mean_val": r["mean_val"], "stddev_val": r["stddev_val"],
             "cp": cp, "cpk": cpk, "pp": None, "ppk": None  # pp/ppk ไว้เพิ่มภายหลัง

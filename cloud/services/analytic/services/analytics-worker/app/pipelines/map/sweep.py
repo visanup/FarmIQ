@@ -9,19 +9,27 @@ def _ts(s: str) -> datetime:
 
 def handle_sweep_reading(o: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """
+    Handle envelope format from analytics-stream
     Sweep payloads มักเป็นชุดค่าในข้อความเดียว (ไม่เหมาะจะแตกเป็นหลาย measurement
     ใน handler ปัจจุบัน) ดังนั้นรวมเป็น 'sweep_completed' EVENT + summary
     Examples:
     {
-      "time":"2025-08-20T02:20:00Z",
-      "tenant_id":"t1","factory_id":"f1","machine_id":"mc-01",
-      "metric":"temp",                         # อาจมีหรือไม่มีก็ได้
-      "readings":[ {"value":23.1},{"value":22.9},{"value":23.6} ],
-      "payload": {...}
+      "data": {
+        "timestamp":"2025-08-20T02:20:00Z",
+        "tenant_id":"t1","farmId":"f1","deviceId":"device-01",
+        "metric":"temp",
+        "readings":[ {"value":23.1},{"value":22.9},{"value":23.6} ]
+      }
     }
     """
-    t = _ts(o["time"])
-    vals: List[float] = [float(r["value"]) for r in (o.get("readings") or []) if r.get("value") is not None]
+    # Handle envelope format
+    data = o.get("data", o)
+    
+    t = _ts(data.get("timestamp") or data.get("time"))
+    tenant = data["tenant_id"] if "tenant_id" in data else "unknown"
+    device_id = data.get("deviceId") or data.get("device_id") or "unknown"
+    
+    vals: List[float] = [float(r["value"]) for r in (data.get("readings") or []) if r.get("value") is not None]
     n = len(vals)
     s = sum(vals) if n else None
     avg = (s / n) if s is not None else None
@@ -30,17 +38,17 @@ def handle_sweep_reading(o: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
 
     return "event", {
         "time": t,
-        "tenant_id": o["tenant_id"],
+        "tenant_id": tenant,
         "domain": "sweep",
-        "entity_type": "machine",
-        "entity_id": o.get("machine_id","-"),
+        "entity_type": "device",
+        "entity_id": device_id,
         "event_type": "sweep_completed",
         "value": avg,                # summary value (avg)
-        "unit": o.get("unit"),
+        "unit": data.get("unit"),
         "severity": 1,
         "payload": {
             "count": n, "sum": s, "min": mn, "max": mx,
-            "metric": o.get("metric"),
-            **(o.get("payload") or {})
+            "metric": data.get("metric"),
+            **(data.get("payload") or {})
         }
     }
